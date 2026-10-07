@@ -1,4 +1,5 @@
 import { CREW_BY_ID } from "./crew.ts";
+import { HOOK_SOURCES } from "./hooks.ts";
 import { LSP_BY_ID } from "./lsps.ts";
 import { MCP_BY_ID } from "./mcps.ts";
 import { PLATFORM_BY_ID } from "./platforms.ts";
@@ -176,64 +177,47 @@ function cursorMcp(config: HarnessConfig): string {
 
 function hooksJson(config: HarnessConfig): string {
   if (!config.hooksEnabled) {
-    return `{\n  "hooks": {}\n}\n`;
+    return JSON.stringify({ hooks: {} }, null, 2) + "\n";
   }
-  const graphHint = config.graphFirst
-    ? `,
-    "PreToolUse": [
+  const settings: {
+    permissions: { deny: string[] };
+    hooks: Record<string, { matcher?: string; hooks: { type: string; command: string }[] }[]>;
+  } = {
+    permissions: {
+      // Fail-closed secret protection: denies stay in permissions, not in advice hooks.
+      deny: ["Read(.env)", "Read(.env.*)", "Read(**/secrets/**)"],
+    },
+    hooks: {
+      PostToolUse: [
+        {
+          matcher: "Edit|Write",
+          hooks: [{ type: "command", command: "node .helix/hooks/format-lint.mjs" }],
+        },
+      ],
+      Stop: [{ hooks: [{ type: "command", command: "node .helix/hooks/test-on-stop.mjs" }] }],
+    },
+  };
+  if (config.graphFirst) {
+    settings.hooks.PreToolUse = [
       {
-        "matcher": "Read|Grep|Glob",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .helix/hooks/prefer-graph.mjs"
-          }
-        ]
-      }
-    ]`
-    : "";
-  return `{
-  "permissions": {
-    "deny": ["Read(.env)", "Read(.env.*)", "Read(**/secrets/**)"]
-  },
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .helix/hooks/format-lint.mjs"
-          }
-        ]
-      }
-    ]${graphHint}
+        matcher: "Read|Grep|Glob",
+        hooks: [{ type: "command", command: "node .helix/hooks/prefer-graph.mjs" }],
+      },
+    ];
   }
-}
-`;
+  return JSON.stringify(settings, null, 2) + "\n";
 }
 
 function preferGraphHook(): string {
-  return `#!/usr/bin/env node
-// Helix PreToolUse: if a Read/Grep/Glob looks like a fishing expedition,
-// print a reminder to query Graphify first. Exit 0 always — this is advice.
-const msg = process.env.HOOK_INPUT || "";
-const wide = /\\*\\*|src\\/\\*\\*|\\.\\//.test(msg);
-if (wide) {
-  console.error(
-    "[helix] Wide filesystem search. Prefer graphify.query_graph / shortest_path, then Read the cited range.",
-  );
-}
-process.exit(0);
-`;
+  return HOOK_SOURCES["prefer-graph"];
 }
 
 function formatHintHook(): string {
-  return `#!/usr/bin/env node
-// Helix PostToolUse: reminder only. Swap the command for the repo's formatter.
-console.error("[helix] After edits, run the repo format/lint. Hooks beat prompt memory.");
-process.exit(0);
-`;
+  return HOOK_SOURCES["format-lint"];
+}
+
+function testOnStopHook(): string {
+  return HOOK_SOURCES["test-on-stop"];
 }
 
 function cursorRule(config: HarnessConfig): string {
@@ -395,6 +379,11 @@ export function generatePack(config: HarnessConfig): PackFile[] {
       path: ".helix/hooks/format-lint.mjs",
       language: "javascript",
       body: formatHintHook(),
+    });
+    files.push({
+      path: ".helix/hooks/test-on-stop.mjs",
+      language: "javascript",
+      body: testOnStopHook(),
     });
   }
 

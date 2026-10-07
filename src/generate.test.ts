@@ -25,8 +25,27 @@ describe("generatePack", () => {
     const on = generatePack(BASE).map((f) => f.path);
     assert.ok(on.includes(".helix/hooks/prefer-graph.mjs"));
     assert.ok(on.includes(".helix/hooks/format-lint.mjs"));
+    assert.ok(on.includes(".helix/hooks/test-on-stop.mjs"));
     const off = generatePack({ ...BASE, hooksEnabled: false }).map((f) => f.path);
     assert.ok(!off.some((p) => p.startsWith(".helix/hooks/")));
+  });
+
+  it("emits settings.json that parses with a Stop hook and secret denies", () => {
+    const cfg: HarnessConfig = { ...BASE, platforms: ["claude-code"] };
+    const settings = generatePack(cfg).find((f) => f.path === ".claude/settings.json");
+    assert.ok(settings);
+    const parsed = JSON.parse(settings.body) as {
+      permissions: { deny: string[] };
+      hooks: Record<string, unknown[]>;
+    };
+    assert.ok(parsed.permissions.deny.some((d) => d.includes(".env")));
+    assert.ok(Array.isArray(parsed.hooks.PostToolUse));
+    assert.ok(Array.isArray(parsed.hooks.Stop));
+    assert.ok(Array.isArray(parsed.hooks.PreToolUse));
+    const noGraph = generatePack({ ...cfg, graphFirst: false }).find(
+      (f) => f.path === ".claude/settings.json",
+    );
+    assert.ok(!("PreToolUse" in (JSON.parse(noGraph?.body ?? "{}") as { hooks: object })));
   });
 
   it("scopes platform files to the enabled platforms", () => {
