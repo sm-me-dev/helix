@@ -11,7 +11,7 @@ import { breakdown, formatTokens, savingsRatio } from "./tokens.ts";
 import type { HarnessConfig } from "./types.ts";
 
 const MINIMAL: HarnessConfig = {
-  crew: ["conductor"],
+  crew: [],
   skills: [],
   mcps: [],
   lsps: [],

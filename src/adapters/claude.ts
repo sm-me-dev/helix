@@ -38,7 +38,7 @@ export const claudeAdapter: PlatformAdapter = {
     "main session is the orchestrator.",
   files(config: HarnessConfig) {
     const files = [{ path: "CLAUDE.md", language: "markdown", body: pointer("Claude Code") }];
-    for (const cid of config.crew.filter((id) => id !== "conductor")) {
+    for (const cid of config.crew) {
       files.push({ path: `.claude/agents/${cid}.md`, language: "markdown", body: agentFile(cid) });
     }
     for (const sid of config.skills) {

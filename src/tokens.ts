@@ -33,9 +33,9 @@ export function agentTokens(id: HarnessConfig["crew"][number]): { index: number;
   return { index: countTokens(frontmatter(full)), body: countTokens(full) };
 }
 
-/** Roles actually emitted as agent files (the main session needs no file). */
+/** Roles emitted as agent files. The main session orchestrates and needs no file. */
 function emittedCrew(config: HarnessConfig) {
-  return config.crew.filter((id) => id !== "conductor");
+  return [...config.crew];
 }
 
 function buildChecks(
@@ -115,10 +115,7 @@ export function breakdown(config: HarnessConfig): TokenBreakdown {
   // schemas; skills and crew fully inlined (frontmatter-only is the helix
   // optimization).
   const naiveSkills = SKILLS.reduce((n, s) => n + countTokens(skillFile(s.id)), 0);
-  const naiveCrew = CREW.filter((c) => c.id !== "conductor").reduce(
-    (n, c) => n + countTokens(agentFile(c.id)),
-    0,
-  );
+  const naiveCrew = CREW.reduce((n, c) => n + countTokens(agentFile(c.id)), 0);
   const naiveAlwaysOn =
     countTokens(BLOATED_AGENTS_MD) +
     countTokens(TYPICAL_MCP_SCHEMAS) +

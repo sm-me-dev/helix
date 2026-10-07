@@ -65,7 +65,7 @@ Pick one. The reason must cite an existing file, test, or invariant — not tast
     name: "prove-behavior",
     description:
       "A failing test first, then the command the repo already uses. Use on any behavior change.",
-    loadsWhen: "Prover runs, or Builder claims done.",
+    loadsWhen: "Builder runs; the Stop hook re-runs the suite.",
     body: `Find the test command from package.json / Makefile / AGENTS.md — do not invent pytest flags.
 
 Prefer one focused test that would have caught this bug over a new suite. Paste the command and the tail of the output. A green typecheck is not a behavior proof.`,
@@ -74,8 +74,8 @@ Prefer one focused test that would have caught this bug over a new suite. Paste 
     id: "independent-audit",
     name: "independent-audit",
     description:
-      "Fresh-window check of plan vs diff vs tests. Use after Builder and Prover. Must not share context with Builder.",
-    loadsWhen: "Auditor runs.",
+      "Fresh-window check of plan vs diff vs tests. Use after the Builder. Must not share context with Builder.",
+    loadsWhen: "Reviewer runs.",
     body: `You did not write this patch. Treat it as untrusted.
 
 PASS only if:
@@ -90,7 +90,7 @@ FAIL with file:line. Do not suggest extra features.`,
     name: "lean-handoff",
     description:
       "Compact handoff cards between roles. Use whenever a subagent is spawned or a role returns.",
-    loadsWhen: "Conductor dispatches or a role finishes.",
+    loadsWhen: "The main session dispatches or a role finishes.",
     body: `Handoff card (hard cap 12 lines):
 - Goal
 - Constraints

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { adaptSimEvents, SIM_DURATION, SIM_EVENTS, SAMPLE_ISSUE } from "./simulation.ts";
+import { adaptSimEvents, pickTier, SIM_DURATION, SIM_EVENTS, SAMPLE_ISSUE } from "./simulation.ts";
 import { DEFAULT_CREW } from "./crew.ts";
 import { DEFAULT_LSPS } from "./lsps.ts";
 import { DEFAULT_MCPS } from "./mcps.ts";
@@ -8,15 +8,7 @@ import { DEFAULT_PLATFORMS } from "./platforms.ts";
 import { DEFAULT_SKILLS } from "./skills.ts";
 import type { CrewId, HarnessConfig } from "./types.ts";
 
-const ROLES: (CrewId | "system")[] = [
-  "conductor",
-  "scout",
-  "architect",
-  "builder",
-  "prover",
-  "auditor",
-  "system",
-];
+const ROLES: (CrewId | "system")[] = ["scout", "architect", "builder", "reviewer", "system"];
 
 describe("SIM_EVENTS consistency", () => {
   it("is ordered in time within the simulation window", () => {
@@ -31,12 +23,12 @@ describe("SIM_EVENTS consistency", () => {
     );
   });
 
-  it("uses only known roles and starts/ends with the conductor", () => {
+  it("uses only known roles and starts/ends with the main session", () => {
     for (const e of SIM_EVENTS) {
       assert.ok(ROLES.includes(e.role), `unknown role: ${e.role}`);
     }
-    assert.equal(SIM_EVENTS[0].role, "conductor");
-    assert.equal(SIM_EVENTS[SIM_EVENTS.length - 1].role, "conductor");
+    assert.equal(SIM_EVENTS[0].role, "system");
+    assert.equal(SIM_EVENTS[SIM_EVENTS.length - 1].role, "system");
   });
 
   it("keeps token counters monotonic with naive at or above helix", () => {
@@ -62,6 +54,21 @@ describe("SIM_EVENTS consistency", () => {
   });
 });
 
+describe("pickTier", () => {
+  it("sends questions and one-file asks to the main session", () => {
+    assert.equal(pickTier({ fileCount: 5, crossesModules: true, isQuestion: true }), "trivial");
+    assert.equal(pickTier({ fileCount: 1, crossesModules: false, isQuestion: false }), "trivial");
+  });
+
+  it("keeps known single-module work at standard", () => {
+    assert.equal(pickTier({ fileCount: 3, crossesModules: false, isQuestion: false }), "standard");
+  });
+
+  it("reserves the full chain for unknown or cross-module work", () => {
+    assert.equal(pickTier({ fileCount: 4, crossesModules: true, isQuestion: false }), "complex");
+  });
+});
+
 describe("SAMPLE_ISSUE", () => {
   it("carries the fields the /run header renders", () => {
     assert.ok(SAMPLE_ISSUE.id);
@@ -72,7 +79,7 @@ describe("SAMPLE_ISSUE", () => {
 });
 
 const FULL: HarnessConfig = {
-  crew: ["conductor", "scout", "architect", "builder", "prover", "auditor"],
+  crew: ["scout", "architect", "builder", "reviewer"],
   skills: [],
   mcps: [],
   lsps: [],
@@ -99,17 +106,17 @@ describe("adaptSimEvents", () => {
     assert.equal(adapted.events.length, SIM_EVENTS.length);
     assert.deepEqual(adapted.dropped, []);
     assert.equal(adapted.scale, 1);
-    assert.equal(adapted.summaries, 6);
+    assert.equal(adapted.summaries, 4);
   });
 
-  it("drops the auditor pass and restates the merge when auditor is off", () => {
+  it("drops the reviewer pass and restates the merge when reviewer is off", () => {
     const adapted = adaptSimEvents({
       ...FULL,
-      crew: ["conductor", "scout", "architect", "builder", "prover"],
+      crew: ["scout", "architect", "builder"],
     });
-    assert.ok(!adapted.events.some((e) => e.role === "auditor"));
-    assert.deepEqual(adapted.dropped, ["auditor"]);
-    assert.ok(adapted.events[adapted.events.length - 1].body.includes("Five summaries"));
+    assert.ok(!adapted.events.some((e) => e.role === "reviewer"));
+    assert.deepEqual(adapted.dropped, ["reviewer"]);
+    assert.ok(adapted.events[adapted.events.length - 1].body.includes("Three summaries"));
   });
 
   it("scales helix tokens with the live always-on index", () => {
@@ -126,9 +133,9 @@ describe("adaptSimEvents", () => {
     );
   });
 
-  it("never empties the timeline, even for conductor-only", () => {
-    const adapted = adaptSimEvents({ ...FULL, crew: ["conductor"] });
+  it("never empties the timeline, even for an empty crew", () => {
+    const adapted = adaptSimEvents({ ...FULL, crew: [] });
     assert.ok(adapted.events.length >= 2);
-    assert.equal(adapted.events[0].role, "conductor");
+    assert.equal(adapted.events[0].role, "system");
   });
 });

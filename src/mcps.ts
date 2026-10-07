@@ -73,7 +73,7 @@ export const MCPS: Mcp[] = [
     id: "playwright",
     name: "Playwright",
     maintainer: "Microsoft",
-    job: "A real browser for the Prover and Auditor. Compiling is not the same as the flow working.",
+    job: "A real browser for the Builder and Reviewer. Compiling is not the same as the flow working.",
     tools: ["navigate", "click", "fill", "snapshot", "console"],
     schemaTokens: 1320,
     skipIf: "No UI, or tests already drive the browser in CI.",

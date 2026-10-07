@@ -16,9 +16,9 @@ export const SAMPLE_ISSUE = {
 export const SIM_EVENTS: SimEvent[] = [
   {
     t: 0,
-    role: "conductor",
+    role: "system",
     title: "Classify and contract",
-    body: "Bug. Two modules (auth, limiter) share a call site — fan-out is justified. Contract: restore authenticated bypass without loosening anonymous limits. Success: existing IP test plus a new API-key test both pass.",
+    body: "Bug across two modules (auth, limiter) — complex tier: scout, architect, builder, reviewer. Contract: restore authenticated bypass without loosening anonymous limits. Success: existing IP test plus a new API-key test both pass.",
     tokens: 420,
     naiveTokens: 420,
   },
@@ -69,32 +69,31 @@ export const SIM_EVENTS: SimEvent[] = [
     t: 8600,
     role: "architect",
     title: "Plan",
-    body: "1. Stamp limiter class on context in AuthMiddleware. 2. RateLimiter branches on context, not headers. 3. Prover adds test with a valid API key at 80 req/min. Out of scope: Redis key layout, billing.",
+    body: "1. Stamp limiter class on context in AuthMiddleware. 2. RateLimiter branches on context, not headers. 3. Builder writes the API-key test first, then the patch. Out of scope: Redis key layout, billing.",
     tokens: 9100,
     naiveTokens: 56000,
   },
   {
     t: 10800,
     role: "builder",
-    title: "Scoped diff",
-    body: "auth.ts stamps context.limiter = user ? 'auth' : 'public'. rate-limit.ts reads context.limiter. No helpers. No drive-by format of gateway.ts.",
+    title: "Test first, then patch",
+    body: "New case 429s on HEAD, then green after the branch: auth.ts stamps context.limiter = user ? 'auth' : 'public'. rate-limit.ts reads context.limiter. No helpers. No drive-by format of gateway.ts.",
     tokens: 14200,
     naiveTokens: 78000,
-    files: ["src/http/auth.ts", "src/http/rate-limit.ts"],
+    tool: "pnpm test",
+    files: ["src/http/auth.ts", "src/http/rate-limit.ts", "src/http/rate-limit.test.ts"],
   },
   {
     t: 12800,
-    role: "prover",
-    title: "Fail then pass",
-    body: "pnpm test rate-limit.test.ts — new case 429s on HEAD, then green after the branch. Anonymous IP case unchanged.",
+    role: "builder",
+    title: "Stop hook gates",
+    body: "Stop hook runs the repo suite once more — anonymous IP case unchanged, new case green. Failure tail would have blocked the stop.",
     tokens: 16800,
     naiveTokens: 86000,
-    tool: "pnpm test",
-    files: ["src/http/rate-limit.test.ts"],
   },
   {
     t: 14600,
-    role: "auditor",
+    role: "reviewer",
     title: "Independent pass",
     body: "Fresh window. Diff matches the plan's two files plus the test. Success criteria ran. get_pr_impact: RateLimiter callers are tests and gateway only. PASS.",
     tokens: 18900,
@@ -103,9 +102,9 @@ export const SIM_EVENTS: SimEvent[] = [
   },
   {
     t: 15800,
-    role: "conductor",
+    role: "system",
     title: "Merge",
-    body: "Six summaries, not six transcripts. Ready to open the PR. Token ratio vs a single window that globbed src/http: 4.8× less.",
+    body: "Four summaries, not four transcripts. Ready to open the PR. Token ratio vs a single window that globbed src/http: 4.8× less.",
     tokens: 19420,
     naiveTokens: 93800,
   },
@@ -114,6 +113,20 @@ export const SIM_EVENTS: SimEvent[] = [
 export const SIM_DURATION = 17000;
 
 const NUMBER_WORDS = ["Zero", "One", "Two", "Three", "Four", "Five", "Six"];
+
+/** Tier of a task, picked by the main session before any delegation. */
+export type TaskTier = "trivial" | "standard" | "complex";
+
+/** Pick a tier: one file/clear ask/question, one known module, or unknown/cross-module. */
+export function pickTier(args: {
+  fileCount: number;
+  crossesModules: boolean;
+  isQuestion: boolean;
+}): TaskTier {
+  if (args.isQuestion || args.fileCount <= 1) return "trivial";
+  if (!args.crossesModules) return "standard";
+  return "complex";
+}
 
 export type AdaptedSim = {
   events: SimEvent[];
@@ -127,15 +140,13 @@ export type AdaptedSim = {
 
 /**
  * Shape the canned timeline to the live config. Roles the user disabled drop
- * out (conductor/system always stay), helix-side tokens scale with the live
+ * out (system events always stay), helix-side tokens scale with the live
  * always-on index, and the merge event restates its summary count and ratio.
  * Naive-side tokens are untouched — they are the no-harness baseline.
  */
 export function adaptSimEvents(config: HarnessConfig): AdaptedSim {
   const inCrew = new Set(config.crew);
-  const kept = SIM_EVENTS.filter(
-    (e) => e.role === "conductor" || e.role === "system" || inCrew.has(e.role),
-  );
+  const kept = SIM_EVENTS.filter((e) => e.role === "system" || inCrew.has(e.role));
   const events = kept.length > 0 ? kept : SIM_EVENTS.slice(0, 1);
 
   const live = breakdown(config);
@@ -146,7 +157,7 @@ export function adaptSimEvents(config: HarnessConfig): AdaptedSim {
   roles.delete("system");
   const summaries = roles.size;
   const summaryWord = NUMBER_WORDS[summaries] ?? String(summaries);
-  const dropped = (["scout", "architect", "builder", "prover", "auditor"] as CrewId[]).filter(
+  const dropped = (["scout", "architect", "builder", "reviewer"] as CrewId[]).filter(
     (r) => !inCrew.has(r),
   );
 

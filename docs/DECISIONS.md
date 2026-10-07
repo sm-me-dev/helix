@@ -196,3 +196,21 @@ Token/method rule: anything shown as a measurement must name the script + date.
   (no stable server-side lib; the approximation label is the honest fix);
   async/lazy tokenizer loading (2.4 MB ranks are noise next to pglite/recharts
   already in the bundle).
+
+## 2026-10-07 — Phase 3 tiered crew
+
+- Roles are now scout → architect → builder → reviewer, picked by tier
+  (trivial: main session only; standard: build + fresh reviewer; complex: full
+  chain). `pickTier` in `simulation.ts` encodes the rule, with tests.
+- Retired: conductor as an emittable role (main session orchestrates) and
+  prover as a role (Stop hook + builder test-first rule). `auditor` renamed to
+  `reviewer` with strictly read-only tools (Read + graphify only — Bash went
+  too, since the input is contract/plan/diff/test-output only).
+- Store bumped to version 2 with an exported, tested `migratePersisted`:
+  auditor→reviewer, conductor/prover dropped, unknown ids dropped so
+  `requireKnownIds` cannot crash on old storage.
+- /crew, /run, the simulation, and the index copy follow the tiers; UI and
+  typecheck clean. Default pack: 34 files, AGENTS.md 42 lines.
+- Justification for names (per prompt): kept scout/architect/builder (already
+  in the dispatch text and tests) and chose reviewer over auditor because the
+  job is PASS/FAIL verification, not a general audit.
