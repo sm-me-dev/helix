@@ -237,6 +237,10 @@ Token/method rule: anything shown as a measurement must name the script + date.
   entry) but unfired — no real runs happened here (see probe note above).
 - /evals route renders only committed `evals/results/*.json` via
   `import.meta.glob` (empty state otherwise); /run links to it.
+- Doctor ordering: a fresh `helix init` target fails the graph check until the
+  user runs graphify (README install flow is init → graphify → doctor green).
+  Verified: init + default pack + measured MCP inventory pass; only the
+  graph-index step stays red pre-index, which is the check working as designed.
 - Alternatives rejected: YAML library dep (subset parser is 60 lines, tested);
   capturing transcripts for the trap (canary-in-output is adapter-agnostic);
   `.codex/config.toml` in the helix eval arm (could shadow runner MCP/auth —
