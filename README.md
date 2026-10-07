@@ -11,7 +11,17 @@ May become public in the future; repo is already hardened for that
 - Vite 8, TypeScript 5.7, ESLint + Prettier
 - Postgres (Neon-ready) via `pg` + Kysely, Better Auth (opt-in)
 
-## Getting started
+## Install (one-liner, once public)
+
+```bash
+curl --fail --proto '=https' --tlsv1.2 -sSL \
+  https://raw.githubusercontent.com/sm-me-dev/helix/main/scripts/install.sh | bash
+```
+
+Safer (download → inspect → run), Windows PowerShell, flags, private-repo path,
+and troubleshooting: see [`docs/INSTALL.md`](docs/INSTALL.md).
+
+## Getting started (manual)
 
 ```bash
 npm install
@@ -21,14 +31,14 @@ npm run dev            # http://localhost:8080
 
 ## Scripts
 
-| Script | Purpose |
-| ------ | ------- |
-| `npm run dev` | Dev server on `:8080` |
-| `npm run build` | Production build + DB migrate |
-| `npm run typecheck` | `tsc --noEmit` |
-| `npm run lint` | ESLint |
-| `npm run test` | Node tests |
-| `npm run format` | Prettier write |
+| Script              | Purpose                       |
+| ------------------- | ----------------------------- |
+| `npm run dev`       | Dev server on `:8080`         |
+| `npm run build`     | Production build + DB migrate |
+| `npm run typecheck` | `tsc --noEmit`                |
+| `npm run lint`      | ESLint                        |
+| `npm run test`      | Node tests                    |
+| `npm run format`    | Prettier write                |
 
 ## Env
 
