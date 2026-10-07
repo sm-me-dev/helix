@@ -1,16 +1,12 @@
+import { ADAPTER_BY_ID } from "./adapters/index.ts";
 import { CREW_BY_ID } from "./crew.ts";
-import { HOOK_SOURCES } from "./hooks.ts";
 import { LSP_BY_ID } from "./lsps.ts";
 import { MCP_BY_ID } from "./mcps.ts";
 import { PLATFORM_BY_ID } from "./platforms.ts";
 import { SKILL_BY_ID } from "./skills.ts";
-import type { HarnessConfig, PlatformId } from "./types";
+import type { HarnessConfig, PackFile } from "./types";
 
-export type PackFile = {
-  path: string;
-  language: string;
-  body: string;
-};
+export type { PackFile } from "./types";
 
 /** Fail fast on stale ids (e.g. a persisted config from an older app version). */
 function requireKnownIds(config: HarnessConfig): void {
@@ -94,142 +90,6 @@ Auditor never shares a window with Builder.
 `;
 }
 
-function pointer(from: string): string {
-  return `# ${from}
-
-Follow \`AGENTS.md\` at the repo root. It is the single source of truth for this harness.
-Do not fork rules here — edit AGENTS.md, then this pointer stays valid.
-`;
-}
-
-function skillFile(id: HarnessConfig["skills"][number]): string {
-  const s = SKILL_BY_ID[id];
-  return `---
-name: ${s.name}
-description: ${s.description}
----
-
-${s.body}
-`;
-}
-
-function agentFile(id: HarnessConfig["crew"][number]): string {
-  const c = CREW_BY_ID[id];
-  const skills = c.skills.join(", ");
-  return `---
-name: ${c.id}
-description: ${c.oneLiner}
-tools: ${c.tools.join(", ")}
-model: ${c.model}
----
-
-You are the Helix **${c.name}**. ${c.job}
-
-When: ${c.when}
-Skip when: ${c.skipWhen}
-
-Input: ${c.input}
-Output: ${c.output}
-
-Skills to load if present: ${skills}
-
-Rules:
-- Isolated window. Return a summary, not a transcript.
-- Do not do another role's job.
-- If the contract is wrong, stop and return to the main session.
-`;
-}
-
-function mcpJson(config: HarnessConfig): string {
-  const servers: string[] = [];
-  for (const id of config.mcps) {
-    const raw = MCP_BY_ID[id].config.trim();
-    const inner = raw.replace(/^\{\n/, "").replace(/\n\}$/, "");
-    servers.push(inner);
-  }
-  return `{\n  "mcpServers": {\n${servers.join(",\n")}\n  }\n}\n`;
-}
-
-function cursorMcp(config: HarnessConfig): string {
-  return mcpJson(config);
-}
-
-function hooksJson(config: HarnessConfig): string {
-  if (!config.hooksEnabled) {
-    return JSON.stringify({ hooks: {} }, null, 2) + "\n";
-  }
-  const settings: {
-    permissions: { deny: string[] };
-    hooks: Record<string, { matcher?: string; hooks: { type: string; command: string }[] }[]>;
-  } = {
-    permissions: {
-      // Fail-closed secret protection: denies stay in permissions, not in advice hooks.
-      deny: ["Read(.env)", "Read(.env.*)", "Read(**/secrets/**)"],
-    },
-    hooks: {
-      PostToolUse: [
-        {
-          matcher: "Edit|Write",
-          hooks: [{ type: "command", command: "node .helix/hooks/format-lint.mjs" }],
-        },
-      ],
-      Stop: [{ hooks: [{ type: "command", command: "node .helix/hooks/test-on-stop.mjs" }] }],
-    },
-  };
-  if (config.graphFirst) {
-    settings.hooks.PreToolUse = [
-      {
-        matcher: "Read|Grep|Glob",
-        hooks: [{ type: "command", command: "node .helix/hooks/prefer-graph.mjs" }],
-      },
-    ];
-  }
-  return JSON.stringify(settings, null, 2) + "\n";
-}
-
-function preferGraphHook(): string {
-  return HOOK_SOURCES["prefer-graph"];
-}
-
-function formatHintHook(): string {
-  return HOOK_SOURCES["format-lint"];
-}
-
-function testOnStopHook(): string {
-  return HOOK_SOURCES["test-on-stop"];
-}
-
-function cursorRule(config: HarnessConfig): string {
-  return `---
-description: Helix harness pointer
-alwaysApply: true
----
-
-${pointer("Cursor")}
-Crew: ${config.crew.map((id) => CREW_BY_ID[id].name).join(" → ")}.
-Graph-first: ${config.graphFirst ? "yes" : "no"}.
-`;
-}
-
-function copilotInstructions(): string {
-  return pointer("GitHub Copilot");
-}
-
-function conventionsMd(): string {
-  return `# CONVENTIONS
-
-${pointer("Aider").replace("# Aider\n\n", "")}
-`;
-}
-
-function clinerules(): string {
-  return pointer("Cline").replace("# Cline\n\n", "");
-}
-
-function windsurfRule(): string {
-  return pointer("Windsurf");
-}
-
 function readme(config: HarnessConfig): string {
   const platforms = config.platforms.map((id) => PLATFORM_BY_ID[id].name).join(", ");
   const roles = config.crew
@@ -258,7 +118,7 @@ Then inside the assistant: \`/graphify .\` (Codex: \`$graphify\`).
 - Crew roles (main session orchestrates; no dispatcher file) — ${roles || "none"}
 - MCP — ${config.mcps.map((id) => MCP_BY_ID[id].name).join(", ") || "none"}
 - LSP — ${config.lsps.map((id) => LSP_BY_ID[id].name).join(", ") || "none (editor defaults)"}
-- Hooks — ${config.hooksEnabled ? "format/lint + graph-first hint + .env deny" : "off"}
+- Hooks — ${config.hooksEnabled ? "format/lint + graph-first hint + Stop test gate + .env deny" : "off"}
 
 Vendor files (CLAUDE.md, GEMINI.md, CONVENTIONS.md, …) are pointers. Edit AGENTS.md only.
 
@@ -268,84 +128,6 @@ Fan-out costs ~15× tokens when the work is coupled. Helix fans out when the Sco
 `;
 }
 
-function filesForPlatform(id: PlatformId, config: HarnessConfig): PackFile[] {
-  const files: PackFile[] = [];
-  const p = PLATFORM_BY_ID[id];
-  switch (p.family) {
-    case "claude":
-      files.push({ path: "CLAUDE.md", language: "markdown", body: pointer("Claude Code") });
-      // No conductor file: the main session is the orchestrator (dispatch rules live in AGENTS.md).
-      for (const cid of config.crew.filter((id) => id !== "conductor")) {
-        files.push({
-          path: `.claude/agents/${cid}.md`,
-          language: "markdown",
-          body: agentFile(cid),
-        });
-      }
-      for (const sid of config.skills) {
-        files.push({
-          path: `.claude/skills/${SKILL_BY_ID[sid].name}/SKILL.md`,
-          language: "markdown",
-          body: skillFile(sid),
-        });
-      }
-      files.push({
-        path: ".claude/settings.json",
-        language: "json",
-        body: hooksJson(config),
-      });
-      files.push({ path: ".mcp.json", language: "json", body: mcpJson(config) });
-      break;
-    case "cursor":
-      files.push({
-        path: ".cursor/rules/helix.mdc",
-        language: "markdown",
-        body: cursorRule(config),
-      });
-      files.push({ path: ".cursor/mcp.json", language: "json", body: cursorMcp(config) });
-      break;
-    case "gemini":
-      files.push({
-        path: "GEMINI.md",
-        language: "markdown",
-        body: pointer("Gemini / Antigravity"),
-      });
-      break;
-    case "copilot":
-      files.push({
-        path: ".github/copilot-instructions.md",
-        language: "markdown",
-        body: copilotInstructions(),
-      });
-      files.push({ path: ".vscode/mcp.json", language: "json", body: mcpJson(config) });
-      break;
-    case "aider":
-      files.push({ path: "CONVENTIONS.md", language: "markdown", body: conventionsMd() });
-      break;
-    case "rules-file":
-      if (id === "cline") {
-        files.push({ path: ".clinerules", language: "markdown", body: clinerules() });
-      } else {
-        files.push({
-          path: ".windsurf/rules/helix.md",
-          language: "markdown",
-          body: windsurfRule(),
-        });
-      }
-      break;
-    default:
-      files.push({ path: ".mcp.json", language: "json", body: mcpJson(config) });
-      for (const sid of config.skills) {
-        files.push({
-          path: `skills/${SKILL_BY_ID[sid].name}/SKILL.md`,
-          language: "markdown",
-          body: skillFile(sid),
-        });
-      }
-  }
-  return files;
-}
-
 export function generatePack(config: HarnessConfig): PackFile[] {
   requireKnownIds(config);
   const files: PackFile[] = [
@@ -353,30 +135,11 @@ export function generatePack(config: HarnessConfig): PackFile[] {
     { path: "AGENTS.md", language: "markdown", body: agentsMd(config) },
   ];
 
-  if (config.hooksEnabled) {
-    files.push({
-      path: ".helix/hooks/prefer-graph.mjs",
-      language: "javascript",
-      body: preferGraphHook(),
-    });
-    files.push({
-      path: ".helix/hooks/format-lint.mjs",
-      language: "javascript",
-      body: formatHintHook(),
-    });
-    files.push({
-      path: ".helix/hooks/test-on-stop.mjs",
-      language: "javascript",
-      body: testOnStopHook(),
-    });
-  }
-
   const seen = new Set<string>(files.map((f) => f.path));
-  // Skills emit only inside filesForPlatform, at the location the enabled
-  // platform reads (.claude/skills for Claude, skills/ for the AGENTS.md
-  // family). No unconditional root copy: each skill ships once per reader.
+  // Each adapter emits only at the location its platform reads; the seen-set
+  // keeps shared paths (e.g. GEMINI.md for gemini + antigravity) to one copy.
   for (const pid of config.platforms) {
-    for (const f of filesForPlatform(pid, config)) {
+    for (const f of ADAPTER_BY_ID[pid].files(config)) {
       if (seen.has(f.path)) continue;
       seen.add(f.path);
       files.push(f);

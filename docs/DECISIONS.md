@@ -79,3 +79,65 @@ Token/method rule: anything shown as a measurement must name the script + date.
   - Non-Claude platforms (Cursor/Codex/Gemini/Copilot/Windsurf/Cline/Aider/…):
     NOT yet individually verified this turn — 1.6 will emit only verified
     surfaces and mark the rest `unverified` in catalog notes.
+
+## 2026-10-07 — 1.1 real hooks (verified protocol above)
+
+- `src/lib/harness/hooks.ts` is the single source of truth; `generate.ts` embeds
+  the sources verbatim. `src/lib/harness/hooks.test.ts` pipes sample JSON to
+  stdin and asserts exit codes/output (11 tests).
+- `prefer-graph.mjs` (PreToolUse): reads stdin JSON, hints on wide Glob/Grep
+  (`**`, `./`) or large/unranged Reads (>400 lines); exit 0 always (advice).
+- `format-lint.mjs` (PostToolUse): detects prettier/eslint/biome (package.json +
+  config files) plus gofmt/rustfmt/ruff, runs on the edited file only, 20s
+  timeout; silent when nothing detected; fail-open with `.helix/hooks/hooks.log`.
+- `test-on-stop.mjs` (Stop, no matcher): scans the transcript for Edit/Write,
+  detects the test command (package.json scripts / Makefile / justfile, package
+  manager from lockfile), exit 2 with a 30-line tail on failure (the documented
+  Stop channel), exit 0 otherwise. Timeouts/missing binaries fail open.
+- Secret protection stays fail-closed in `permissions.deny`. Settings JSON is
+  built with `JSON.stringify`, not string surgery.
+- All hooks: zero deps, node: only, <100 lines (enforced by test).
+
+## 2026-10-07 — 1.2/1.3/1.4 orchestrator, routing, skills + 1.7 lean file
+
+- No `conductor` agent file is emitted (main session orchestrates); dispatch
+  tiers live in AGENTS.md. Correction recorded above: nested subagents ARE
+  supported since v2.1.172, so the rationale is cost (one fewer hop), not
+  impossibility.
+- Agent frontmatter now carries `tools:` (allow-list) and `model:` (tier from
+  the catalog: scout/prover haiku, builder sonnet, architect/auditor opus).
+  Scout and auditor tool lists contain no Edit/Write (test-enforced).
+  Descriptions use the "Use proactively when…" style (test-enforced).
+- Skills emit once per reader: `.claude/skills/` for Claude, `.agents/skills/`
+  for Codex; the unconditional root `skills/` copy is gone.
+- AGENTS.md rewritten: 43 lines, ~462 rough tokens (chars/4), no skills
+  section, no Do/Don't table. A test enforces <60 lines and <500 rough tokens
+  on the default pack (chars/4 until the 4.1 tokenizer exists).
+
+## 2026-10-07 — 1.5/1.6 MCP correctness + adapters (verified 2026-10-07)
+
+- MCP catalog entries are structured (`servers` objects); serializers build
+  each platform's shape with `JSON.stringify`: portable `mcpServers` (Claude
+  .mcp.json, Cursor .cursor/mcp.json), VS Code `servers` with required `type`,
+  Codex `.codex/config.toml` with `[mcp_servers.*]`.
+- Pins looked up today: `@playwright/mcp@0.0.83`, `chrome-devtools-mcp@1.10.1`,
+  serena `@v1.7.0` (latest tag via `git ls-remote`). No `@latest`, no bare git
+  ref remains (test-enforced). GitHub keeps read-only toolsets
+  (`issues,pull_requests`). Remote endpoint URLs (context7/sentry/linear/github)
+  were carried over, not re-fetched — marked `verifiedAt: null` in the catalog.
+- `filesForPlatform` is now one adapter per platform behind
+  `PlatformAdapter { id, files(config), verifiedAt, sources[] }`
+  (`src/lib/harness/adapters/`; a shared factory covers the 10 unverified
+  platforms so each still has an explicit entry — recorded choice vs 10
+  copy-paste modules).
+- Corrected two real bugs against vendor docs: Codex MCP is `config.toml`
+  `[mcp_servers.*]`, not `.mcp.json` (https://developers.openai.com/codex/mcp);
+  Codex skills live in `.agents/skills`, not `skills/`
+  (https://developers.openai.com/codex/skills). Cursor `.cursor/mcp.json` +
+  `.mdc` rules confirmed (https://cursor.com/docs/mcp, /docs/rules).
+- Unverified platforms (opencode/devin/factory/kiro/amp/kilo/…) emit only the
+  instructions file; catalog notes say the crew runs as sequential prompts.
+  Default pack: 35 files, every JSON parses, no duplicate paths.
+- Alternatives rejected: hand-rolled TOML quoting beyond `JSON.stringify`
+  (field values are vendor-controlled, no user input); network validation of
+  remote MCP endpoints in tests (pack must build offline).
