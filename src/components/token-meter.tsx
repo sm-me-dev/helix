@@ -41,17 +41,22 @@ export function TokenMeter({ compact = false }: { compact?: boolean }) {
 }
 
 export function LeanBadge() {
-  const b = useHarness((s) => breakdown(selectConfig(s)));
-  const passed = b.checks.filter((c) => c.pass).length;
+  // Select primitives only: zustand re-renders on identity change, and
+  // breakdown() returns a fresh object every call (infinite loop otherwise).
+  const leanScore = useHarness((s) => breakdown(selectConfig(s)).leanScore);
+  const passed = useHarness((s) => breakdown(selectConfig(s)).checks.filter((c) => c.pass).length);
+  const total = useHarness((s) => breakdown(selectConfig(s)).checks.length);
+  const labels = useHarness((s) =>
+    breakdown(selectConfig(s))
+      .checks.map((c) => `${c.pass ? "✓" : "✗"} ${c.label}`)
+      .join("\n"),
+  );
   return (
-    <div
-      className="flex items-baseline gap-1.5"
-      title={b.checks.map((c) => `${c.pass ? "✓" : "✗"} ${c.label}`).join("\n")}
-    >
+    <div className="flex items-baseline gap-1.5" title={labels}>
       <span className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Lean</span>
-      <span className="font-mono text-sm tabular text-paper">{b.leanScore}</span>
+      <span className="font-mono text-sm tabular text-paper">{leanScore}</span>
       <span className="font-mono text-[11px] tabular text-muted-foreground">
-        {passed}/{b.checks.length}
+        {passed}/{total}
       </span>
     </div>
   );

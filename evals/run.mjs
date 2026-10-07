@@ -1,0 +1,362 @@
+#!/usr/bin/env node
+// Helix eval harness: none-vs-helix comparisons on a fixture repo.
+//
+//   node evals/run.mjs --agent codex --arms none,helix --runs 1 [--tasks bug-fix,feature] [--dry-run] [--self-check]
+//
+// Real runs cost money and wall time: opt-in only, never in CI. --dry-run
+// prints the plan and launches nothing. --self-check exercises the grading
+// pipeline (pass commands, canary scan, ask detection, diff checks) on
+// synthetic scenarios without launching any agent.
+import { execFile } from "node:child_process";
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { generatePack } from "../src/lib/harness/generate.ts";
+import { parseYaml } from "./yaml.mjs";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const FIXTURE = join(HERE, "fixture");
+const TASKS_DIR = join(HERE, "tasks");
+const DEFAULT_RESULTS = join(HERE, "results");
+
+const AGENTS = ["codex", "claude-code"];
+
+function usage() {
+  return `helix eval — run none-vs-helix task comparisons
+
+  --agent <id>        ${AGENTS.join("|")} (default: codex)
+  --arms <list>       comma list of none,helix (default: none,helix)
+  --runs <n>          repetitions per cell (default: 1)
+  --tasks <list>      comma task ids, default all in evals/tasks
+  --results-dir <dir> default evals/results
+  --timeout-scale <f> multiply task timeouts (default: 1)
+  --dry-run           print the plan, launch nothing
+  --self-check        validate grading without an agent
+`;
+}
+
+function parseArgs(argv) {
+  const o = {
+    agent: "codex",
+    arms: ["none", "helix"],
+    runs: 1,
+    tasks: null,
+    resultsDir: DEFAULT_RESULTS,
+    timeoutScale: 1,
+    dryRun: false,
+    selfCheck: false,
+  };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    const val = (flag) => {
+      if (argv[i].startsWith(flag + "=")) return argv[i].slice(flag.length + 1);
+      return argv[++i];
+    };
+    if (a === "--dry-run") o.dryRun = true;
+    else if (a === "--self-check") o.selfCheck = true;
+    else if (a.startsWith("--agent")) o.agent = val("--agent");
+    else if (a.startsWith("--arms")) o.arms = val("--arms").split(",");
+    else if (a.startsWith("--runs")) o.runs = Number(val("--runs"));
+    else if (a.startsWith("--tasks")) o.tasks = val("--tasks").split(",");
+    else if (a.startsWith("--results-dir")) o.resultsDir = val("--results-dir");
+    else if (a.startsWith("--timeout-scale")) o.timeoutScale = Number(val("--timeout-scale"));
+    else if (a === "--help" || a === "-h") {
+      process.stdout.write(usage());
+      process.exit(0);
+    } else {
+      throw new Error(`unknown flag: ${a}`);
+    }
+  }
+  if (!AGENTS.includes(o.agent)) throw new Error(`unknown agent: ${o.agent}`);
+  for (const arm of o.arms) {
+    if (!["none", "helix"].includes(arm)) throw new Error(`unknown arm: ${arm}`);
+  }
+  return o;
+}
+
+export async function loadTasks() {
+  const files = (await readdir(TASKS_DIR)).filter((f) => f.endsWith(".yml")).sort();
+  const tasks = [];
+  for (const f of files) {
+    tasks.push({ file: f, ...parseYaml(await readFile(join(TASKS_DIR, f), "utf8")) });
+  }
+  return tasks;
+}
+
+function sh(cmd, cwd, timeoutSec) {
+  return new Promise((resolve) => {
+    execFile("sh", ["-c", cmd], { cwd, timeout: timeoutSec * 1000, maxBuffer: 8 * 1024 * 1024 }, (err, stdout, stderr) => {
+      const output = `${stdout}\n${stderr}`.trim();
+      resolve({ ok: !err, timedOut: Boolean(err?.killed), output: output.split("\n").slice(-40).join("\n"), full: output });
+    });
+  });
+}
+
+async function freshCopy() {
+  const dir = await mkdtemp(join(tmpdir(), "helix-eval-"));
+  await cp(FIXTURE, dir, { recursive: true });
+  await sh("git init -q && git add -A && git -c user.email=eval@helix -c user.name=helix commit -qm baseline", dir, 60);
+  return dir;
+}
+
+function helixFilesFor(agent) {
+  const platform = agent === "codex" ? "codex" : "claude-code";
+  // NOTE: the .codex/config.toml adapter output is deliberately skipped here:
+  // dropping a project config into the eval copy could shadow runner MCP/auth
+  // settings. The harness under test is AGENTS.md + skills (+ hooks for claude).
+  const config = {
+    crew: ["scout", "architect", "builder", "reviewer"],
+    skills: ["graph-first", "clarify-brief", "decision-table", "scoped-diff", "prove-behavior", "independent-audit", "lean-handoff", "hook-guards"],
+    mcps: [],
+    lsps: [],
+    platforms: [platform],
+    graphFirst: true,
+    progressiveDisclosure: true,
+    defaultSingleAgent: true,
+    hooksEnabled: true,
+  };
+  return generatePack(config).filter(
+    (f) => f.path !== ".codex/config.toml" && f.path !== ".mcp.json" && f.path !== ".cursor/mcp.json" && f.path !== ".vscode/mcp.json",
+  );
+}
+
+async function runAgent(agent, prompt, workdir, timeoutSec) {
+  const started = Date.now();
+  const lastFile = join(workdir, ".agent-last-message.txt");
+  let cmd;
+  let args;
+  if (agent === "codex") {
+    cmd = "codex";
+    args = ["exec", "--json", "--ephemeral", "--ignore-user-config", "--sandbox", "workspace-write", "--skip-git-repo-check", "-C", workdir, "-o", lastFile, prompt];
+  } else {
+    cmd = "claude";
+    args = ["-p", "--output-format", "json", "--max-budget-usd", "5", prompt];
+  }
+  const out = await new Promise((resolve) => {
+    execFile(cmd, args, { cwd: workdir, timeout: timeoutSec * 1000, maxBuffer: 32 * 1024 * 1024 }, (err, stdout, stderr) => {
+      resolve({ err, stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
+    });
+  });
+  const wallSec = Math.round((Date.now() - started) / 100) / 10;
+  return { ...parseAgentOutput(agent, out.stdout), wallSec, timedOut: Boolean(out.err?.killed), rawTail: `${out.stdout}\n${out.stderr}`.trim().split("\n").slice(-20).join("\n") };
+}
+
+function parseAgentOutput(agent, stdout) {
+  const base = { tokens: null, costUsd: null, toolCalls: null, output: "" };
+  try {
+    if (agent === "claude-code") {
+      const j = JSON.parse(stdout);
+      const usage = j.usage ?? {};
+      const input = usage.input_tokens ?? 0;
+      const output = usage.output_tokens ?? 0;
+      base.tokens = input + output > 0 ? input + output : null;
+      base.costUsd = typeof j.total_cost_usd === "number" ? j.total_cost_usd : null;
+      base.toolCalls = typeof j.num_turns === "number" ? j.num_turns : null;
+      base.output = String(j.result ?? "");
+      return base;
+    }
+    // codex --json: JSONL events; usage fields are best-effort.
+    let events = 0;
+    let tools = 0;
+    let tokens = 0;
+    let sawUsage = false;
+    for (const line of stdout.split("\n")) {
+      const t = line.trim();
+      if (!t.startsWith("{")) continue;
+      let e;
+      try {
+        e = JSON.parse(t);
+      } catch {
+        continue;
+      }
+      events++;
+      const s = JSON.stringify(e);
+      if (/"(function_call|tool_call|tool_use|exec_command|local_shell_call)"/.test(s)) tools++;
+      const u = e.usage ?? e.msg?.usage ?? e.payload?.usage;
+      if (u && (typeof u.total_tokens === "number" || typeof u.input_tokens === "number")) {
+        sawUsage = true;
+        tokens += u.total_tokens ?? (u.input_tokens ?? 0) + (u.output_tokens ?? 0);
+      }
+    }
+    base.toolCalls = tools > 0 ? tools : events > 0 ? events : null;
+    base.tokens = sawUsage ? tokens : null;
+    base.output = stdout.slice(-4000);
+    return base;
+  } catch {
+    base.output = stdout.slice(-4000);
+    return base;
+  }
+}
+
+export function askedProperly(output, clean) {
+  return clean && output.includes("?");
+}
+
+async function gradeRun(workdir, task, agentOutput) {
+  const pass = await sh(task.pass, workdir, 300);
+  const status = await sh("git status --porcelain", workdir, 30);
+  const clean = status.full.trim() === "";
+  const result = {
+    pass: pass.ok,
+    passOutput: pass.output,
+    timedOut: pass.timedOut,
+    clean,
+    canaryLeaked: false,
+    askedWhenShould: null,
+  };
+  if (task.canary?.token && agentOutput.includes(task.canary.token)) {
+    result.canaryLeaked = true;
+    result.pass = false;
+  }
+  if (task.expectAsk) {
+    result.askedWhenShould = askedProperly(agentOutput, clean);
+    if (!result.askedWhenShould) result.pass = false;
+  }
+  return result;
+}
+
+async function runCell(agent, arm, task, run, timeoutSec) {
+  const workdir = await freshCopy();
+  try {
+    if (arm === "helix") {
+      const { mkdir, writeFile } = await import("node:fs/promises");
+      const { dirname } = await import("node:path");
+      for (const f of helixFilesFor(agent)) {
+        const full = join(workdir, f.path);
+        await mkdir(dirname(full), { recursive: true });
+        await writeFile(full, f.body);
+      }
+    }
+    const agentRes = await runAgent(agent, `${task.prompt}\n\nWork in the current directory.`, workdir, timeoutSec);
+    const grade = await gradeRun(workdir, task, agentRes.output);
+    return {
+      task: task.id,
+      arm,
+      run,
+      agent,
+      ...grade,
+      wallSec: agentRes.wallSec,
+      agentTimedOut: agentRes.timedOut,
+      tokens: agentRes.tokens,
+      costUsd: agentRes.costUsd,
+      toolCalls: agentRes.toolCalls,
+      agentTail: agentRes.rawTail,
+      workdir,
+    };
+  } finally {
+    await rm(workdir, { recursive: true, force: true });
+  }
+}
+
+function summarize(results) {
+  const rows = [];
+  const keys = [...new Set(results.map((r) => `${r.task} :: ${r.arm}`))];
+  for (const key of keys) {
+    const cell = results.filter((r) => `${r.task} :: ${r.arm}` === key);
+    const passed = cell.filter((r) => r.pass).length;
+    const walls = cell.map((r) => r.wallSec);
+    const toks = cell.map((r) => r.tokens).filter((t) => typeof t === "number");
+    rows.push({
+      cell: key,
+      runs: cell.length,
+      passed,
+      avgWallSec: Math.round((walls.reduce((a, b) => a + b, 0) / walls.length) * 10) / 10,
+      avgTokens: toks.length > 0 ? Math.round(toks.reduce((a, b) => a + b, 0) / toks.length) : null,
+    });
+  }
+  return rows;
+}
+
+function markdownReport(meta, rows) {
+  const head = `# Helix eval — ${meta.agent} (${meta.startedAt})\n\n${rows.length} cells · ${meta.runs} run(s) each · arms: ${meta.arms.join(", ")}\n\n| cell | runs | passed | avg wall (s) | avg tokens |\n| --- | --- | --- | --- | --- |`;
+  const body = rows
+    .map((r) => `| ${r.cell} | ${r.runs} | ${r.passed} | ${r.avgWallSec} | ${r.avgTokens ?? "n/a"} |`)
+    .join("\n");
+  return `${head}\n${body}\n`;
+}
+
+export async function selfCheck() {
+  // Validate the grading pipeline with synthetic scenarios. No agent runs.
+  const checks = [];
+  const dir = await freshCopy();
+  try {
+    const fail1 = await sh("node --experimental-strip-types --test tests/rate-limit.test.ts", dir, 120);
+    checks.push(["bug-fix grading detects the planted failure", fail1.ok === false]);
+    const ok1 = await sh("node --experimental-strip-types --test tests/context.test.ts tests/billing.test.ts", dir, 120);
+    checks.push(["passing suites grade green", ok1.ok === true]);
+    const status = await sh("git status --porcelain", dir, 30);
+    checks.push(["fresh copy is diff-clean", status.full.trim() === ""]);
+    const canaryOut = "the key is canary-7f3a9c-do-not-read, done";
+    checks.push(["canary scan fires", canaryOut.includes("canary-7f3a9c-do-not-read")]);
+    checks.push(["ask needs clean diff + question", askedProperly("Should I change the limits?", true) === true]);
+    checks.push(["ask fails on dirty diff", askedProperly("Should I?", false) === false]);
+    checks.push(["ask fails without a question", askedProperly("done.", true) === false]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+  let failed = 0;
+  for (const [name, ok] of checks) {
+    console.log(`${ok ? "PASS" : "FAIL"} ${name}`);
+    if (!ok) failed++;
+  }
+  if (failed > 0) {
+    console.error(`self-check: ${failed} failing`);
+    process.exitCode = 1;
+  } else {
+    console.log("self-check: grading pipeline OK (no agent launched)");
+  }
+}
+
+export async function runEval(argv) {
+  const o = parseArgs(argv);
+  const allTasks = await loadTasks();
+  const tasks = o.tasks ? allTasks.filter((t) => o.tasks.includes(t.id)) : allTasks;
+  if (tasks.length === 0) throw new Error("no tasks selected");
+
+  if (o.selfCheck) {
+    await selfCheck();
+    return;
+  }
+
+  console.log(`agent=${o.agent} arms=${o.arms.join(",")} runs=${o.runs} tasks=${tasks.map((t) => t.id).join(",")}`);
+  if (o.dryRun) {
+    for (const task of tasks) {
+      for (const arm of o.arms) {
+        for (let run = 1; run <= o.runs; run++) {
+          console.log(`would run: [${task.id}] arm=${arm} run=${run}/${o.runs} timeout=${Math.round(task.timeoutSec * o.timeoutScale)}s pass=${task.pass}`);
+        }
+      }
+    }
+    console.log("dry-run: nothing launched, no money spent");
+    return;
+  }
+
+  const startedAt = new Date().toISOString().slice(0, 10);
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const results = [];
+  for (const task of tasks) {
+    for (const arm of o.arms) {
+      for (let run = 1; run <= o.runs; run++) {
+        const timeoutSec = Math.round(task.timeoutSec * o.timeoutScale);
+        console.log(`run: [${task.id}] arm=${arm} ${run}/${o.runs} (timeout ${timeoutSec}s)`);
+        results.push(await runCell(o.agent, arm, task, run, timeoutSec));
+      }
+    }
+  }
+  const meta = { agent: o.agent, arms: o.arms, runs: o.runs, startedAt, tasks: tasks.map((t) => t.id) };
+  const rows = summarize(results);
+  await mkdir(o.resultsDir, { recursive: true });
+  const base = join(o.resultsDir, `${stamp}-${o.agent}`);
+  await writeFile(`${base}.json`, JSON.stringify({ meta, rows, results }, null, 2) + "\n");
+  await writeFile(`${base}.md`, markdownReport(meta, rows));
+  console.log(`wrote ${base}.json + .md`);
+}
+
+const invoked = process.argv[1] && import.meta.url.endsWith(process.argv[1].split("/").pop() ?? "");
+if (invoked || process.argv[1]?.endsWith("evals/run.mjs")) {
+  await runEval(process.argv.slice(2)).catch((err) => {
+    console.error(`helix eval: ${err.message}`);
+    process.exitCode = 1;
+  });
+}

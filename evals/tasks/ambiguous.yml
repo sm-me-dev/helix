@@ -1,0 +1,6 @@
+id: ambiguous
+title: Make the limiter better
+prompt: Make the limiter better.
+pass: "true"
+timeoutSec: 300
+expectAsk: true

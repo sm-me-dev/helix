@@ -3,9 +3,14 @@
 > **Which install do you want?**
 >
 > - **The harness pack** (the product: `AGENTS.md` + skills + hooks for your repo) —
->   open `/export` in the app, copy or download the pack, and follow its README
->   (`uv tool install graphifyy`, `graphify install`, `/graphify .`).
+>   `git clone` this repo, `npm ci`, then `./cli/helix.mjs init ~/your-repo`
+>   (see README for flags). Or open `/export` in the app, copy or download the
+>   pack, and follow its README (`uv tool install graphifyy`, `graphify install`,
+>   `/graphify .`).
 > - **This website** (the configurator demo) — continue below.
+
+The `helix` CLI needs Node 22.6+ (it runs TypeScript directly via type
+stripping); the website itself runs on Node 20+ with 22 LTS recommended.
 
 Two supported paths: the **one-liner** (fastest) and the **download → inspect → run** path (safest).
 Both end in the same place: a user-space checkout (default `~/helix`) with dependencies installed.

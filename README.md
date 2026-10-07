@@ -1,83 +1,108 @@
-# Helix — a crew for every agent
+# Helix — a coding harness that earns its tokens
 
-Helix is a drop-in harness for AI coding agents (Claude Code, Cursor, Codex, Gemini,
-Copilot, and the rest of the AGENTS.md family): six specialized roles, Graphify-first
-context, skills that load on demand — tuned so the model spends attention on the change,
-not the repo.
+Helix is a drop-in harness for AI coding agents (Claude Code, Cursor, Codex,
+Gemini, Copilot, and the rest of the AGENTS.md family): tier-routed roles,
+Graphify-first context, skills that load on demand, hooks for mechanical work.
+The product is the generated file pack; this repo's website is the
+configurator that builds it.
 
-**This app is the configurator.** Toggle the crew, stack, and playbook rails, watch the
-always-on token index move, scrub a simulated fix on `/run`, then export a file pack on
-`/export` and drop it at any repo root.
+## 60-second install
 
-## Routes
-
-| Route       | Purpose                                                              |
-| ----------- | -------------------------------------------------------------------- |
-| `/` Studio  | Pitch + live token stats + crew/graph previews                       |
-| `/crew`     | The six roles — enable, inspect, read each contract                  |
-| `/stack`    | Skills / MCP / LSP toggles with schema-token costs                   |
-| `/playbook` | Four doctrine flags that rewrite the generated AGENTS.md             |
-| `/run`      | **Simulated** fix (LED-1841) — scripted timeline, live-scaled tokens |
-| `/export`   | Generated pack: preview, copy, or download per file or as text       |
-
-Token figures are **illustrative estimates** computed live from your toggles
-(see the methodology note on `/run`), not measured runs.
-
-## Install the harness pack (the product)
-
-On `/export`: copy or download the pack, drop the files at a repo root, then:
-
-```
-uv tool install graphifyy
-graphify install
+```sh
+git clone <this-repo> && cd helix && npm ci
+./cli/helix.mjs init ~/your-repo --platform claude-code,codex
 ```
 
-then inside the assistant: `/graphify .` (Codex: `$graphify`).
+`helix init` detects the stack (language, package manager, test/lint/format
+commands, existing agent files), then writes the pack. It never overwrites an
+existing file without showing a diff and asking — pass `--force` to skip the
+prompt. Requires Node 22.6+ (type stripping, no build step).
 
-## Run this website (the demo)
+## What is verified and what is not
 
-```bash
-npm install
-cp .env.example .env   # local only, never commit .env
-npm run dev            # http://localhost:8080
+- **Verified 2026-10-07 against vendor docs**: Claude hook protocol (stdin
+  JSON, exit codes), subagent frontmatter (`tools`, `model`, delegating
+  `description`), skill paths, MCP config keys per platform (VS Code
+  `servers`+`type`, Claude/Cursor `mcpServers`, Codex `config.toml`), Cursor
+  rules/MCP, Codex skills. Each catalog entry carries `source` + `verifiedAt`.
+- **Measured, not invented**: token counts use o200k_base BPE (an
+  approximation, labeled everywhere); MCP schemas come from live `tools/list`
+  captures (`scripts/measure-mcp.mjs`) or are flagged as estimates; practice
+  statistics carry confidence badges on `/playbook`.
+- **Not verified**: tail-platform paths (opencode, devin, factory, kiro, amp,
+  kilo, windsurf, cline, aider, gemini) — those adapters emit pointers only.
+- **Illustrative, not measured**: the `/run` timeline and the sample graph.
+  Real head-to-head numbers live on `/evals` once a report is committed.
+
+## How the tiers work
+
+The main session classifies every task and orchestrates — there is no
+dispatcher subagent:
+
+| Tier | When | Flow |
+| --- | --- | --- |
+| trivial | one file, clear ask, or a question | main session only |
+| standard | known files, one module | build, then a fresh-window reviewer |
+| complex | unknown surface or cross-module | scout → architect → builder → reviewer |
+
+Handoffs are 12-line cards (goal, constraints, cited files, done-means, out
+of scope). The builder writes the smallest failing test first; the Stop hook
+re-runs the repo suite; the reviewer checks plan vs diff vs test output in a
+fresh window and answers PASS or FAIL with `file:line`.
+
+## Reading `helix doctor` output
+
+```sh
+./cli/helix.mjs doctor ~/your-repo
 ```
 
-Full installer options (one-liner, Windows PowerShell, flags, troubleshooting):
-see [`docs/INSTALL.md`](docs/INSTALL.md) — it covers **this website only**.
+Checks: `AGENTS.md` parses and stays under 60 lines / ~500 tokens; every
+emitted JSON/TOML config parses and matches its platform shape; hook scripts
+referenced by settings exist and run clean on sample input; no duplicate
+skills; MCP count with per-server measured-vs-estimate tokens; Graphify index
+freshness vs `git rev-parse HEAD`; unpinned versions flagged. Exit non-zero on
+any failure. `helix measure` prints the token breakdown; `helix export
+--platform <id>` prints the pack as JSON for scripted use.
 
-## Scripts
+## Running evals
 
-| Script              | Purpose                        |
-| ------------------- | ------------------------------ |
-| `npm run dev`       | Dev server on `:8080`          |
-| `npm run build`     | Production build + DB migrate  |
-| `npm run typecheck` | `tsc --noEmit`                 |
-| `npm run lint`      | ESLint                         |
-| `npm run test`      | Node tests (scripts + harness) |
-| `npm run format`    | Prettier write                 |
+Real runs cost money and wall time: opt-in only, never in CI.
 
-## Env
+```sh
+node evals/run.mjs --agent codex --arms none,helix --runs 3 --dry-run  # plan only
+node evals/run.mjs --self-check   # grading pipeline, no agent
+node evals/run.mjs --agent codex --arms none,helix --runs 3
+```
 
-See `.env.example`. Only `VITE_`-prefixed vars reach the browser.
-Never commit `.env` or secrets. Production injects `DATABASE_URL` + auth creds.
+Six tasks (bug fix, feature, cross-module refactor, ambiguous ask, docs-only
+spec, secret-file trap) run headless in clean fixture copies. Reports land in
+`evals/results/` and render on `/evals`. Details: `evals/README.md`.
 
-Auth and database are pre-wired but **opt-in**: the configurator itself runs entirely
-client-side (zustand + `localStorage`) with no login required.
+## Adding or updating a catalog entry
 
-## Git workflow
+1. Check the vendor's current docs (Context7 + web fetch).
+2. Add `source` (URL) and `verifiedAt` (today's date) to the entry.
+3. Add or update a test that would fail if the fact were wrong (golden-file
+   tests for generated output, stdin-driven tests for hooks).
+4. If you cannot verify it, mark it unverified in notes and emit the minimal
+   surface — never ship an unverified claim as fact.
+5. Record the decision in `docs/DECISIONS.md` (date, evidence, rejected
+   alternatives).
 
-- Trunk-based: `main` always deployable, short-lived branches, merge in 1–3 days.
-- Conventional Commits: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`.
-- Hooks (Husky + lint-staged): ESLint + Prettier on commit, typecheck on push.
-- CI: lint → typecheck → test → build, plus ShellCheck on `scripts/`.
+Gates for every commit: `npm run lint && npm run typecheck && npm test`
+(needs Node 22 to match CI; green on 24/26 too).
 
-## Going public checklist
+## Routes (configurator)
 
-- [ ] Confirm `LICENSE` (MIT) + copyright holder
-- [ ] Remove any internal URLs / screenshots from docs
-- [ ] Rotate any credentials ever committed (none should exist)
-- [ ] Enable branch protection on `main` + secret scanning + Dependabot
-- [ ] Add `CODEOWNERS` if needed
+| Route | Purpose |
+| --- | --- |
+| `/` Studio | Pitch + live token stats |
+| `/crew` | The four roles — enable, inspect, read each contract |
+| `/stack` | Skills / MCP / LSP toggles with measured-or-labeled costs + leanness checklist |
+| `/playbook` | Doctrine flags with confidence badges and sources |
+| `/run` | **Illustrative** fix timeline — scripted, live-scaled tokens |
+| `/evals` | Real eval reports (empty until one is committed) |
+| `/export` | Generated pack: preview, copy, or download per file or as text |
 
 ## License
 

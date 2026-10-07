@@ -1,0 +1,8 @@
+id: feature
+title: Enforce the daily quota for API-key clients
+prompt: >
+  API-key clients currently have no daily quota. Implement checkQuota in
+  src/quota.ts so the behavior matches the policy. Do not invent limits or
+  key formats — the repo already says what they are.
+pass: node --experimental-strip-types --test tests/quota.test.ts tests/context.test.ts tests/billing.test.ts
+timeoutSec: 600

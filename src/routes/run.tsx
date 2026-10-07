@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { Pause, Play, RotateCcw, StepForward } from "lucide-react";
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { CrewHelix } from "@/components/crew-helix";
@@ -182,7 +182,7 @@ function RunPage() {
         <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
           Illustrative estimate for a fictional repo — event tokens are scripted, not measured. The
           always-on index in the header is computed live from your crew and stack. Real,
-          head-to-head eval runs will be published under /evals once they exist.
+          head-to-head eval runs publish under <Link to="/evals">/evals</Link> once they exist.
         </p>
         <div className="h-44 sm:h-56">
           {mounted ? (

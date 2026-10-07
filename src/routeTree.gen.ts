@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CrewRouteImport } from './routes/crew'
+import { Route as EvalsRouteImport } from './routes/evals'
 import { Route as ExportRouteImport } from './routes/export'
 import { Route as PlaybookRouteImport } from './routes/playbook'
 import { Route as RunRouteImport } from './routes/run'
@@ -24,6 +25,11 @@ const IndexRoute = IndexRouteImport.update({
 const CrewRoute = CrewRouteImport.update({
   id: '/crew',
   path: '/crew',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EvalsRoute = EvalsRouteImport.update({
+  id: '/evals',
+  path: '/evals',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ExportRoute = ExportRouteImport.update({
@@ -50,6 +56,7 @@ const StackRoute = StackRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/crew': typeof CrewRoute
+  '/evals': typeof EvalsRoute
   '/export': typeof ExportRoute
   '/playbook': typeof PlaybookRoute
   '/run': typeof RunRoute
@@ -58,6 +65,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/crew': typeof CrewRoute
+  '/evals': typeof EvalsRoute
   '/export': typeof ExportRoute
   '/playbook': typeof PlaybookRoute
   '/run': typeof RunRoute
@@ -67,6 +75,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/crew': typeof CrewRoute
+  '/evals': typeof EvalsRoute
   '/export': typeof ExportRoute
   '/playbook': typeof PlaybookRoute
   '/run': typeof RunRoute
@@ -74,15 +83,25 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/crew' | '/export' | '/playbook' | '/run' | '/stack'
+  fullPaths:
+    '/' | '/crew' | '/evals' | '/export' | '/playbook' | '/run' | '/stack'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/crew' | '/export' | '/playbook' | '/run' | '/stack'
-  id: '__root__' | '/' | '/crew' | '/export' | '/playbook' | '/run' | '/stack'
+  to: '/' | '/crew' | '/evals' | '/export' | '/playbook' | '/run' | '/stack'
+  id:
+    | '__root__'
+    | '/'
+    | '/crew'
+    | '/evals'
+    | '/export'
+    | '/playbook'
+    | '/run'
+    | '/stack'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CrewRoute: typeof CrewRoute
+  EvalsRoute: typeof EvalsRoute
   ExportRoute: typeof ExportRoute
   PlaybookRoute: typeof PlaybookRoute
   RunRoute: typeof RunRoute
@@ -103,6 +122,13 @@ declare module '@tanstack/react-router' {
       path: '/crew'
       fullPath: '/crew'
       preLoaderRoute: typeof CrewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/evals': {
+      id: '/evals'
+      path: '/evals'
+      fullPath: '/evals'
+      preLoaderRoute: typeof EvalsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/export': {
@@ -139,6 +165,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CrewRoute: CrewRoute,
+  EvalsRoute: EvalsRoute,
   ExportRoute: ExportRoute,
   PlaybookRoute: PlaybookRoute,
   RunRoute: RunRoute,
