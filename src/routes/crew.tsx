@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { CrewHelix } from "@/components/crew-helix";
 import { Shell } from "@/components/shell";
 import { Switch } from "@/components/ui/switch";
-import { CREW, CREW_BY_ID } from "@/lib/harness/crew";
+import { CREW_BY_ID } from "@/lib/harness/crew";
 import { SKILL_BY_ID } from "@/lib/harness/skills";
 import type { CrewId } from "@/lib/harness/types";
 import { useHarness } from "@/lib/store";
@@ -41,7 +41,9 @@ function CrewPage() {
         <article className="rounded-[28px] bg-card p-5 shadow-[var(--shadow-border)] sm:p-7">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="font-mono text-[11px] text-steel">{role.step} · {role.verb}</p>
+              <p className="font-mono text-[11px] text-steel">
+                {role.step} · {role.verb}
+              </p>
               <h2 className="mt-1 font-display text-3xl">{role.name}</h2>
             </div>
             <label className="flex min-h-11 items-center gap-3">

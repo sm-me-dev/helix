@@ -76,7 +76,7 @@ export const MCPS: Mcp[] = [
     job: "Issues, PRs, and Actions. Enable only the toolsets you use — the full catalog is expensive.",
     tools: ["issues", "pull_requests", "actions"],
     schemaTokens: 1680,
-    skipIf: "You already have \`gh\` and a single local repo.",
+    skipIf: "You already have `gh` and a single local repo.",
     defaultOn: false,
     config: `{
   "github": {
