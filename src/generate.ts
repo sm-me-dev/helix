@@ -32,51 +32,50 @@ function requireKnownIds(config: HarnessConfig): void {
 
 function agentsMd(config: HarnessConfig): string {
   const crewRows = config.crew
+    .filter((id) => id !== "conductor")
     .map((id) => {
       const c = CREW_BY_ID[id];
       return `| ${c.name} | ${c.when} | ${c.output.split(".")[0]}. |`;
     })
     .join("\n");
 
-  const skillList = config.skills
-    .map((id) => {
-      const s = SKILL_BY_ID[id];
-      return `- \`${s.name}\` — ${s.description}`;
-    })
-    .join("\n");
-
   const mcpList = config.mcps.map((id) => MCP_BY_ID[id].name).join(", ");
 
   const graph = config.graphFirst
-    ? `Query the graph first (\`query_graph\`, \`shortest_path\`, \`explain\`). Read a file only when the graph cites it. Rebuild with \`/graphify .\` (Codex: \`$graphify\`) if the map is stale.`
+    ? `Graph first: query, path, explain. Read a file only when the graph cites it.`
     : `Prefer targeted reads over glob. Name files before opening them.`;
 
   const fanout = config.defaultSingleAgent
-    ? `Default to a single agent when the change is local and the files are already in context. Fan out only when subtasks do not share types, names, or call sites, and a cheap test can accept the result.`
+    ? `Default to one agent when the change is local and files are in context.`
     : `Dispatch the matching crew role for every non-trivial task.`;
 
   const hooks = config.hooksEnabled
-    ? `Hooks own format, lint, and secret-path denies. Do not spend model tokens on them.`
+    ? `Hooks own format, lint, and secret denies. Spend no model tokens on them.`
     : `Run the repo format/lint commands before you return.`;
 
   return `# Helix
 
-Universal coding harness. This file is the always-on layer. Keep it short.
-Load skills and references only when the current task needs them.
+Always-on layer. Skills load on demand; this file stays short.
+
+## Dispatch (you are the orchestrator; no dispatcher subagent)
+
+- trivial (one file, clear ask, or question): main session only.
+- standard (known files, one module): build, then a fresh-window reviewer.
+- complex (unknown surface or cross-module): scout, architect, builder, reviewer.
+- Handoff, 12 lines max: goal, constraints, cited files, done-means, out of scope.
 
 ## How to work
 
-1. Classify the task (bug / feature / refactor / question).
+1. Classify (bug/feature/refactor/question), pick a tier.
 2. ${fanout}
 3. ${graph}
-4. Return compact artifacts. Never dump raw transcripts between agents.
+4. Return summaries, never transcripts.
 
 ## Commands
 
-Use the repo's actual scripts — read \`package.json\`, \`Makefile\`, or \`justfile\`. Do not invent flags.
-
-- Graph: \`graphify query "…"\` · \`graphify path A B\` · \`graphify explain NAME\`
-- MCPs enabled: ${mcpList || "(none)"}
+Read package.json / Makefile / justfile for real scripts. Never invent flags.
+- Graph: graphify query ".." / path A B / explain NAME
+- MCPs: ${mcpList || "(none)"}
 
 ## Crew
 
@@ -84,34 +83,14 @@ Use the repo's actual scripts — read \`package.json\`, \`Makefile\`, or \`just
 | --- | --- | --- |
 ${crewRows}
 
-Conductor never writes the patch. Auditor never shares a context window with Builder.
+Auditor never shares a window with Builder.
 
-## Token budget
+## Budget
 
-- Always-on rules stay small. Skills load on demand.
-- Subagent descriptions in the parent: one sentence. Body loads on run.
-- Handoff card hard cap: 12 lines (goal, constraints, cited files, done-means, out of scope).
-- Do not read a file over ~400 lines; use graph neighbors or a focused range.
-
-## Quality
-
-- Match existing patterns. No drive-by refactors.
-- Every behavior change has a test the Prover ran.
+- One-sentence subagent descriptions; body loads on run.
+- No file over ~400 lines; use graph neighbors or a range.
 - ${hooks}
-
-## Skills
-
-${skillList}
-
-## Do / Don't
-
-| Do | Don't |
-| --- | --- |
-| Ask the graph who calls this | Grep the repo "to be sure" |
-| Write an 8-line handoff card | Paste the last 40 turns |
-| Earn each rule from a past failure | Download a 400-line rules pack |
-| Stop when the brief is ambiguous | Guess product intent |
-| Strip unused MCP toolsets | Leave 20 servers connected |
+- Every behavior change ships with a failing test first.
 `;
 }
 
@@ -140,6 +119,8 @@ function agentFile(id: HarnessConfig["crew"][number]): string {
   return `---
 name: ${c.id}
 description: ${c.oneLiner}
+tools: ${c.tools.join(", ")}
+model: ${c.model}
 ---
 
 You are the Helix **${c.name}**. ${c.job}
@@ -152,12 +133,10 @@ Output: ${c.output}
 
 Skills to load if present: ${skills}
 
-Tools you may need: ${c.tools.join(", ")}
-
 Rules:
 - Isolated window. Return a summary, not a transcript.
 - Do not do another role's job.
-- If the contract is wrong, stop and return to Conductor.
+- If the contract is wrong, stop and return to the main session.
 `;
 }
 
@@ -253,6 +232,10 @@ function windsurfRule(): string {
 
 function readme(config: HarnessConfig): string {
   const platforms = config.platforms.map((id) => PLATFORM_BY_ID[id].name).join(", ");
+  const roles = config.crew
+    .filter((id) => id !== "conductor")
+    .map((id) => CREW_BY_ID[id].name)
+    .join(", ");
   return `# Helix pack
 
 Drop these files at the root of a repo. One harness, many agents.
@@ -272,7 +255,7 @@ Then inside the assistant: \`/graphify .\` (Codex: \`$graphify\`).
 
 - \`AGENTS.md\` — always-on, short, vendor-neutral
 - Skills — progressive disclosure, Agent Skills format
-- Crew roles — Conductor, Scout, Architect, Builder, Prover, Auditor
+- Crew roles (main session orchestrates; no dispatcher file) — ${roles || "none"}
 - MCP — ${config.mcps.map((id) => MCP_BY_ID[id].name).join(", ") || "none"}
 - LSP — ${config.lsps.map((id) => LSP_BY_ID[id].name).join(", ") || "none (editor defaults)"}
 - Hooks — ${config.hooksEnabled ? "format/lint + graph-first hint + .env deny" : "off"}
@@ -291,7 +274,8 @@ function filesForPlatform(id: PlatformId, config: HarnessConfig): PackFile[] {
   switch (p.family) {
     case "claude":
       files.push({ path: "CLAUDE.md", language: "markdown", body: pointer("Claude Code") });
-      for (const cid of config.crew) {
+      // No conductor file: the main session is the orchestrator (dispatch rules live in AGENTS.md).
+      for (const cid of config.crew.filter((id) => id !== "conductor")) {
         files.push({
           path: `.claude/agents/${cid}.md`,
           language: "markdown",
@@ -388,12 +372,9 @@ export function generatePack(config: HarnessConfig): PackFile[] {
   }
 
   const seen = new Set<string>(files.map((f) => f.path));
-  for (const sid of config.skills) {
-    const path = `skills/${SKILL_BY_ID[sid].name}/SKILL.md`;
-    if (seen.has(path)) continue;
-    seen.add(path);
-    files.push({ path, language: "markdown", body: skillFile(sid) });
-  }
+  // Skills emit only inside filesForPlatform, at the location the enabled
+  // platform reads (.claude/skills for Claude, skills/ for the AGENTS.md
+  // family). No unconditional root copy: each skill ships once per reader.
   for (const pid of config.platforms) {
     for (const f of filesForPlatform(pid, config)) {
       if (seen.has(f.path)) continue;
