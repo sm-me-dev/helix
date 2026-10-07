@@ -1,0 +1,112 @@
+import type { SimEvent } from "./types";
+
+export const SAMPLE_ISSUE = {
+  id: "LED-1841",
+  title: "Authenticated API clients are hitting the public rate limiter",
+  body: "Customers with valid API keys get 429s from /v1/ledger after ~40 requests/min. Anonymous IP limits should not apply once AuthMiddleware has a user. Started after the gateway change that strips unknown headers.",
+  repo: "ledger-api",
+};
+
+export const SIM_EVENTS: SimEvent[] = [
+  {
+    t: 0,
+    role: "conductor",
+    title: "Classify and contract",
+    body: "Bug. Two modules (auth, limiter) share a call site — fan-out is justified. Contract: restore authenticated bypass without loosening anonymous limits. Success: existing IP test plus a new API-key test both pass.",
+    tokens: 420,
+    naiveTokens: 420,
+  },
+  {
+    t: 1400,
+    role: "scout",
+    title: "query_graph",
+    body: "how does rate limiting attach to authenticated requests?",
+    tokens: 860,
+    naiveTokens: 11800,
+    tool: "graphify.query_graph",
+  },
+  {
+    t: 2800,
+    role: "scout",
+    title: "shortest_path",
+    body: "AuthMiddleware → RateLimiter  (3 hops via ApiGateway)",
+    tokens: 1120,
+    naiveTokens: 18400,
+    tool: "graphify.shortest_path",
+  },
+  {
+    t: 4200,
+    role: "scout",
+    title: "Read cited ranges",
+    body: "Three files, not twenty-eight. Auth stamps a user but never a limiter class. RateLimiter still looks at X-Client-Class, which the gateway now strips.",
+    tokens: 6400,
+    naiveTokens: 48200,
+    files: [
+      "src/http/gateway.ts:40-88",
+      "src/http/auth.ts:12-71",
+      "src/http/rate-limit.ts:1-120",
+    ],
+  },
+  {
+    t: 5600,
+    role: "scout",
+    title: "Brief",
+    body: "Assumption (stated, not guessed): authenticated means 'has RequestContext.user'. Open question: should API keys and cookie sessions share one bucket? Defaulting to one bucket unless product says otherwise.",
+    tokens: 7100,
+    naiveTokens: 51000,
+  },
+  {
+    t: 7200,
+    role: "architect",
+    title: "Decision table",
+    body: "A: restore the stripped header — fights the gateway. B: RateLimiter reads RequestContext.user — matches the existing type. Pick B. Blast radius: rate-limit.ts + one test.",
+    tokens: 8400,
+    naiveTokens: 54000,
+  },
+  {
+    t: 8600,
+    role: "architect",
+    title: "Plan",
+    body: "1. Stamp limiter class on context in AuthMiddleware. 2. RateLimiter branches on context, not headers. 3. Prover adds test with a valid API key at 80 req/min. Out of scope: Redis key layout, billing.",
+    tokens: 9100,
+    naiveTokens: 56000,
+  },
+  {
+    t: 10800,
+    role: "builder",
+    title: "Scoped diff",
+    body: "auth.ts stamps context.limiter = user ? 'auth' : 'public'. rate-limit.ts reads context.limiter. No helpers. No drive-by format of gateway.ts.",
+    tokens: 14200,
+    naiveTokens: 78000,
+    files: ["src/http/auth.ts", "src/http/rate-limit.ts"],
+  },
+  {
+    t: 12800,
+    role: "prover",
+    title: "Fail then pass",
+    body: "pnpm test rate-limit.test.ts — new case 429s on HEAD, then green after the branch. Anonymous IP case unchanged.",
+    tokens: 16800,
+    naiveTokens: 86000,
+    tool: "pnpm test",
+    files: ["src/http/rate-limit.test.ts"],
+  },
+  {
+    t: 14600,
+    role: "auditor",
+    title: "Independent pass",
+    body: "Fresh window. Diff matches the plan's two files plus the test. Success criteria ran. get_pr_impact: RateLimiter callers are tests and gateway only. PASS.",
+    tokens: 18900,
+    naiveTokens: 91000,
+    tool: "graphify.get_pr_impact",
+  },
+  {
+    t: 15800,
+    role: "conductor",
+    title: "Merge",
+    body: "Six summaries, not six transcripts. Ready to open the PR. Token ratio vs a single window that globbed src/http: 4.8× less.",
+    tokens: 19420,
+    naiveTokens: 93800,
+  },
+];
+
+export const SIM_DURATION = 17000;
