@@ -1,0 +1,5 @@
+# ShellCheck — bash/sh static analysis
+shell=bash
+enable=avoid-nullary-conditions,require-variable-braces
+disable=SC1091
+external-sources=true
