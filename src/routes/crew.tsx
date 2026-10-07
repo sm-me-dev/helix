@@ -46,7 +46,14 @@ function CrewPage() {
               </p>
               <h2 className="mt-1 font-display text-3xl">{role.name}</h2>
             </div>
-            <label className="flex min-h-11 items-center gap-3">
+            <label
+              className="flex min-h-11 items-center gap-3"
+              title={
+                role.required
+                  ? "Conductor is required — it owns every run and cannot be disabled."
+                  : undefined
+              }
+            >
               <span className="text-sm text-muted-foreground">
                 {role.required ? "Always on" : on ? "Enabled" : "Off"}
               </span>
@@ -83,6 +90,12 @@ function CrewPage() {
             <span className="mx-2 text-border">·</span>
             Always-on index: {role.alwaysOnTokens} tokens
           </p>
+          {role.required && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Conductor can’t be disabled — it classifies the work and holds the contract for every
+              run.
+            </p>
+          )}
         </article>
       </div>
     </Shell>

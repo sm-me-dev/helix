@@ -1,5 +1,6 @@
 import { breakdown, formatTokens } from "@/lib/harness/tokens";
 import { selectConfig, useHarness } from "@/lib/store";
+import { Term } from "@/components/term";
 import { cn } from "@/lib/utils";
 
 export function TokenMeter({ compact = false }: { compact?: boolean }) {
@@ -13,7 +14,9 @@ export function TokenMeter({ compact = false }: { compact?: boolean }) {
         {!compact && (
           <div className="mb-1 flex items-baseline justify-between gap-3">
             <span className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-              Always-on
+              <Term definition="Tokens loaded on every turn, before the task is known. Lower is cheaper.">
+                Always-on
+              </Term>
             </span>
             <span className="font-mono text-[11px] tabular text-steel">
               {formatTokens(alwaysOn)}

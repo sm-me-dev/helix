@@ -3,6 +3,7 @@ import { ArrowRight } from "lucide-react";
 import { CrewHelix } from "@/components/crew-helix";
 import { KnowledgeGraph } from "@/components/knowledge-graph";
 import { Shell } from "@/components/shell";
+import { Term } from "@/components/term";
 import { Button } from "@/components/ui/button";
 import { PLATFORMS } from "@/lib/harness/platforms";
 import { SAMPLE_ISSUE } from "@/lib/harness/simulation";
@@ -22,14 +23,16 @@ function Studio() {
     <Shell>
       <div className="stagger-in grid gap-10 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:gap-14">
         <section className="min-w-0">
-          <p className="text-[11px] uppercase tracking-[0.22em] text-steel">Universal coding harness</p>
+          <p className="text-[11px] uppercase tracking-[0.22em] text-steel">
+            Universal coding harness
+          </p>
           <h1 className="mt-3 font-display text-[2.35rem] leading-[1.08] tracking-[-0.03em] sm:text-5xl lg:text-[3.35rem]">
             A crew for every agent. Fewer tokens. Better diffs.
           </h1>
           <p className="mt-5 max-w-[38rem] text-base leading-relaxed text-muted-foreground sm:text-[1.05rem]">
-            Helix is a drop-in harness for Claude Code, Cursor, Codex, Gemini, Copilot, and the rest of
-            the AGENTS.md family. Six specialized roles, Graphify-first context, skills that load on
-            demand — tuned so the model spends attention on the change, not the repo.
+            Helix is a drop-in harness for Claude Code, Cursor, Codex, Gemini, Copilot, and the rest
+            of the AGENTS.md family. Six specialized roles, Graphify-first context, skills that load
+            on demand — tuned so the model spends attention on the change, not the repo.
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
             <Button asChild>
@@ -43,8 +46,18 @@ function Studio() {
             </Button>
           </div>
           <dl className="mt-10 grid grid-cols-3 gap-3 sm:gap-5">
-            <Stat k="Always-on" v={formatTokens(b.alwaysOn)} hint={`vs ${formatTokens(b.naiveAlwaysOn)} naive`} />
-            <Stat k="Lean score" v={String(b.leanScore)} hint={`${ratio}× lighter`} />
+            <Stat
+              k="Always-on"
+              term="Tokens loaded on every turn, before the task is known. Lower is cheaper."
+              v={formatTokens(b.alwaysOn)}
+              hint={`vs ${formatTokens(b.naiveAlwaysOn)} naive`}
+            />
+            <Stat
+              k="Lean score"
+              term="0–99 leanness estimate derived from your toggles. Illustrative, not measured."
+              v={String(b.leanScore)}
+              hint={`${ratio}× lighter`}
+            />
             <Stat k="Agents" v={String(PLATFORMS.length)} hint="same AGENTS.md" />
           </dl>
         </section>
@@ -83,7 +96,9 @@ function Studio() {
 
       <section className="mt-16 rounded-[28px] bg-card px-5 py-8 shadow-[var(--shadow-border)] sm:px-8">
         <p className="text-[11px] uppercase tracking-[0.18em] text-steel">2026 rails</p>
-        <h2 className="mt-2 font-display text-3xl tracking-tight">Earn each line. Strip each tool.</h2>
+        <h2 className="mt-2 font-display text-3xl tracking-tight">
+          Earn each line. Strip each tool.
+        </h2>
         <ul className="mt-6 grid gap-6 sm:grid-cols-3">
           <Rail
             title="Progressive disclosure"
@@ -103,10 +118,12 @@ function Studio() {
   );
 }
 
-function Stat({ k, v, hint }: { k: string; v: string; hint: string }) {
+function Stat({ k, v, hint, term }: { k: string; v: string; hint: string; term?: string }) {
   return (
     <div className="rounded-2xl bg-card px-3 py-3 shadow-[var(--shadow-border)] sm:px-4 sm:py-4">
-      <dt className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">{k}</dt>
+      <dt className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+        {term ? <Term definition={term}>{k}</Term> : k}
+      </dt>
       <dd className="mt-1 font-mono text-xl tabular text-paper sm:text-2xl">{v}</dd>
       <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
     </div>

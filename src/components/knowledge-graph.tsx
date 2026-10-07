@@ -34,6 +34,13 @@ export function KnowledgeGraph({
     onSelect?.(id);
   }
 
+  function onNodeKey(e: React.KeyboardEvent, id: string) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      choose(id);
+    }
+  }
+
   return (
     <div className={cn("flex min-h-0 flex-col", className)}>
       <svg
@@ -57,7 +64,9 @@ export function KnowledgeGraph({
               stroke={hot ? "var(--color-paper)" : "var(--color-border)"}
               strokeWidth={hot ? 0.45 : 0.28}
               strokeOpacity={hot ? 0.7 : 0.55}
-              strokeDasharray={e.kind === "tests" ? "1.2 0.8" : e.kind === "imports" ? "0.6 0.6" : undefined}
+              strokeDasharray={
+                e.kind === "tests" ? "1.2 0.8" : e.kind === "imports" ? "0.6 0.6" : undefined
+              }
             />
           );
         })}
@@ -69,16 +78,23 @@ export function KnowledgeGraph({
               key={n.id}
               transform={`translate(${n.x} ${n.y})`}
               className="cursor-pointer"
+              role="button"
+              tabIndex={0}
+              aria-label={`Graph node ${n.label}`}
+              aria-pressed={selected}
               onClick={() => choose(n.id)}
+              onKeyDown={(e) => onNodeKey(e, n.id)}
             >
               {selected && (
-                <circle r="4.4" fill="none" stroke="var(--color-paper)" strokeOpacity="0.45" strokeWidth="0.3" />
+                <circle
+                  r="4.4"
+                  fill="none"
+                  stroke="var(--color-paper)"
+                  strokeOpacity="0.45"
+                  strokeWidth="0.3"
+                />
               )}
-              <circle
-                r={hot ? 1.7 : 1.35}
-                fill={KIND_FILL[n.kind]}
-                opacity={hot ? 1 : 0.45}
-              />
+              <circle r={hot ? 1.7 : 1.35} fill={KIND_FILL[n.kind]} opacity={hot ? 1 : 0.45} />
               <text
                 x="2.4"
                 y="0.9"
@@ -97,12 +113,19 @@ export function KnowledgeGraph({
         <div className="flex items-center justify-between gap-3">
           <p className="font-mono text-[11px] text-steel">
             {SAMPLE_GRAPH.title}
-            <span className="text-muted-foreground"> · {SAMPLE_GRAPH.nodes.toLocaleString()} nodes</span>
+            <span className="text-muted-foreground">
+              {" "}
+              · {SAMPLE_GRAPH.nodes.toLocaleString()} nodes
+            </span>
           </p>
-          <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">{node.kind}</p>
+          <p className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+            {node.kind}
+          </p>
         </div>
         <p className="mt-1.5 font-mono text-sm text-paper">{node.label}</p>
-        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{NODE_EXPLAIN[node.id]}</p>
+        <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+          {NODE_EXPLAIN[node.id]}
+        </p>
       </div>
     </div>
   );

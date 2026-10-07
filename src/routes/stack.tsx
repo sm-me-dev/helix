@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Shell } from "@/components/shell";
+import { Term } from "@/components/term";
 import { Switch } from "@/components/ui/switch";
 import { LSPS } from "@/lib/harness/lsps";
 import { MCPS } from "@/lib/harness/mcps";
@@ -33,14 +34,20 @@ function StackPage() {
           </p>
         </div>
         <p className="font-mono text-sm tabular text-steel">
-          schemas {formatTokens(b.mcpSchemas + b.lspSchemas)}
-          <span className="text-muted-foreground"> always-on {formatTokens(b.alwaysOn)}</span>
+          schemas {formatTokens(b.mcpSchemas + b.lspSchemas)}{" "}
+          <span className="text-muted-foreground">
+            <Term definition="Tokens loaded on every turn, before the task is known. Lower is cheaper.">
+              always-on
+            </Term>{" "}
+            {formatTokens(b.alwaysOn)}
+          </span>
         </p>
       </header>
 
       {mcpWarn && (
         <p className="mt-6 rounded-2xl bg-warn/10 px-4 py-3 text-sm text-warn">
-          More than five MCPs. Schema tokens sit in every turn — disable anything this repo will not call.
+          More than five MCPs. Schema tokens sit in every turn — disable anything this repo will not
+          call.
         </p>
       )}
 
@@ -52,7 +59,9 @@ function StackPage() {
             onClick={() => setTab(t)}
             className={cn(
               "flex-1 rounded-lg px-3 py-2.5 text-sm transition-[background-color,color] duration-150 ease-out",
-              tab === t ? "bg-card text-foreground shadow-[var(--shadow-border)]" : "text-muted-foreground",
+              tab === t
+                ? "bg-card text-foreground shadow-[var(--shadow-border)]"
+                : "text-muted-foreground",
             )}
           >
             {t}
@@ -65,16 +74,25 @@ function StackPage() {
           {SKILLS.map((s) => {
             const on = store.skills.includes(s.id);
             return (
-              <li key={s.id} className="rounded-2xl bg-card p-4 shadow-[var(--shadow-border)] sm:p-5">
+              <li
+                key={s.id}
+                className="rounded-2xl bg-card p-4 shadow-[var(--shadow-border)] sm:p-5"
+              >
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <p className="font-mono text-sm text-paper">{s.name}</p>
-                    <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{s.description}</p>
+                    <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                      {s.description}
+                    </p>
                     <p className="mt-2 font-mono text-[11px] text-steel">
                       {s.alwaysOnTokens} index · {s.bodyTokens} body on demand · {s.loadsWhen}
                     </p>
                   </div>
-                  <Switch checked={on} onCheckedChange={() => store.toggleSkill(s.id)} aria-label={s.name} />
+                  <Switch
+                    checked={on}
+                    onCheckedChange={() => store.toggleSkill(s.id)}
+                    aria-label={s.name}
+                  />
                 </div>
               </li>
             );
@@ -87,12 +105,17 @@ function StackPage() {
           {MCPS.map((m) => {
             const on = store.mcps.includes(m.id);
             return (
-              <li key={m.id} className="rounded-2xl bg-card p-4 shadow-[var(--shadow-border)] sm:p-5">
+              <li
+                key={m.id}
+                className="rounded-2xl bg-card p-4 shadow-[var(--shadow-border)] sm:p-5"
+              >
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <div className="flex flex-wrap items-baseline gap-2">
                       <h2 className="font-medium">{m.name}</h2>
-                      <span className="font-mono text-[11px] text-muted-foreground">{m.maintainer}</span>
+                      <span className="font-mono text-[11px] text-muted-foreground">
+                        {m.maintainer}
+                      </span>
                     </div>
                     <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{m.job}</p>
                     <p className="mt-2 font-mono text-[11px] text-steel">
@@ -100,7 +123,11 @@ function StackPage() {
                     </p>
                     <p className="mt-2 text-xs text-muted-foreground">Skip if {m.skipIf}</p>
                   </div>
-                  <Switch checked={on} onCheckedChange={() => store.toggleMcp(m.id)} aria-label={m.name} />
+                  <Switch
+                    checked={on}
+                    onCheckedChange={() => store.toggleMcp(m.id)}
+                    aria-label={m.name}
+                  />
                 </div>
               </li>
             );
@@ -113,7 +140,10 @@ function StackPage() {
           {LSPS.map((l) => {
             const on = store.lsps.includes(l.id);
             return (
-              <li key={l.id} className="rounded-2xl bg-card p-4 shadow-[var(--shadow-border)] sm:p-5">
+              <li
+                key={l.id}
+                className="rounded-2xl bg-card p-4 shadow-[var(--shadow-border)] sm:p-5"
+              >
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <h2 className="font-medium">{l.name}</h2>
@@ -122,7 +152,11 @@ function StackPage() {
                       {l.languages.join(" · ")} · {l.schemaTokens} tokens
                     </p>
                   </div>
-                  <Switch checked={on} onCheckedChange={() => store.toggleLsp(l.id)} aria-label={l.name} />
+                  <Switch
+                    checked={on}
+                    onCheckedChange={() => store.toggleLsp(l.id)}
+                    aria-label={l.name}
+                  />
                 </div>
               </li>
             );

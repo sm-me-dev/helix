@@ -17,7 +17,11 @@ export const Route = createFileRoute("/run")({ component: RunPage });
 
 function RunPage() {
   const [t, setT] = useState(0);
-  const [playing, setPlaying] = useState(true);
+  const [playing, setPlaying] = useState(
+    () =>
+      typeof window === "undefined" ||
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {

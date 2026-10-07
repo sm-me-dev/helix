@@ -1,12 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import {
-  BookOpen,
-  Boxes,
-  Download,
-  Play,
-  Radio,
-  Users,
-} from "lucide-react";
+import { BookOpen, Boxes, Download, Play, Radio, Users } from "lucide-react";
 import { type ReactNode } from "react";
 import { Toaster } from "sonner";
 import { HelixMark } from "@/components/mark";
@@ -27,19 +20,26 @@ export function Shell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-dvh flex-col bg-background text-foreground">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-card focus:px-4 focus:py-2 focus:text-sm"
+      >
+        Skip to content
+      </a>
       <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-[1400px] items-center gap-4 px-4 sm:h-16 sm:px-6">
           <Link to="/" className="flex items-center gap-2.5 pr-1">
             <HelixMark className="size-6" />
             <span className="font-display text-xl tracking-tight">Helix</span>
           </Link>
-          <nav className="hidden items-center gap-1 md:flex">
+          <nav aria-label="Primary" className="hidden items-center gap-1 md:flex">
             {NAV.map((item) => {
               const on = item.to === "/" ? pathname === "/" : pathname === item.to;
               return (
                 <Link
                   key={item.to}
                   to={item.to}
+                  aria-current={on ? "page" : undefined}
                   className={cn(
                     "rounded-lg px-3 py-2 text-sm transition-[color,background-color] duration-150 ease-out",
                     on
@@ -61,11 +61,17 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 pb-24 pt-6 sm:px-6 sm:pt-8 md:pb-12">
+      <main
+        id="main-content"
+        className="mx-auto w-full max-w-[1400px] flex-1 px-4 pb-24 pt-6 sm:px-6 sm:pt-8 md:pb-12"
+      >
         {children}
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/90 backdrop-blur-md md:hidden">
+      <nav
+        aria-label="Primary"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden"
+      >
         <ul className="grid grid-cols-6">
           {NAV.map((item) => {
             const on = item.to === "/" ? pathname === "/" : pathname === item.to;
@@ -74,13 +80,21 @@ export function Shell({ children }: { children: ReactNode }) {
               <li key={item.to}>
                 <Link
                   to={item.to}
+                  aria-current={on ? "page" : undefined}
                   className={cn(
-                    "flex min-h-14 flex-col items-center justify-center gap-0.5 text-[10px] tracking-wide",
+                    "relative flex min-h-14 flex-col items-center justify-center gap-0.5 text-[10px] tracking-wide",
                     on ? "text-paper" : "text-muted-foreground",
                   )}
                 >
                   <Icon className="size-4" strokeWidth={1.6} />
                   {item.label}
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "absolute bottom-1 size-1 rounded-full bg-paper transition-opacity",
+                      on ? "opacity-100" : "opacity-0",
+                    )}
+                  />
                 </Link>
               </li>
             );
