@@ -55,6 +55,10 @@ playwright/.cache/
 .grok/status
 .tanstack/
 
+# Graphify index cache (regenerable via `graphify update .`; report + graph.json stay tracked)
+graphify-out/cache/
+graphify-out/graph.html
+
 # Dev QA screenshots & local artifacts (not for public repo)
 screenshots/
 artifacts/
