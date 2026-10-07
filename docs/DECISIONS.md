@@ -141,3 +141,15 @@ Token/method rule: anything shown as a measurement must name the script + date.
 - Alternatives rejected: hand-rolled TOML quoting beyond `JSON.stringify`
   (field values are vendor-controlled, no user input); network validation of
   remote MCP endpoints in tests (pack must build offline).
+- Amendment: the sandbox appended a blanket `graphify-out/` ignore; replaced
+  with targeted ignores (`cache/`, `graph.html`, dated `20*/` snapshots,
+  `.graphify_*` dotfiles) so `graph.json` + `GRAPH_REPORT.md` + `manifest.json`
+  stay tracked as the index and freshness evidence.
+
+## 2026-10-07 — 1.9 failing-test verdict
+
+- `src/lib/app-data/app-data.test.ts:189` passes on Node v26.10.0 (full suite:
+  197 + 98 green) and on Node v24.14.1 (file suite: 25 green). Node 22 (CI) is
+  not installed locally, so CI is the arbiter. No skip added; if CI is green the
+  report is closed as environment-only. Cause of the original report unknown —
+  possibly a stale worktree or an older revision.
