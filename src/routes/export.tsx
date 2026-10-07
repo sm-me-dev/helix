@@ -4,6 +4,14 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Shell } from "@/components/shell";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogActions,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { generatePack, packAsText, type PackFile } from "@/lib/harness/generate";
 import { PLATFORMS } from "@/lib/harness/platforms";
 import type { PlatformId } from "@/lib/harness/types";
@@ -43,6 +51,12 @@ function ExportPage() {
     URL.revokeObjectURL(url);
   }
 
+  function onReset() {
+    store.reset();
+    setActive("AGENTS.md");
+    toast.success("Configuration reset to defaults");
+  }
+
   function downloadFile(f: PackFile) {
     const blob = new Blob([f.body], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -51,6 +65,22 @@ function ExportPage() {
     a.download = f.path.split("/").at(-1) ?? "file.txt";
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  if (!file) {
+    return (
+      <Shell>
+        <header className="max-w-2xl">
+          <p className="text-[11px] uppercase tracking-[0.22em] text-steel">Export</p>
+          <h1 className="mt-2 font-display text-4xl tracking-tight sm:text-5xl">
+            Nothing to export yet.
+          </h1>
+          <p className="mt-4 text-[15px] leading-relaxed text-muted-foreground">
+            Enable at least one platform or skill on the crew and stack rails to generate a pack.
+          </p>
+        </header>
+      </Shell>
+    );
   }
 
   return (
@@ -76,10 +106,31 @@ function ExportPage() {
             <Download className="size-4" />
             Download
           </Button>
-          <Button variant="ghost" onClick={() => store.reset()}>
-            <RotateCcw className="size-4" />
-            Reset
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost">
+                <RotateCcw className="size-4" />
+                Reset
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogTitle>Reset everything?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This restores the default crew, stack, playbook flags, and platforms. Your current
+                configuration will be lost.
+              </AlertDialogDescription>
+              <AlertDialogActions>
+                <AlertDialogTrigger asChild>
+                  <Button variant="outline">Keep my setup</Button>
+                </AlertDialogTrigger>
+                <AlertDialogTrigger asChild>
+                  <Button variant="default" onClick={onReset}>
+                    Reset to defaults
+                  </Button>
+                </AlertDialogTrigger>
+              </AlertDialogActions>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </header>
 
@@ -88,7 +139,9 @@ function ExportPage() {
       </p>
 
       <section className="mt-6">
-        <p className="mb-3 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Platforms</p>
+        <p className="mb-3 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+          Platforms
+        </p>
         <ul className="flex flex-wrap gap-2">
           {PLATFORMS.map((p) => {
             const on = store.platforms.includes(p.id);
@@ -99,7 +152,9 @@ function ExportPage() {
                   onClick={() => store.togglePlatform(p.id as PlatformId)}
                   className={cn(
                     "min-h-11 rounded-full px-3.5 text-sm transition-[background-color,color] duration-150 ease-out",
-                    on ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground",
+                    on
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary text-muted-foreground",
                   )}
                 >
                   {p.name}
@@ -119,7 +174,9 @@ function ExportPage() {
                 onClick={() => setActive(f.path)}
                 className={cn(
                   "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left font-mono text-[12px]",
-                  f.path === file.path ? "bg-secondary text-paper" : "text-muted-foreground hover:text-foreground",
+                  f.path === file.path
+                    ? "bg-secondary text-paper"
+                    : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 <span className="truncate">{f.path}</span>
@@ -132,7 +189,11 @@ function ExportPage() {
             <p className="truncate font-mono text-[12px] text-steel">{file.path}</p>
             <div className="flex gap-1">
               <Button variant="ghost" size="sm" onClick={() => copy(file.body, file.path)}>
-                {copied === file.path ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                {copied === file.path ? (
+                  <Check className="size-3.5" />
+                ) : (
+                  <Copy className="size-3.5" />
+                )}
                 Copy
               </Button>
               <Button variant="ghost" size="sm" onClick={() => downloadFile(file)}>

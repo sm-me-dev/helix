@@ -1,5 +1,12 @@
 # Install helix
 
+> **Which install do you want?**
+>
+> - **The harness pack** (the product: `AGENTS.md` + skills + hooks for your repo) —
+>   open `/export` in the app, copy or download the pack, and follow its README
+>   (`uv tool install graphifyy`, `graphify install`, `/graphify .`).
+> - **This website** (the configurator demo) — continue below.
+
 Two supported paths: the **one-liner** (fastest) and the **download → inspect → run** path (safest).
 Both end in the same place: a user-space checkout (default `~/helix`) with dependencies installed.
 

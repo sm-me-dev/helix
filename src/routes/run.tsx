@@ -1,17 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Pause, Play, RotateCcw, StepForward } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import {
-  Area,
-  AreaChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { CrewHelix } from "@/components/crew-helix";
 import { KnowledgeGraph } from "@/components/knowledge-graph";
 import { Shell } from "@/components/shell";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { HOT_PATH } from "@/lib/harness/graph";
 import { SAMPLE_ISSUE, SIM_DURATION, SIM_EVENTS } from "@/lib/harness/simulation";
@@ -78,8 +72,13 @@ function RunPage() {
     <Shell>
       <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="max-w-2xl">
-          <p className="text-[11px] uppercase tracking-[0.22em] text-steel">Run · {SAMPLE_ISSUE.id}</p>
-          <h1 className="mt-2 font-display text-3xl tracking-tight sm:text-4xl">{SAMPLE_ISSUE.title}</h1>
+          <p className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.22em] text-steel">
+            <span>Run · {SAMPLE_ISSUE.id}</span>
+            <Badge variant="warn">Simulated</Badge>
+          </p>
+          <h1 className="mt-2 font-display text-3xl tracking-tight sm:text-4xl">
+            {SAMPLE_ISSUE.title}
+          </h1>
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{SAMPLE_ISSUE.body}</p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -101,10 +100,15 @@ function RunPage() {
       <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
         <div className="rounded-[28px] bg-card p-4 shadow-[var(--shadow-border)] sm:p-5">
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Handoffs</p>
+            <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+              Handoffs
+            </p>
             <p className="font-mono text-[11px] tabular text-steel">
               {formatTokens(current.tokens)} helix
-              <span className="text-muted-foreground"> · {formatTokens(current.naiveTokens)} naive</span>
+              <span className="text-muted-foreground">
+                {" "}
+                · {formatTokens(current.naiveTokens)} naive
+              </span>
             </p>
           </div>
           <ol className="flex max-h-[28rem] flex-col gap-2 overflow-y-auto pr-1">
@@ -120,7 +124,9 @@ function RunPage() {
                   <p className="text-[11px] uppercase tracking-[0.14em] text-steel">
                     {e.role} · {e.title}
                   </p>
-                  {e.tool && <p className="font-mono text-[10px] text-muted-foreground">{e.tool}</p>}
+                  {e.tool && (
+                    <p className="font-mono text-[10px] text-muted-foreground">{e.tool}</p>
+                  )}
                 </div>
                 <p className="mt-1 text-sm leading-relaxed">{e.body}</p>
                 {e.files && (
@@ -147,12 +153,18 @@ function RunPage() {
 
       <section className="mt-6 rounded-[28px] bg-card p-4 shadow-[var(--shadow-border)] sm:p-5">
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Token path</p>
+          <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+            Token path
+          </p>
           <p className="text-sm text-muted-foreground">
-            Finish at {formatTokens(last.tokens)} vs {formatTokens(last.naiveTokens)} — {ratio.toFixed(1)}×
-            less than globbing <span className="font-mono">src/http</span>
+            Finish at {formatTokens(last.tokens)} vs {formatTokens(last.naiveTokens)} —{" "}
+            {ratio.toFixed(1)}× less than globbing <span className="font-mono">src/http</span>
           </p>
         </div>
+        <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
+          Illustrative estimate for a fictional repo — event tokens are scripted, not measured. The
+          always-on index in the header is computed live from your crew and stack.
+        </p>
         <div className="h-44 sm:h-56">
           {mounted ? (
             <ResponsiveContainer width="100%" height="100%">
@@ -200,7 +212,9 @@ function RunPage() {
       </section>
 
       <section className="mt-8">
-        <p className="mb-3 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Active role</p>
+        <p className="mb-3 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+          Active role
+        </p>
         <CrewHelix active={activeRole} compact />
       </section>
     </Shell>
