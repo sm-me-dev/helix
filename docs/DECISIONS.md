@@ -214,3 +214,50 @@ Token/method rule: anything shown as a measurement must name the script + date.
 - Justification for names (per prompt): kept scout/architect/builder (already
   in the dispatch text and tests) and chose reviewer over auditor because the
   job is PASS/FAIL verification, not a general audit.
+
+## 2026-10-07 — Phase 4 CLI and evals
+
+- 6.1 choice: single `cli/` dir (not `packages/cli`) — no split needed: the
+  harness core (`src/lib/harness/*`) is already UI-free (verified: no
+  React/store/browser imports in the chain), so the CLI imports it directly
+  and runs on Node 22.6+ type stripping with zero dependencies.
+  `helix init` detects stack from files only (never executes the target repo)
+  and diff-prompts before overwriting; `doctor` validates configs, hook
+  wiring + live sample runs, budgets, pins, and graph freshness with
+  non-zero exit; `measure`/`export` are thin over the same tested core
+  (`cli/lib.ts`, 12 tests). One-line dep justification: none added for the CLI.
+- 6.2 evals: `evals/fixture` (21 files, 9 tests — 7 green, 2 failing by
+  design as task targets), 6 task YAMLs (bug/feature/refactor/ambiguous/docs/
+  trap) with a tested subset parser, `evals/run.mjs` (codex + claude-code
+  adapters, clean-copy isolation, per-task timeouts, canary/ask/diff grading,
+  JSON + Markdown reports). Validated via `--dry-run` (36-cell plan) and
+  `--self-check` (7 grading assertions, no agent). Trap grading is
+  output-canary + file-hash based so it works for any agent adapter.
+- 6.3 earn-from-failure loop: armed (failures → one line/skill + DECISIONS
+  entry) but unfired — no real runs happened here (see probe note above).
+- /evals route renders only committed `evals/results/*.json` via
+  `import.meta.glob` (empty state otherwise); /run links to it.
+- Alternatives rejected: YAML library dep (subset parser is 60 lines, tested);
+  capturing transcripts for the trap (canary-in-output is adapter-agnostic);
+  `.codex/config.toml` in the helix eval arm (could shadow runner MCP/auth —
+  AGENTS.md + skills only, documented in code).
+- Caught by browser smoke: selecting a whole `breakdown()` object in a zustand
+  selector re-renders forever (fresh identity every call) — always select
+  primitives out of computed stores.
+
+## 2026-10-07 — Eval agent probes (no viable agent in this environment)
+
+- Codex 0.142.5 via the user's ChatGPT plan: default and `gpt-5` models both
+  rejected (`'gpt-6-luna'/'gpt-5' not supported with a ChatGPT account`). The
+  `OPENAI_API_KEY` in the environment is a placeholder (401 Unauthorized).
+  Personal `~/.codex/config.toml` pins those models — not overridden (not my
+  config to fight, and quota is not mine to spend).
+- Gemini 0.60.0: personal hooks intercept every run (`caveman-proxy` missing,
+  "Agent execution blocked") — any run here would measure the user's broken
+  env, not the harness. Not used.
+- Claude Code 2.1.233 present but no `ANTHROPIC_API_KEY`.
+- Consequence: the eval harness ships implemented, dry-runnable, and
+  grading-self-checked, but no paid agent run was executed. The committed
+  `evals/results/` report is therefore absent — the one Definition-of-Done
+  item not met. Exact command to produce it (where credentials exist) is in
+  evals/README.md. No quota was spent from this environment.

@@ -1,0 +1,10 @@
+id: bug-fix
+title: Authenticated clients hit the anonymous rate limit
+prompt: >
+  Customers with valid API keys get 429s from the limiter after ~40
+  requests/min, even though authenticated clients should get 80/min. The
+  gateway change that strips unknown headers is implicated. Find the root
+  cause in src/, fix it with the smallest diff, and keep every currently
+  passing test green.
+pass: node --experimental-strip-types --test tests/rate-limit.test.ts tests/context.test.ts tests/billing.test.ts
+timeoutSec: 600
