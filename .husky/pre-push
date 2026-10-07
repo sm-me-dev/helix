@@ -1,1 +1,5 @@
+if [ ! -x node_modules/.bin/tsc ]; then
+  echo "⚠️  tsc not installed — skipping typecheck (run npm install)"
+  exit 0
+fi
 npm run typecheck
