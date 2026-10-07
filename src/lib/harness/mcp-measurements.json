@@ -1,0 +1,53 @@
+{
+  "$comment": "MCP tools/list token measurements. Written by scripts/measure-mcp.mjs; read by src/lib/harness/mcps.ts. Entries with tokens:null have never been measured — the catalog estimate is used and flagged. Measurements go stale after 60 days.",
+  "servers": {
+    "graphify": {
+      "tokens": 1336,
+      "version": null,
+      "measuredAt": "2026-10-07",
+      "method": "stdio tools/list (10 tools), o200k_base via scripts/measure-mcp.mjs"
+    },
+    "context7": {
+      "tokens": null,
+      "version": null,
+      "measuredAt": null,
+      "method": "unmeasured: remote URL — needs no launch but streamable-HTTP is out of scope for this script"
+    },
+    "playwright": {
+      "tokens": 4413,
+      "version": null,
+      "measuredAt": "2026-10-07",
+      "method": "stdio tools/list (25 tools), o200k_base via scripts/measure-mcp.mjs"
+    },
+    "github": {
+      "tokens": null,
+      "version": null,
+      "measuredAt": null,
+      "method": "unmeasured: remote URL — needs a token; not launched"
+    },
+    "serena": {
+      "tokens": 8204,
+      "version": null,
+      "measuredAt": "2026-10-07",
+      "method": "stdio tools/list (29 tools), o200k_base via scripts/measure-mcp.mjs"
+    },
+    "chrome-devtools": {
+      "tokens": 5914,
+      "version": null,
+      "measuredAt": "2026-10-07",
+      "method": "stdio tools/list (30 tools), o200k_base via scripts/measure-mcp.mjs"
+    },
+    "sentry": {
+      "tokens": null,
+      "version": null,
+      "measuredAt": null,
+      "method": "unmeasured: remote URL — needs auth; not launched"
+    },
+    "linear": {
+      "tokens": null,
+      "version": null,
+      "measuredAt": null,
+      "method": "unmeasured: remote URL — needs auth; not launched"
+    }
+  }
+}

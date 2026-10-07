@@ -135,8 +135,10 @@ function ExportPage() {
       </header>
 
       <p className="mt-6 font-mono text-sm tabular text-steel">
-        {files.length} files · always-on {formatTokens(b.alwaysOn)} · lean {b.leanScore}
+        {files.length} files · always-on {formatTokens(b.alwaysOn)} · lean {b.leanScore} (
+        {b.checks.filter((c) => c.pass).length}/{b.checks.length} checks)
       </p>
+      <p className="mt-1 text-xs text-muted-foreground">{b.method}</p>
 
       <section className="mt-6">
         <p className="mb-3 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">

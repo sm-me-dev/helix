@@ -41,11 +41,18 @@ export function TokenMeter({ compact = false }: { compact?: boolean }) {
 }
 
 export function LeanBadge() {
-  const leanScore = useHarness((s) => breakdown(selectConfig(s)).leanScore);
+  const b = useHarness((s) => breakdown(selectConfig(s)));
+  const passed = b.checks.filter((c) => c.pass).length;
   return (
-    <div className="flex items-baseline gap-1.5">
+    <div
+      className="flex items-baseline gap-1.5"
+      title={b.checks.map((c) => `${c.pass ? "✓" : "✗"} ${c.label}`).join("\n")}
+    >
       <span className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">Lean</span>
-      <span className="font-mono text-sm tabular text-paper">{leanScore}</span>
+      <span className="font-mono text-sm tabular text-paper">{b.leanScore}</span>
+      <span className="font-mono text-[11px] tabular text-muted-foreground">
+        {passed}/{b.checks.length}
+      </span>
     </div>
   );
 }

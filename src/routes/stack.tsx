@@ -4,9 +4,9 @@ import { Shell } from "@/components/shell";
 import { Term } from "@/components/term";
 import { Switch } from "@/components/ui/switch";
 import { LSPS } from "@/lib/harness/lsps";
-import { MCPS } from "@/lib/harness/mcps";
+import { MCPS, mcpSchemaTokens } from "@/lib/harness/mcps";
 import { SKILLS } from "@/lib/harness/skills";
-import { breakdown, formatTokens } from "@/lib/harness/tokens";
+import { breakdown, formatTokens, skillTokens } from "@/lib/harness/tokens";
 import { selectConfig, useHarness } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -29,8 +29,8 @@ function StackPage() {
             Tools are a performance setting.
           </h1>
           <p className="mt-4 text-[15px] leading-relaxed text-muted-foreground">
-            Vercel stripped 80% of an agent’s tools and watched success go up while tokens halved.
-            Helix defaults to Graphify, Context7, and Playwright. Everything else is opt-in.
+            Vercel stripped 80% of an agent’s tools and watched success go 80% → 100% with 37% fewer
+            tokens. Helix defaults to Graphify, Context7, and Playwright. Everything else is opt-in.
           </p>
         </div>
         <p className="font-mono text-sm tabular text-steel">
@@ -85,7 +85,8 @@ function StackPage() {
                       {s.description}
                     </p>
                     <p className="mt-2 font-mono text-[11px] text-steel">
-                      {s.alwaysOnTokens} index · {s.bodyTokens} body on demand · {s.loadsWhen}
+                      {skillTokens(s.id).index} index · {skillTokens(s.id).body} body on demand ·{" "}
+                      {s.loadsWhen}
                     </p>
                   </div>
                   <Switch
@@ -119,7 +120,8 @@ function StackPage() {
                     </div>
                     <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{m.job}</p>
                     <p className="mt-2 font-mono text-[11px] text-steel">
-                      {m.tools.join(" · ")} · {formatTokens(m.schemaTokens)} schema
+                      {m.tools.join(" · ")} · {formatTokens(mcpSchemaTokens(m.id).tokens)} schema ·{" "}
+                      {mcpSchemaTokens(m.id).measured ? "measured" : "estimate"}
                     </p>
                     <p className="mt-2 text-xs text-muted-foreground">Skip if {m.skipIf}</p>
                   </div>
@@ -149,7 +151,7 @@ function StackPage() {
                     <h2 className="font-medium">{l.name}</h2>
                     <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{l.job}</p>
                     <p className="mt-2 font-mono text-[11px] text-steel">
-                      {l.languages.join(" · ")} · {l.schemaTokens} tokens
+                      {l.languages.join(" · ")} · {l.schemaTokens} tokens (estimate)
                     </p>
                   </div>
                   <Switch
@@ -163,6 +165,37 @@ function StackPage() {
           })}
         </ul>
       )}
+
+      <section className="mt-10 rounded-[24px] bg-card p-5 shadow-[var(--shadow-border)] sm:p-6">
+        <h2 className="text-[11px] uppercase tracking-[0.2em] text-steel">Leanness checklist</h2>
+        <p className="mt-2 font-mono text-2xl tabular text-paper">
+          {b.leanScore}
+          <span className="ml-2 text-sm text-muted-foreground">
+            {b.checks.filter((c) => c.pass).length}/{b.checks.length} checks
+          </span>
+        </p>
+        <ul className="mt-4 space-y-2">
+          {b.checks.map((c) => (
+            <li key={c.id} className="flex items-start gap-2 text-sm">
+              <span aria-hidden>{c.pass ? "✓" : "✗"}</span>
+              <span className={c.pass ? "" : "text-warn"}>{c.label}</span>
+            </li>
+          ))}
+        </ul>
+        {b.estimates.length > 0 && (
+          <div className="mt-4 border-t border-border pt-3">
+            <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+              Estimates inside these numbers
+            </p>
+            <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+              {b.estimates.map((e) => (
+                <li key={e}>{e}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <p className="mt-3 text-xs text-muted-foreground">{b.method}</p>
+      </section>
     </Shell>
   );
 }

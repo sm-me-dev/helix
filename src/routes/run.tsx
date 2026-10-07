@@ -87,7 +87,7 @@ function RunPage() {
         <div className="max-w-2xl">
           <p className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-[0.22em] text-steel">
             <span>Run · {SAMPLE_ISSUE.id}</span>
-            <Badge variant="warn">Simulated</Badge>
+            <Badge variant="warn">Illustrative simulation</Badge>
           </p>
           <h1 className="mt-2 font-display text-3xl tracking-tight sm:text-4xl">
             {SAMPLE_ISSUE.title}
@@ -182,7 +182,8 @@ function RunPage() {
         </div>
         <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
           Illustrative estimate for a fictional repo — event tokens are scripted, not measured. The
-          always-on index in the header is computed live from your crew and stack.
+          always-on index in the header is computed live from your crew and stack. Real,
+          head-to-head eval runs will be published under /evals once they exist.
         </p>
         <div className="h-44 sm:h-56">
           {mounted ? (

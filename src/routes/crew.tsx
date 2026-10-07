@@ -5,6 +5,7 @@ import { Shell } from "@/components/shell";
 import { Switch } from "@/components/ui/switch";
 import { CREW_BY_ID } from "@/lib/harness/crew";
 import { SKILL_BY_ID } from "@/lib/harness/skills";
+import { agentTokens } from "@/lib/harness/tokens";
 import type { CrewId } from "@/lib/harness/types";
 import { useHarness } from "@/lib/store";
 
@@ -88,7 +89,8 @@ function CrewPage() {
           <p className="mt-6 font-mono text-[12px] text-muted-foreground">
             Isolated: {role.isolated ? "yes — summary only returns" : "no — lives in the parent"}
             <span className="mx-2 text-border">·</span>
-            Always-on index: {role.alwaysOnTokens} tokens
+            Parent sees {agentTokens(role.id).index} tokens · full body {agentTokens(role.id).body}{" "}
+            on run
           </p>
           {role.required && (
             <p className="mt-2 text-xs text-muted-foreground">

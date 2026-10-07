@@ -15,7 +15,6 @@ export type CrewRole = {
   /** Model tier, configurable here — never hardcoded in templates. */
   model: "haiku" | "sonnet" | "opus" | "inherit";
   skills: SkillId[];
-  alwaysOnTokens: number;
   isolated: boolean;
   required: boolean;
 };
@@ -35,7 +34,6 @@ export const CREW: CrewRole[] = [
     tools: ["graphify.query_graph", "Task"],
     model: "inherit",
     skills: ["lean-handoff"],
-    alwaysOnTokens: 70,
     isolated: false,
     required: true,
   },
@@ -60,7 +58,6 @@ export const CREW: CrewRole[] = [
     ],
     model: "haiku",
     skills: ["graph-first", "clarify-brief"],
-    alwaysOnTokens: 80,
     isolated: true,
     required: false,
   },
@@ -79,7 +76,6 @@ export const CREW: CrewRole[] = [
     tools: ["graphify.get_pr_impact", "Read"],
     model: "opus",
     skills: ["decision-table", "lean-handoff"],
-    alwaysOnTokens: 75,
     isolated: true,
     required: false,
   },
@@ -98,7 +94,6 @@ export const CREW: CrewRole[] = [
     tools: ["Read", "Edit", "Write", "Bash"],
     model: "sonnet",
     skills: ["scoped-diff", "graph-first"],
-    alwaysOnTokens: 70,
     isolated: true,
     required: false,
   },
@@ -117,7 +112,6 @@ export const CREW: CrewRole[] = [
     tools: ["Bash", "Read", "Edit"],
     model: "haiku",
     skills: ["prove-behavior"],
-    alwaysOnTokens: 65,
     isolated: true,
     required: false,
   },
@@ -136,7 +130,6 @@ export const CREW: CrewRole[] = [
     tools: ["Read", "Bash", "graphify.get_pr_impact"],
     model: "opus",
     skills: ["independent-audit"],
-    alwaysOnTokens: 70,
     isolated: true,
     required: false,
   },

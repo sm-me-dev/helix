@@ -50,13 +50,13 @@ function Studio() {
               k="Always-on"
               term="Tokens loaded on every turn, before the task is known. Lower is cheaper."
               v={formatTokens(b.alwaysOn)}
-              hint={`vs ${formatTokens(b.naiveAlwaysOn)} naive`}
+              hint={`vs ${formatTokens(b.naiveAlwaysOn)} fixture baseline`}
             />
             <Stat
               k="Lean score"
-              term="0–99 leanness estimate derived from your toggles. Illustrative, not measured."
+              term="Share of leanness checks passing — full checklist on /stack. Counts use an o200k_base approximation."
               v={String(b.leanScore)}
-              hint={`${ratio}× lighter`}
+              hint={`${b.checks.filter((c) => c.pass).length}/${b.checks.length} checks · ${ratio}× lighter`}
             />
             <Stat k="Agents" v={String(PLATFORMS.length)} hint="same AGENTS.md" />
           </dl>
