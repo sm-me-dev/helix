@@ -1,0 +1,14 @@
+#!/bin/sh
+# Conventional Commits guard (feat/fix/docs/style/refactor/perf/test/build/ci/chore/revert)
+msg=$(cat "$1" 2>/dev/null || echo "")
+if ! echo "$msg" | grep -qE '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?: .{1,72}'; then
+  echo "❌ Commit message must match Conventional Commits:"
+  echo "   <type>: <short description>  (e.g. feat: add login form)"
+  echo "   Types: feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert"
+  exit 1
+fi
+# Secret guard
+if git diff --cached --diff-filter=ACM | grep -nEi '(AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|gho_[A-Za-z0-9]{36}|sk-live-[A-Za-z0-9]{10,}|-----BEGIN (RSA )?PRIVATE KEY-----|password\s*=\s*["'\''][^"'\'']+["'\''])' >/dev/null 2>&1; then
+  echo "🚨 Potential secret detected in staged changes. Remove it before committing."
+  exit 1
+fi
