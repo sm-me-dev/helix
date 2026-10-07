@@ -4,8 +4,6 @@ export type Skill = {
   id: SkillId;
   name: string;
   description: string;
-  alwaysOnTokens: number;
-  bodyTokens: number;
   loadsWhen: string;
   body: string;
 };
@@ -16,8 +14,6 @@ export const SKILLS: Skill[] = [
     name: "graph-first",
     description:
       "Query the knowledge graph before glob, grep, or wide file reads. Use when locating code, assessing blast radius, or deciding what to open.",
-    alwaysOnTokens: 62,
-    bodyTokens: 420,
     loadsWhen: "Any search, 'where is', impact, or architecture question.",
     body: `Use Graphify (skill or MCP) as the map. Do not start with glob/grep "to be sure".
 
@@ -33,8 +29,6 @@ If the graph is stale, rebuild once (\`/graphify .\` or \`graphify index\`) then
     name: "clarify-brief",
     description:
       "Turn an unclear ask into a brief with open questions. Use when product intent is ambiguous or the surface is unknown.",
-    alwaysOnTokens: 58,
-    bodyTokens: 380,
     loadsWhen: "Scout runs, or the ask has two readings.",
     body: `Write a brief, not a novel.
 
@@ -50,8 +44,6 @@ If two product readings both fit, stop. Do not pick one. A wrong product guess i
     name: "decision-table",
     description:
       "Force a named choice between real options before code. Use when more than one valid approach exists.",
-    alwaysOnTokens: 55,
-    bodyTokens: 360,
     loadsWhen: "Architect runs, or Builder is about to invent an approach.",
     body: `| Option | Fits repo? | Blast radius | Reversible | Pick? |
 | --- | --- | --- | --- | --- |
@@ -61,10 +53,7 @@ Pick one. The reason must cite an existing file, test, or invariant — not tast
   {
     id: "scoped-diff",
     name: "scoped-diff",
-    description:
-      "Implement only the plan's files. Use whenever code is written.",
-    alwaysOnTokens: 54,
-    bodyTokens: 340,
+    description: "Implement only the plan's files. Use whenever code is written.",
     loadsWhen: "Builder runs.",
     body: `- Touch only files named in the plan.
 - Match local naming, error handling, and import style.
@@ -76,8 +65,6 @@ Pick one. The reason must cite an existing file, test, or invariant — not tast
     name: "prove-behavior",
     description:
       "A failing test first, then the command the repo already uses. Use on any behavior change.",
-    alwaysOnTokens: 56,
-    bodyTokens: 400,
     loadsWhen: "Prover runs, or Builder claims done.",
     body: `Find the test command from package.json / Makefile / AGENTS.md — do not invent pytest flags.
 
@@ -88,8 +75,6 @@ Prefer one focused test that would have caught this bug over a new suite. Paste 
     name: "independent-audit",
     description:
       "Fresh-window check of plan vs diff vs tests. Use after Builder and Prover. Must not share context with Builder.",
-    alwaysOnTokens: 60,
-    bodyTokens: 360,
     loadsWhen: "Auditor runs.",
     body: `You did not write this patch. Treat it as untrusted.
 
@@ -105,8 +90,6 @@ FAIL with file:line. Do not suggest extra features.`,
     name: "lean-handoff",
     description:
       "Compact handoff cards between roles. Use whenever a subagent is spawned or a role returns.",
-    alwaysOnTokens: 52,
-    bodyTokens: 320,
     loadsWhen: "Conductor dispatches or a role finishes.",
     body: `Handoff card (hard cap 12 lines):
 - Goal
@@ -122,8 +105,6 @@ Never paste transcripts, raw tool dumps, or "in case it's useful" files. The rec
     name: "hook-guards",
     description:
       "Put mechanical checks in hooks, not in prompts. Use when lint, format, or secret scans are being done by the model.",
-    alwaysOnTokens: 50,
-    bodyTokens: 300,
     loadsWhen: "Configuring the harness, or the model is running prettier by hand.",
     body: `If a rule is deterministic, it is a hook:
 - format / lint on write

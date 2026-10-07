@@ -1,55 +1,159 @@
-import { CREW_BY_ID } from "./crew.ts";
-import { MCP_BY_ID } from "./mcps.ts";
-import { SKILL_BY_ID } from "./skills.ts";
+// Token accounting for the harness pack.
+//
+// Every number here is COMPUTED: helix-side counts come from countTokens over
+// the actually generated output, the naive side from committed fixtures under
+// fixtures/baseline/. The only catalog numbers left are LSP schema weights
+// (flagged in `estimates`) and MCP schemas without a fresh tools/list
+// measurement (flagged per server — run scripts/measure-mcp.mjs).
+import { BLOATED_AGENTS_MD } from "../../../fixtures/baseline/bloated-agents-md.ts";
+import { TYPICAL_MCP_SCHEMAS } from "../../../fixtures/baseline/fifteen-mcp-schemas.ts";
+import { agentFile, skillFile } from "./adapters/parts.ts";
+import { CREW } from "./crew.ts";
+import { agentsMd, generatePack } from "./generate.ts";
 import { LSP_BY_ID } from "./lsps.ts";
-import type { HarnessConfig, TokenBreakdown } from "./types";
+import { mcpSchemaTokens } from "./mcps.ts";
+import { countTokens, TOKENIZER_METHOD } from "./measure.ts";
+import { SKILLS } from "./skills.ts";
+import type { HarnessConfig, TokenBreakdown, TokenCheck } from "./types";
 
-const AGENTS_MD_LEAN = 780;
-const AGENTS_MD_BLOATED = 6400;
-const NAIVE_MCP = 8600;
-const NAIVE_SKILLS = 4200;
-const NAIVE_CREW = 2400;
+function frontmatter(text: string): string {
+  const m = text.match(/^---\n[\s\S]*?\n---/);
+  return m ? m[0] : text;
+}
+
+/** Measured display numbers for one skill: always-on frontmatter vs full body. */
+export function skillTokens(id: HarnessConfig["skills"][number]): { index: number; body: number } {
+  const full = skillFile(id);
+  return { index: countTokens(frontmatter(full)), body: countTokens(full) };
+}
+
+/** Measured display numbers for one crew role: parent-side description vs full file. */
+export function agentTokens(id: HarnessConfig["crew"][number]): { index: number; body: number } {
+  const full = agentFile(id);
+  return { index: countTokens(frontmatter(full)), body: countTokens(full) };
+}
+
+/** Roles actually emitted as agent files (the main session needs no file). */
+function emittedCrew(config: HarnessConfig) {
+  return config.crew.filter((id) => id !== "conductor");
+}
+
+function buildChecks(
+  config: HarnessConfig,
+  parts: { agentsMd: number },
+  unmeasuredMcps: string[],
+): TokenCheck[] {
+  const pack = generatePack(config);
+  const paths = pack.map((f) => f.path);
+  const settings = pack.find((f) => f.path === ".claude/settings.json");
+  const hookFiles = [
+    ".helix/hooks/prefer-graph.mjs",
+    ".helix/hooks/format-lint.mjs",
+    ".helix/hooks/test-on-stop.mjs",
+  ].every((p) => paths.includes(p));
+  let settingsWired = false;
+  if (settings) {
+    try {
+      const s = JSON.parse(settings.body) as {
+        hooks?: Record<string, unknown[]>;
+      };
+      settingsWired = Array.isArray(s.hooks?.Stop) && Array.isArray(s.hooks?.PostToolUse);
+    } catch {
+      settingsWired = false;
+    }
+  }
+  return [
+    {
+      id: "agents-budget",
+      label: `AGENTS.md under 500 tokens (now ${parts.agentsMd})`,
+      pass: parts.agentsMd <= 500,
+    },
+    {
+      id: "no-duplicates",
+      label: "no duplicate file paths in the pack",
+      pass: new Set(paths).size === paths.length,
+    },
+    {
+      id: "hooks",
+      label: config.hooksEnabled
+        ? `hooks wired (settings + 3 scripts: ${settingsWired && hookFiles ? "yes" : "no"})`
+        : "hooks off (nothing to wire)",
+      pass: !config.hooksEnabled || (settingsWired && hookFiles),
+    },
+    {
+      id: "mcp-count",
+      label: `at most 5 MCP servers (now ${config.mcps.length})`,
+      pass: config.mcps.length <= 5,
+    },
+    {
+      id: "mcp-measured",
+      label:
+        unmeasuredMcps.length === 0
+          ? "every enabled MCP schema measured via tools/list"
+          : `unmeasured MCP schemas: ${unmeasuredMcps.join(", ")}`,
+      pass: unmeasuredMcps.length === 0,
+    },
+  ];
+}
 
 export function breakdown(config: HarnessConfig): TokenBreakdown {
-  const skillIndex = config.skills.reduce((n, id) => n + SKILL_BY_ID[id].alwaysOnTokens, 0);
-  const mcpSchemas = config.mcps.reduce((n, id) => n + MCP_BY_ID[id].schemaTokens, 0);
-  const lspSchemas = config.lsps.reduce((n, id) => n + LSP_BY_ID[id].schemaTokens, 0);
-  const crewIndex = config.crew.reduce((n, id) => n + CREW_BY_ID[id].alwaysOnTokens, 0);
-  const agentsMd = config.progressiveDisclosure ? AGENTS_MD_LEAN : AGENTS_MD_BLOATED;
-  const alwaysOn = agentsMd + skillIndex + mcpSchemas + lspSchemas + crewIndex;
-  const naiveAlwaysOn = AGENTS_MD_BLOATED + NAIVE_MCP + NAIVE_SKILLS + NAIVE_CREW + lspSchemas;
-
-  const mcpPenalty = Math.max(0, config.mcps.length - 4) * 8;
-  const skillPenalty = Math.max(0, config.skills.length - 8) * 4;
-  const graphBonus = config.graphFirst ? 18 : 0;
-  const discloseBonus = config.progressiveDisclosure ? 16 : 0;
-  const singleBonus = config.defaultSingleAgent ? 10 : 0;
-  const hookBonus = config.hooksEnabled ? 8 : 0;
-  const crewBonus = config.crew.includes("auditor") && config.crew.includes("scout") ? 8 : 0;
-  const leanScore = Math.max(
-    12,
-    Math.min(
-      99,
-      48 +
-        graphBonus +
-        discloseBonus +
-        singleBonus +
-        hookBonus +
-        crewBonus -
-        mcpPenalty -
-        skillPenalty,
-    ),
+  const agentsMdTokens = countTokens(agentsMd(config));
+  const skillIndex = config.skills.reduce(
+    (n, id) => n + countTokens(frontmatter(skillFile(id))),
+    0,
   );
+  const crewIndex = emittedCrew(config).reduce(
+    (n, id) => n + countTokens(frontmatter(agentFile(id))),
+    0,
+  );
+  const mcpParts = config.mcps.map((id) => ({ id, ...mcpSchemaTokens(id) }));
+  const mcpSchemas = mcpParts.reduce((n, p) => n + p.tokens, 0);
+  const lspSchemas = config.lsps.reduce((n, id) => n + LSP_BY_ID[id].schemaTokens, 0);
+  const alwaysOn = agentsMdTokens + skillIndex + mcpSchemas + lspSchemas + crewIndex;
+
+  // Naive side: fixtures for the bloated file and the overweight 15-server MCP
+  // schemas; skills and crew fully inlined (frontmatter-only is the helix
+  // optimization).
+  const naiveSkills = SKILLS.reduce((n, s) => n + countTokens(skillFile(s.id)), 0);
+  const naiveCrew = CREW.filter((c) => c.id !== "conductor").reduce(
+    (n, c) => n + countTokens(agentFile(c.id)),
+    0,
+  );
+  const naiveAlwaysOn =
+    countTokens(BLOATED_AGENTS_MD) +
+    countTokens(TYPICAL_MCP_SCHEMAS) +
+    naiveSkills +
+    naiveCrew +
+    lspSchemas;
+
+  const unmeasured = mcpParts.filter((p) => !p.measured).map((p) => p.id);
+  const estimates: string[] = [];
+  if (config.lsps.length > 0) {
+    estimates.push(`LSP schemas (${config.lsps.join(", ")}): catalog estimates, not measured`);
+  }
+  if (unmeasured.length > 0) {
+    estimates.push(
+      `MCP schemas (${unmeasured.join(", ")}): catalog estimates — run scripts/measure-mcp.mjs`,
+    );
+  }
+  estimates.push("naive baseline: representative fixtures (fixtures/baseline/*), not a live host");
+
+  const checks = buildChecks(config, { agentsMd: agentsMdTokens }, unmeasured);
+  const passed = checks.filter((c) => c.pass).length;
+  const leanScore = Math.round((100 * passed) / checks.length);
 
   return {
-    agentsMd,
+    agentsMd: agentsMdTokens,
     skillIndex,
     mcpSchemas,
     lspSchemas,
     crewIndex,
     alwaysOn,
     naiveAlwaysOn,
+    checks,
     leanScore,
+    estimates,
+    method: TOKENIZER_METHOD,
   };
 }
 
@@ -62,3 +166,5 @@ export function savingsRatio(config: HarnessConfig): number {
   const b = breakdown(config);
   return b.naiveAlwaysOn / Math.max(b.alwaysOn, 1);
 }
+
+export { TOKENIZER_METHOD } from "./measure.ts";

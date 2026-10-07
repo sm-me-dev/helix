@@ -1,3 +1,4 @@
+import measurements from "./mcp-measurements.json" with { type: "json" };
 import type { McpId } from "./types";
 
 export type McpStdio = { kind: "stdio"; command: string; args: string[] };
@@ -178,6 +179,38 @@ export const MCPS: Mcp[] = [
 export const MCP_BY_ID = Object.fromEntries(MCPS.map((m) => [m.id, m])) as Record<McpId, Mcp>;
 
 export const DEFAULT_MCPS: McpId[] = MCPS.filter((m) => m.defaultOn).map((m) => m.id);
+
+export const MEASUREMENT_STALE_DAYS = 60;
+
+type Measurement = {
+  tokens: number | null;
+  version: string | null;
+  measuredAt: string | null;
+  method: string;
+};
+
+function measurement(id: McpId): Measurement | null {
+  const all = (measurements as { servers: Partial<Record<McpId, Measurement>> }).servers;
+  return all[id] ?? null;
+}
+
+export function mcpMeasurementFresh(id: McpId, now: number = Date.now()): boolean {
+  const m = measurement(id);
+  if (!m || typeof m.tokens !== "number" || !m.measuredAt) return false;
+  return now - Date.parse(m.measuredAt) < MEASUREMENT_STALE_DAYS * 86400 * 1000;
+}
+
+/** A fresh tools/list measurement wins; otherwise the catalog estimate (flagged). */
+export function mcpSchemaTokens(
+  id: McpId,
+  now: number = Date.now(),
+): { tokens: number; measured: boolean } {
+  const m = measurement(id);
+  if (mcpMeasurementFresh(id, now) && typeof m?.tokens === "number") {
+    return { tokens: m.tokens, measured: true };
+  }
+  return { tokens: MCP_BY_ID[id].schemaTokens, measured: false };
+}
 
 /** Portable shape (Claude Code .mcp.json, Cursor .cursor/mcp.json): `mcpServers`, no type field. */
 export function portableServers(ids: McpId[]): Record<string, unknown> {

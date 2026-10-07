@@ -153,3 +153,46 @@ Token/method rule: anything shown as a measurement must name the script + date.
   not installed locally, so CI is the arbiter. No skip added; if CI is green the
   report is closed as environment-only. Cause of the original report unknown —
   possibly a stale worktree or an older revision.
+
+## 2026-10-07 — Phase 2 honest measurement
+
+- 4.1 `src/lib/harness/measure.ts`: `countTokens` = o200k_base BPE via
+  `gpt-tokenizer@4.0.0` (new dep; justification: real BPE counts with a named
+  method instead of chars/4; UI and code state it approximates frontier
+  tokenizers, not the serving model's own). `tokens.ts` constants are gone:
+  helix side counts generated output (frontmatter-only for skills/crew),
+  naive side counts fixtures + full inline bodies.
+- 4.2 fixtures under `fixtures/baseline/`: `bloated-agents-md.ts` (authored
+  composite of bloat patterns, provenance in-file) and
+  `fifteen-mcp-schemas.ts` (127-tool tools/list composite across 15 servers;
+  playwright names are the real captured set, asserted by test; per-tool
+  weight calibrated against 4 live captures taken the same day).
+  Headline ratio is now 1.97× computed, labeled "fixture baseline" everywhere.
+- 4.3 `scripts/measure-mcp.mjs` speaks MCP JSON-RPC over stdio and wrote real
+  captures 2026-10-07: graphify 1336t/10 tools, playwright 4413t/25, serena
+  8204t/29, chrome-devtools 5914t/30. Findings: catalog estimates were 2–10×
+  low. Remote servers stay null with reasons; entries go stale after 60 days
+  (`mcpMeasurementFresh`); unmeasured parts are listed in `breakdown.estimates`.
+  Raw captures committed under `fixtures/captures/`.
+- 4.4 `leanScore` = % of 5 pass/fail checks (AGENTS budget, no duplicates,
+  hooks wired, ≤5 MCPs, all MCP schemas measured). Checklist + estimates +
+  method render on /stack; score displays show n/m.
+- 4.5 every practice has `sources[]` + `confidence`. Corrected against primary
+  sources: ETH Zurich/SRI (no success gain, +20% cost — the old "every file
+  raised steps" was overstated), Vercel d0 (80→100%, 37% fewer tokens — not
+  "halved" — 3.5× faster avg, n=5), Graphify 71.5× (vendor benchmark, 52-file
+  corpus, scales with size), Anthropic ~15× (plus "most coding tasks go
+  single-agent" — supports the tier design), Claude 15k description warning.
+  Dropped unverifiable attributions (HumanLayer/OpenAI collapse, Microsoft-100,
+  Google recap, LF donation). 14–22% is `reported` (secondary synthesis), not
+  confirmed. Confidence badges + source links render on /playbook.
+- 4.6 /run badge is now "Illustrative simulation" with a scripted-not-measured
+  note and an /evals pointer; the sample graph is titled "illustrative sample".
+- Incidental: disclosure-off now genuinely inlines skill/agent bodies into
+  AGENTS.md (the toggle means something again); removed dead catalog estimate
+  fields (`alwaysOnTokens`, `bodyTokens`, `schemaTokens` displays now measured
+  or labeled estimate; LSP catalog weights remain estimates, flagged).
+- Alternatives rejected: vendoring a second tokenizer for Claude/Gemini
+  (no stable server-side lib; the approximation label is the honest fix);
+  async/lazy tokenizer loading (2.4 MB ranks are noise next to pglite/recharts
+  already in the bundle).

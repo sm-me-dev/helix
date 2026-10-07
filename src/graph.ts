@@ -1,7 +1,7 @@
 import type { GraphEdge, GraphNode } from "./types";
 
 export const SAMPLE_GRAPH = {
-  title: "ledger-api",
+  title: "ledger-api · illustrative sample",
   nodes: 16387,
   files: 412,
   languages: ["TypeScript", "SQL"],
@@ -50,9 +50,11 @@ export const NODE_EXPLAIN: Record<string, string> = {
   gw: "Entry. Forwards every request through AuthMiddleware then RateLimiter — in that order, on paper.",
   auth: "Sets RequestContext.user when a session or API key is valid. Does not currently stamp a 'skip public limiter' flag.",
   rl: "Picks PublicLimiter vs AuthBypass. The bug: it keys off a header the gateway strips, not RequestContext.user.",
-  bypass: "Intended path for authenticated clients. Unreachable on the live path because RateLimiter never sees the user.",
+  bypass:
+    "Intended path for authenticated clients. Unreachable on the live path because RateLimiter never sees the user.",
   pub: "Token bucket in Redis keyed by IP. Correct for anonymous traffic only.",
-  redis: "Shared client. Both limiters write the same key prefix — another reason AuthBypass must be the one that runs.",
+  redis:
+    "Shared client. Both limiters write the same key prefix — another reason AuthBypass must be the one that runs.",
   test: "Covers IP throttling. Does not send a valid API key, so the regression is invisible.",
   key: "Resolves X-Api-Key to a user. Called by AuthMiddleware after the limiter today — too late.",
   ctx: "Request-scoped user, tenant, and now should carry limiter class.",

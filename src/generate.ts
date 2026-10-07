@@ -1,4 +1,5 @@
 import { ADAPTER_BY_ID } from "./adapters/index.ts";
+import { agentFile, skillFile } from "./adapters/parts.ts";
 import { CREW_BY_ID } from "./crew.ts";
 import { LSP_BY_ID } from "./lsps.ts";
 import { MCP_BY_ID } from "./mcps.ts";
@@ -49,6 +50,14 @@ function agentsMd(config: HarnessConfig): string {
     ? `Hooks own format, lint, and secret denies. Spend no model tokens on them.`
     : `Run the repo format/lint commands before you return.`;
 
+  // Disclosure off means the old way: everything inlined in the always-on file.
+  const inlined = config.progressiveDisclosure
+    ? ""
+    : `\n## Reference (inlined: disclosure off)\n\n${config.skills.map((id) => skillFile(id)).join("\n")}\n${config.crew
+        .filter((id) => id !== "conductor")
+        .map((id) => agentFile(id))
+        .join("\n")}`;
+
   return `# Helix
 
 Always-on layer. Skills load on demand; this file stays short.
@@ -87,7 +96,7 @@ Auditor never shares a window with Builder.
 - No file over ~400 lines; use graph neighbors or a range.
 - ${hooks}
 - Every behavior change ships with a failing test first.
-`;
+${inlined}`;
 }
 
 function readme(config: HarnessConfig): string {

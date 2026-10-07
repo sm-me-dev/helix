@@ -51,6 +51,12 @@ export type HarnessConfig = {
   hooksEnabled: boolean;
 };
 
+export type TokenCheck = {
+  id: string;
+  label: string;
+  pass: boolean;
+};
+
 export type TokenBreakdown = {
   agentsMd: number;
   skillIndex: number;
@@ -59,7 +65,14 @@ export type TokenBreakdown = {
   crewIndex: number;
   alwaysOn: number;
   naiveAlwaysOn: number;
+  /** Pass/fail checks the score is derived from — render these, not the bare number. */
+  checks: TokenCheck[];
+  /** Percent of checks passing. Derived, not a formula. */
   leanScore: number;
+  /** Parts of the numbers that are estimates or fixtures, with reasons. */
+  estimates: string[];
+  /** Tokenizer method all counts share. */
+  method: string;
 };
 
 export type GraphNode = {
