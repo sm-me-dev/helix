@@ -5,7 +5,7 @@ import { DEFAULT_HARNESS_CONFIG } from "../store.ts";
 import type { HarnessConfig } from "./types.ts";
 
 const BASE: HarnessConfig = {
-  crew: ["conductor", "scout"],
+  crew: ["scout"],
   skills: ["graph-first"],
   mcps: ["graphify"],
   lsps: ["typescript"],
@@ -60,14 +60,16 @@ describe("generatePack", () => {
     assert.ok(claude.includes(".claude/settings.json"));
   });
 
-  it("never emits a conductor agent file; dispatch lives in AGENTS.md", () => {
+  it("emits only tier roles, never retired ones; dispatch lives in AGENTS.md", () => {
     const claude = generatePack({
       ...BASE,
-      crew: ["conductor", "scout", "architect", "builder", "prover", "auditor"],
+      crew: ["scout", "architect", "builder", "reviewer"],
       platforms: ["claude-code"],
     });
     const paths = claude.map((f) => f.path);
-    assert.ok(!paths.some((p) => p.includes("conductor")));
+    for (const retired of ["conductor", "prover", "auditor"]) {
+      assert.ok(!paths.some((p) => p.includes(retired)), `retired role emitted: ${retired}`);
+    }
     const agents = claude.find((f) => f.path === "AGENTS.md");
     assert.match(agents?.body ?? "", /trivial|standard|complex/);
   });
@@ -75,7 +77,7 @@ describe("generatePack", () => {
   it("gives every emitted agent a tools allow-list, a model, and a delegating description", () => {
     const claude = generatePack({
       ...BASE,
-      crew: ["scout", "architect", "builder", "prover", "auditor"],
+      crew: ["scout", "architect", "builder", "reviewer"],
       platforms: ["claude-code"],
     });
     const agents = claude.filter((f) => f.path.startsWith(".claude/agents/"));
@@ -89,7 +91,7 @@ describe("generatePack", () => {
         `${a.path} needs a delegating description`,
       );
     }
-    for (const id of ["scout", "auditor"]) {
+    for (const id of ["scout", "reviewer"]) {
       const file = agents.find((a) => a.path === `.claude/agents/${id}.md`);
       const toolsLine = (file?.body.match(/^tools: (.+)$/m) ?? [])[1] ?? "";
       assert.ok(

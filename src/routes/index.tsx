@@ -31,8 +31,8 @@ function Studio() {
           </h1>
           <p className="mt-5 max-w-[38rem] text-base leading-relaxed text-muted-foreground sm:text-[1.05rem]">
             Helix is a drop-in harness for Claude Code, Cursor, Codex, Gemini, Copilot, and the rest
-            of the AGENTS.md family. Six specialized roles, Graphify-first context, skills that load
-            on demand — tuned so the model spends attention on the change, not the repo.
+            of the AGENTS.md family. Four tier-routed roles, Graphify-first context, skills that
+            load on demand — tuned so the model spends attention on the change, not the repo.
           </p>
           <div className="mt-7 flex flex-wrap gap-3">
             <Button asChild>
@@ -77,12 +77,12 @@ function Studio() {
         <div>
           <p className="text-[11px] uppercase tracking-[0.18em] text-steel">The crew</p>
           <h2 className="mt-2 font-display text-3xl tracking-tight sm:text-4xl">
-            One conductor. Five specialists. Isolated windows.
+            Trivial, standard, complex. Then the right roles.
           </h2>
           <p className="mt-4 max-w-prose text-[15px] leading-relaxed text-muted-foreground">
-            The parent does not implement. Scout reads what the graph cites. Architect decides.
-            Builder patches the plan’s files. Prover runs the repo’s tests. Auditor never shares a
-            context window with Builder — that is the whole point.
+            The main session classifies and orchestrates. Scout reads what the graph cites.
+            Architect decides. Builder writes the failing test first, then the patch. Reviewer
+            checks plan vs diff vs test output in a fresh window — that is the whole point.
           </p>
           <Button variant="outline" className="mt-6" asChild>
             <Link to="/crew">

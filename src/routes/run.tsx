@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { HOT_PATH } from "@/lib/harness/graph";
 import { adaptSimEvents, SAMPLE_ISSUE, SIM_DURATION } from "@/lib/harness/simulation";
-import type { CrewId } from "@/lib/harness/types";
 import { formatTokens } from "@/lib/harness/tokens";
 import { selectConfig, useHarness } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -52,7 +51,7 @@ function RunPage() {
   const visible = events.filter((e) => e.t <= t);
   const current = visible[visible.length - 1] ?? events[0];
   const last = events[events.length - 1];
-  const activeRole = (current.role === "system" ? "conductor" : current.role) as CrewId;
+  const activeRole = current.role;
   const chart = useMemo(
     () =>
       events
@@ -66,7 +65,7 @@ function RunPage() {
   );
 
   const hot =
-    current.role === "scout" || current.role === "auditor" ? HOT_PATH : ["rl", "bypass", "auth"];
+    current.role === "scout" || current.role === "reviewer" ? HOT_PATH : ["rl", "bypass", "auth"];
 
   function step() {
     const next = events.find((e) => e.t > t);

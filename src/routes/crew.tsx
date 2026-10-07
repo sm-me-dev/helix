@@ -14,7 +14,7 @@ export const Route = createFileRoute("/crew")({ component: CrewPage });
 function CrewPage() {
   const crew = useHarness((s) => s.crew);
   const toggle = useHarness((s) => s.toggleCrew);
-  const [picked, setPicked] = useState<CrewId>("conductor");
+  const [picked, setPicked] = useState<CrewId>("scout");
   const role = CREW_BY_ID[picked];
   const on = crew.includes(picked);
 
@@ -47,20 +47,10 @@ function CrewPage() {
               </p>
               <h2 className="mt-1 font-display text-3xl">{role.name}</h2>
             </div>
-            <label
-              className="flex min-h-11 items-center gap-3"
-              title={
-                role.required
-                  ? "Conductor is required — it owns every run and cannot be disabled."
-                  : undefined
-              }
-            >
-              <span className="text-sm text-muted-foreground">
-                {role.required ? "Always on" : on ? "Enabled" : "Off"}
-              </span>
+            <label className="flex min-h-11 items-center gap-3">
+              <span className="text-sm text-muted-foreground">{on ? "Enabled" : "Off"}</span>
               <Switch
                 checked={on}
-                disabled={role.required}
                 onCheckedChange={() => toggle(role.id)}
                 aria-label={`Toggle ${role.name}`}
               />
@@ -92,12 +82,10 @@ function CrewPage() {
             Parent sees {agentTokens(role.id).index} tokens · full body {agentTokens(role.id).body}{" "}
             on run
           </p>
-          {role.required && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              Conductor can’t be disabled — it classifies the work and holds the contract for every
-              run.
-            </p>
-          )}
+          <p className="mt-6 text-xs text-muted-foreground">
+            The main session classifies the work into a tier and orchestrates — it is not a
+            toggleable role. Proof moved into the Stop hook plus the builder&apos;s test-first rule.
+          </p>
         </article>
       </div>
     </Shell>

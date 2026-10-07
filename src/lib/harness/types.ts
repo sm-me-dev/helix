@@ -1,4 +1,4 @@
-export type CrewId = "conductor" | "scout" | "architect" | "builder" | "prover" | "auditor";
+export type CrewId = "scout" | "architect" | "builder" | "reviewer";
 
 export type PlatformId =
   | "claude-code"

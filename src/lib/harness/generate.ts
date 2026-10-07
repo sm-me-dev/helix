@@ -29,7 +29,6 @@ function requireKnownIds(config: HarnessConfig): void {
 
 function agentsMd(config: HarnessConfig): string {
   const crewRows = config.crew
-    .filter((id) => id !== "conductor")
     .map((id) => {
       const c = CREW_BY_ID[id];
       return `| ${c.name} | ${c.when} | ${c.output.split(".")[0]}. |`;
@@ -54,7 +53,6 @@ function agentsMd(config: HarnessConfig): string {
   const inlined = config.progressiveDisclosure
     ? ""
     : `\n## Reference (inlined: disclosure off)\n\n${config.skills.map((id) => skillFile(id)).join("\n")}\n${config.crew
-        .filter((id) => id !== "conductor")
         .map((id) => agentFile(id))
         .join("\n")}`;
 
@@ -88,7 +86,7 @@ Read package.json / Makefile / justfile for real scripts. Never invent flags.
 | --- | --- | --- |
 ${crewRows}
 
-Auditor never shares a window with Builder.
+Reviewer never shares a window with Builder.
 
 ## Budget
 
@@ -101,10 +99,7 @@ ${inlined}`;
 
 function readme(config: HarnessConfig): string {
   const platforms = config.platforms.map((id) => PLATFORM_BY_ID[id].name).join(", ");
-  const roles = config.crew
-    .filter((id) => id !== "conductor")
-    .map((id) => CREW_BY_ID[id].name)
-    .join(", ");
+  const roles = config.crew.map((id) => CREW_BY_ID[id].name).join(", ");
   return `# Helix pack
 
 Drop these files at the root of a repo. One harness, many agents.
@@ -133,7 +128,7 @@ Vendor files (CLAUDE.md, GEMINI.md, CONVENTIONS.md, …) are pointers. Edit AGEN
 
 ## Default to one agent
 
-Fan-out costs ~15× tokens when the work is coupled. Helix fans out when the Scout cannot name the files, or when Builder and Auditor must not share a window.
+Fan-out costs ~15× tokens when the work is coupled. Helix fans out when the Scout cannot name the files, or when Builder and Reviewer must not share a window.
 `;
 }
 

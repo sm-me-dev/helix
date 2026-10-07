@@ -44,6 +44,25 @@ function knownIds<T extends string>(ids: unknown, table: Record<string, unknown>
   return ids.filter((id): id is T => typeof id === "string" && id in table);
 }
 
+/** v1 -> v2 (tiered crew): auditor becomes reviewer; the conductor role and
+ * the prover role retire (main session orchestrates; the Stop hook proves). */
+const RENAMED_CREW_V2: Record<string, CrewId> = { auditor: "reviewer" };
+const DROPPED_CREW_V2 = new Set(["conductor", "prover"]);
+
+export function migratePersisted(raw: unknown, version: number): HarnessConfig {
+  if (version >= 2) return sanitizePersisted(raw);
+  const c = (raw ?? {}) as { crew?: unknown };
+  const renamed = Array.isArray(c.crew)
+    ? c.crew.map((id) =>
+        typeof id === "string" && id in RENAMED_CREW_V2 ? RENAMED_CREW_V2[id] : id,
+      )
+    : c.crew;
+  const pruned = Array.isArray(renamed)
+    ? renamed.filter((id) => !DROPPED_CREW_V2.has(id))
+    : renamed;
+  return sanitizePersisted({ ...(raw as object), crew: pruned });
+}
+
 /** Drop stale ids a persisted older config may carry; booleans coerce. */
 function sanitizePersisted(raw: unknown): HarnessConfig {
   const c = (raw ?? {}) as Partial<HarnessConfig>;
@@ -77,7 +96,6 @@ export const useHarness = create<HarnessStore>()(
     (set, get) => ({
       ...DEFAULTS,
       toggleCrew: (id) => {
-        if (id === "conductor") return;
         set({ crew: toggleIn(get().crew, id) });
       },
       toggleSkill: (id) => set({ skills: toggleIn(get().skills, id) }),
@@ -89,9 +107,11 @@ export const useHarness = create<HarnessStore>()(
     }),
     {
       name: "helix-harness",
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => ssrSafeStorage()),
       partialize: (s) => selectConfig(s),
+      migrate: (persisted, version) =>
+        ({ ...migratePersisted(persisted, version) }) as HarnessStore,
       merge: (persisted, current) => ({ ...current, ...sanitizePersisted(persisted) }),
     },
   ),

@@ -117,7 +117,7 @@ export const PRACTICES: Practice[] = [
   {
     id: "isolate",
     chapter: "Crew",
-    title: "Auditor never shares a window with Builder",
+    title: "Reviewer never shares a window with Builder",
     rule: "Verification that can see the chain of thought will agree with it.",
     why: "Review-before and sensors-after are different jobs; an independent audit pass is the cheapest high-value fan-out. Guidance from practice, not a cited study.",
     doThis: "Fresh subagent, plan + diff + test output only.",
@@ -158,7 +158,8 @@ export const PRACTICES: Practice[] = [
     title: "Shift left the check, not the prompt",
     rule: "Linters, tests, and evals are cheaper than a smarter model on the next turn.",
     why: "The 2026 industry direction is model + harness + knowledge, with smaller models sufficing when the harness holds the rails. Directional guidance, not a measured result.",
-    doThis: "Prover runs the repo's real test command. Auditor checks the plan, not the vibes.",
+    doThis:
+      "The Stop hook runs the repo's real test command. Reviewer checks the plan, not the vibes.",
     notThis: "A longer system prompt hoping the model 'be more careful'.",
     sources: [],
     confidence: "unverified",
