@@ -1,5 +1,9 @@
 import type { McpId } from "./types";
 
+export type McpStdio = { kind: "stdio"; command: string; args: string[] };
+export type McpRemote = { kind: "remote"; url: string; headers?: Record<string, string> };
+export type McpServerConfig = McpStdio | McpRemote;
+
 export type Mcp = {
   id: McpId;
   name: string;
@@ -9,8 +13,15 @@ export type Mcp = {
   schemaTokens: number;
   skipIf: string;
   defaultOn: boolean;
-  config: string;
+  /** Structured server configs. Serializers per platform build the JSON/TOML. */
+  servers: Record<string, McpServerConfig>;
+  /** Vendor docs URL for this server's install shape. */
+  source: string;
+  /** Date the shape/version below was checked. Null = carried over, not re-checked. */
+  verifiedAt: string | null;
 };
+
+const V = "2026-10-07";
 
 export const MCPS: Mcp[] = [
   {
@@ -31,12 +42,15 @@ export const MCPS: Mcp[] = [
     schemaTokens: 980,
     skipIf: "The repo is under ~20 files and already fits in one read.",
     defaultOn: true,
-    config: `{
-  "graphify": {
-    "command": "uvx",
-    "args": ["--from", "graphifyy[mcp]", "graphify-mcp"]
-  }
-}`,
+    servers: {
+      graphify: {
+        kind: "stdio",
+        command: "uvx",
+        args: ["--from", "graphifyy[mcp]", "graphify-mcp"],
+      },
+    },
+    source: "carried over from previous catalog; install shape not re-checked against vendor docs",
+    verifiedAt: null,
   },
   {
     id: "context7",
@@ -47,11 +61,12 @@ export const MCPS: Mcp[] = [
     schemaTokens: 420,
     skipIf: "The stack is frozen and the in-repo examples are enough.",
     defaultOn: true,
-    config: `{
-  "context7": {
-    "url": "https://mcp.context7.com/mcp"
-  }
-}`,
+    servers: {
+      context7: { kind: "remote", url: "https://mcp.context7.com/mcp" },
+    },
+    source:
+      "carried over from previous catalog; endpoint not re-fetched (identifier only, no network in pack)",
+    verifiedAt: null,
   },
   {
     id: "playwright",
@@ -62,28 +77,30 @@ export const MCPS: Mcp[] = [
     schemaTokens: 1320,
     skipIf: "No UI, or tests already drive the browser in CI.",
     defaultOn: true,
-    config: `{
-  "playwright": {
-    "command": "npx",
-    "args": ["@playwright/mcp@latest"]
-  }
-}`,
+    servers: {
+      playwright: { kind: "stdio", command: "npx", args: ["@playwright/mcp@0.0.83"] },
+    },
+    source: "https://www.npmjs.com/package/@playwright/mcp (version lookup)",
+    verifiedAt: V,
   },
   {
     id: "github",
     name: "GitHub",
     maintainer: "GitHub",
-    job: "Issues, PRs, and Actions. Enable only the toolsets you use — the full catalog is expensive.",
+    job: "Issues, PRs, and Actions. Read-only toolsets by default — the full catalog is expensive.",
     tools: ["issues", "pull_requests", "actions"],
     schemaTokens: 1680,
     skipIf: "You already have `gh` and a single local repo.",
     defaultOn: false,
-    config: `{
-  "github": {
-    "url": "https://api.githubcopilot.com/mcp/",
-    "headers": { "X-MCP-Toolsets": "issues,pull_requests" }
-  }
-}`,
+    servers: {
+      github: {
+        kind: "remote",
+        url: "https://api.githubcopilot.com/mcp/",
+        headers: { "X-MCP-Toolsets": "issues,pull_requests" },
+      },
+    },
+    source: "carried over from previous catalog; read-only toolsets kept, endpoint not re-fetched",
+    verifiedAt: null,
   },
   {
     id: "serena",
@@ -94,12 +111,20 @@ export const MCPS: Mcp[] = [
     schemaTokens: 860,
     skipIf: "Graphify neighbors already give you the call sites.",
     defaultOn: false,
-    config: `{
-  "serena": {
-    "command": "uvx",
-    "args": ["--from", "git+https://github.com/oraios/serena", "serena", "start-mcp-server"]
-  }
-}`,
+    servers: {
+      serena: {
+        kind: "stdio",
+        command: "uvx",
+        args: [
+          "--from",
+          "git+https://github.com/oraios/serena@v1.7.0",
+          "serena",
+          "start-mcp-server",
+        ],
+      },
+    },
+    source: "https://github.com/oraios/serena (latest tag lookup)",
+    verifiedAt: V,
   },
   {
     id: "chrome-devtools",
@@ -110,12 +135,11 @@ export const MCPS: Mcp[] = [
     schemaTokens: 1100,
     skipIf: "You are not chasing a runtime or perf bug in the browser.",
     defaultOn: false,
-    config: `{
-  "chrome-devtools": {
-    "command": "npx",
-    "args": ["chrome-devtools-mcp@latest"]
-  }
-}`,
+    servers: {
+      "chrome-devtools": { kind: "stdio", command: "npx", args: ["chrome-devtools-mcp@1.10.1"] },
+    },
+    source: "https://www.npmjs.com/package/chrome-devtools-mcp (version lookup)",
+    verifiedAt: V,
   },
   {
     id: "sentry",
@@ -126,11 +150,12 @@ export const MCPS: Mcp[] = [
     schemaTokens: 940,
     skipIf: "You are not diagnosing production failures.",
     defaultOn: false,
-    config: `{
-  "sentry": {
-    "url": "https://mcp.sentry.dev/mcp"
-  }
-}`,
+    servers: {
+      sentry: { kind: "remote", url: "https://mcp.sentry.dev/mcp" },
+    },
+    source:
+      "carried over from previous catalog; endpoint not re-fetched (identifier only, no network in pack)",
+    verifiedAt: null,
   },
   {
     id: "linear",
@@ -141,14 +166,68 @@ export const MCPS: Mcp[] = [
     schemaTokens: 780,
     skipIf: "The ask already includes the full brief.",
     defaultOn: false,
-    config: `{
-  "linear": {
-    "url": "https://mcp.linear.app/mcp"
-  }
-}`,
+    servers: {
+      linear: { kind: "remote", url: "https://mcp.linear.app/mcp" },
+    },
+    source:
+      "carried over from previous catalog; endpoint not re-fetched (identifier only, no network in pack)",
+    verifiedAt: null,
   },
 ];
 
 export const MCP_BY_ID = Object.fromEntries(MCPS.map((m) => [m.id, m])) as Record<McpId, Mcp>;
 
 export const DEFAULT_MCPS: McpId[] = MCPS.filter((m) => m.defaultOn).map((m) => m.id);
+
+/** Portable shape (Claude Code .mcp.json, Cursor .cursor/mcp.json): `mcpServers`, no type field. */
+export function portableServers(ids: McpId[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const id of ids) {
+    for (const [name, s] of Object.entries(MCP_BY_ID[id].servers)) {
+      out[name] =
+        s.kind === "stdio"
+          ? { command: s.command, args: s.args }
+          : { url: s.url, ...(s.headers ? { headers: s.headers } : {}) };
+    }
+  }
+  return out;
+}
+
+/** VS Code shape (.vscode/mcp.json): `servers`, with a required `type` on each. */
+export function vscodeServers(ids: McpId[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const id of ids) {
+    for (const [name, s] of Object.entries(MCP_BY_ID[id].servers)) {
+      out[name] =
+        s.kind === "stdio"
+          ? { type: "stdio", command: s.command, args: s.args }
+          : { type: "http", url: s.url, ...(s.headers ? { headers: s.headers } : {}) };
+    }
+  }
+  return out;
+}
+
+export function portableMcpJson(ids: McpId[]): string {
+  return JSON.stringify({ mcpServers: portableServers(ids) }, null, 2) + "\n";
+}
+
+export function vscodeMcpJson(ids: McpId[]): string {
+  return JSON.stringify({ servers: vscodeServers(ids) }, null, 2) + "\n";
+}
+
+/** Codex shape (.codex/config.toml): `[mcp_servers.<name>]` tables. */
+export function codexToml(ids: McpId[]): string {
+  const lines: string[] = [];
+  for (const id of ids) {
+    for (const [name, s] of Object.entries(MCP_BY_ID[id].servers)) {
+      lines.push(`[mcp_servers.${name}]`);
+      if (s.kind === "stdio") {
+        lines.push(`command = ${JSON.stringify(s.command)}`);
+        lines.push(`args = ${JSON.stringify(s.args)}`);
+      } else {
+        lines.push(`url = ${JSON.stringify(s.url)}`);
+      }
+    }
+  }
+  return lines.join("\n") + "\n";
+}

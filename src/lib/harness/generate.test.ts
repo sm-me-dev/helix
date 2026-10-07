@@ -23,11 +23,12 @@ describe("generatePack", () => {
   });
 
   it("emits hooks only when enabled", () => {
-    const on = generatePack(BASE).map((f) => f.path);
+    const cfg: HarnessConfig = { ...BASE, platforms: ["claude-code"] };
+    const on = generatePack(cfg).map((f) => f.path);
     assert.ok(on.includes(".helix/hooks/prefer-graph.mjs"));
     assert.ok(on.includes(".helix/hooks/format-lint.mjs"));
     assert.ok(on.includes(".helix/hooks/test-on-stop.mjs"));
-    const off = generatePack({ ...BASE, hooksEnabled: false }).map((f) => f.path);
+    const off = generatePack({ ...cfg, hooksEnabled: false }).map((f) => f.path);
     assert.ok(!off.some((p) => p.startsWith(".helix/hooks/")));
   });
 
@@ -51,7 +52,7 @@ describe("generatePack", () => {
 
   it("scopes platform files to the enabled platforms", () => {
     const codex = generatePack(BASE).map((f) => f.path);
-    assert.ok(codex.includes(".mcp.json"));
+    assert.ok(codex.includes(".codex/config.toml"));
     assert.ok(!codex.some((p) => p.startsWith(".claude/")));
     const claude = generatePack({ ...BASE, platforms: ["claude-code"] }).map((f) => f.path);
     assert.ok(claude.includes("CLAUDE.md"));
@@ -103,7 +104,7 @@ describe("generatePack", () => {
     assert.ok(!claudeOnly.some((p) => p.startsWith("skills/")));
     assert.ok(claudeOnly.some((p) => p.startsWith(".claude/skills/graph-first/")));
     const codexOnly = generatePack({ ...BASE, platforms: ["codex"] }).map((f) => f.path);
-    assert.ok(codexOnly.includes("skills/graph-first/SKILL.md"));
+    assert.ok(codexOnly.includes(".agents/skills/graph-first/SKILL.md"));
     assert.ok(!codexOnly.some((p) => p.startsWith(".claude/skills/")));
   });
 
@@ -121,14 +122,65 @@ describe("generatePack", () => {
     );
   });
 
-  it("dedupes shared skill and mcp paths across platform families", () => {
+  it("dedupes shared skill paths across platform families", () => {
     const paths = generatePack({
       ...BASE,
-      platforms: ["codex", "opencode", "devin"],
+      platforms: ["codex", "claude-code"],
     }).map((f) => f.path);
     const count = (p: string) => paths.filter((x) => x === p).length;
-    assert.equal(count("skills/graph-first/SKILL.md"), 1);
-    assert.equal(count(".mcp.json"), 1);
+    assert.equal(count(".agents/skills/graph-first/SKILL.md"), 1);
+    assert.equal(count(".claude/skills/graph-first/SKILL.md"), 1);
+  });
+
+  it("emits Codex MCP as config.toml with mcp_servers and skills under .agents", () => {
+    const paths = generatePack({ ...BASE, platforms: ["codex"] }).map((f) => f.path);
+    assert.ok(paths.includes(".codex/config.toml"));
+    assert.ok(paths.includes(".agents/skills/graph-first/SKILL.md"));
+    assert.ok(!paths.includes(".mcp.json"), "Codex reads config.toml, not .mcp.json");
+    assert.ok(
+      !paths.some((p) => p.startsWith("skills/")),
+      "Codex reads .agents/skills, not skills/",
+    );
+    const toml = generatePack({ ...BASE, platforms: ["codex"] }).find(
+      (f) => f.path === ".codex/config.toml",
+    );
+    assert.match(toml?.body ?? "", /\[mcp_servers\.graphify\]/);
+  });
+
+  it("emits portable MCP JSON with an mcpServers key for Claude and Cursor", () => {
+    for (const platform of ["claude-code", "cursor"] as const) {
+      const files = generatePack({ ...BASE, platforms: [platform] });
+      const path = platform === "cursor" ? ".cursor/mcp.json" : ".mcp.json";
+      const body = files.find((f) => f.path === path)?.body ?? "";
+      const parsed = JSON.parse(body) as { mcpServers: Record<string, unknown> };
+      assert.ok(parsed.mcpServers.graphify, `${path} must carry the graphify server`);
+    }
+  });
+
+  it("emits VS Code MCP JSON with a servers key and a type on every server", () => {
+    const body =
+      generatePack({ ...BASE, platforms: ["copilot"] }).find((f) => f.path === ".vscode/mcp.json")
+        ?.body ?? "";
+    const parsed = JSON.parse(body) as { servers: Record<string, { type?: string }> };
+    assert.ok(parsed.servers.graphify);
+    for (const [name, server] of Object.entries(parsed.servers)) {
+      assert.ok(["stdio", "http", "sse"].includes(server.type ?? ""), `${name} needs a type`);
+    }
+  });
+
+  it("pins every MCP version and leaves no @latest or bare git ref", () => {
+    const files = generatePack(DEFAULT_HARNESS_CONFIG);
+    for (const f of files) {
+      if (!f.path.endsWith(".json") && !f.path.endsWith(".toml")) continue;
+      assert.ok(!f.body.includes("@latest"), `${f.path} must not float on @latest`);
+      assert.ok(!/git\+https:[^"'\s]*["'\s](?!.*@v)/.test(f.body), `${f.path} must pin git refs`);
+    }
+  });
+
+  it("emits only the instructions file for unverified platforms", () => {
+    const paths = generatePack({ ...BASE, platforms: ["opencode"] }).map((f) => f.path);
+    assert.ok(!paths.some((p) => p.startsWith("skills/")));
+    assert.ok(!paths.includes(".mcp.json"));
   });
 
   it("names the enabled LSPs in the pack README", () => {

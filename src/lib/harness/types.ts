@@ -1,10 +1,4 @@
-export type CrewId =
-  | "conductor"
-  | "scout"
-  | "architect"
-  | "builder"
-  | "prover"
-  | "auditor";
+export type CrewId = "conductor" | "scout" | "architect" | "builder" | "prover" | "auditor";
 
 export type PlatformId =
   | "claude-code"
@@ -43,12 +37,7 @@ export type McpId =
   | "sentry"
   | "linear";
 
-export type LspId =
-  | "serena-lsp"
-  | "typescript"
-  | "pyright"
-  | "rust-analyzer"
-  | "gopls";
+export type LspId = "serena-lsp" | "typescript" | "pyright" | "rust-analyzer" | "gopls";
 
 export type HarnessConfig = {
   crew: CrewId[];
@@ -96,4 +85,10 @@ export type SimEvent = {
   naiveTokens: number;
   tool?: string;
   files?: string[];
+};
+
+export type PackFile = {
+  path: string;
+  language: string;
+  body: string;
 };
