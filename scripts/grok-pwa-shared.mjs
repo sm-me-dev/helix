@@ -249,6 +249,8 @@ export function grokExtensionsHeadTags(projectId = readGrokProjectId()) {
 }
 
 export function readOgSite(cwd = process.cwd()) {
+  // Empty cwd means "no workspace": never consult the ambient process.cwd().
+  if (!cwd) return {};
   try {
     const raw = readFileSync(join(cwd, OG_SITE_REL_PATH), "utf8");
     const parsed = JSON.parse(raw);
@@ -260,6 +262,8 @@ export function readOgSite(cwd = process.cwd()) {
 
 /** Public path of an on-disk share card, or "" if neither file exists. */
 export function ogCardPublicPath(cwd = process.cwd()) {
+  // Empty cwd means "no workspace": never consult the ambient process.cwd().
+  if (!cwd) return "";
   if (existsSync(join(cwd, "public/og.jpg"))) return "/og.jpg";
   if (existsSync(join(cwd, "public/og.png"))) return "/og.png";
   return "";
@@ -273,6 +277,8 @@ function detectCustomOgCard(cwd = process.cwd(), site = {}) {
 
 /** Snapshot for Vite/Nitro to bake into the server bundle (Vercel has no workspace FS). */
 export function snapshotOgIdentity(cwd = process.cwd()) {
+  // Empty cwd means "no workspace": never consult the ambient process.cwd().
+  if (!cwd) return { site: {} };
   const site = { ...readOgSite(cwd) };
   const disk = ogCardPublicPath(cwd);
   if (disk) {
@@ -344,7 +350,7 @@ export function grokOgHeadTags({
   appName = DEFAULT_APP_NAME,
   site = {},
   documentTitle = "",
-  cwd = process.cwd(),
+  cwd = "",
 } = {}) {
   const title = resolveOgTitle(site, appName, host, documentTitle);
   const publicHost = resolvePublicHost(host);
@@ -414,7 +420,11 @@ function insertBeforeHeadClose(html, snippet) {
 }
 
 export function normalizeHeadContext(ctx = {}) {
-  const cwd = ctx.cwd ?? process.cwd();
+  // An omitted cwd means "no workspace", NOT process.cwd(): consulting the
+  // ambient filesystem would let ambient site.json / public/og.jpg override
+  // the caller's explicit appName/host/documentTitle. Dev/preview callers
+  // that want workspace reads pass cwd explicitly.
+  const cwd = ctx.cwd ?? "";
   // Middleware passes a baked `site`. Still consult the workspace so a
   // public/og.jpg generated after that snapshot (or missed by a wrong cwd)
   // wins over the og.grok.me placeholder. Vercel has no public/ to read, so
