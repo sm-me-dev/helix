@@ -1,9 +1,9 @@
 import { create } from "zustand";
-import { DEFAULT_CREW } from "./harness/crew";
-import { DEFAULT_LSPS } from "./harness/lsps";
-import { DEFAULT_MCPS } from "./harness/mcps";
-import { DEFAULT_PLATFORMS } from "./harness/platforms";
-import { DEFAULT_SKILLS } from "./harness/skills";
+import { DEFAULT_CREW } from "./harness/crew.ts";
+import { DEFAULT_LSPS } from "./harness/lsps.ts";
+import { DEFAULT_MCPS } from "./harness/mcps.ts";
+import { DEFAULT_PLATFORMS } from "./harness/platforms.ts";
+import { DEFAULT_SKILLS } from "./harness/skills.ts";
 import type { CrewId, HarnessConfig, LspId, McpId, PlatformId, SkillId } from "./harness/types";
 
 type HarnessStore = HarnessConfig & {

@@ -1,15 +1,33 @@
-import { CREW_BY_ID } from "./crew";
-import { MCP_BY_ID } from "./mcps";
-import { PLATFORM_BY_ID } from "./platforms";
-import { SKILL_BY_ID } from "./skills";
+import { CREW_BY_ID } from "./crew.ts";
+import { LSP_BY_ID } from "./lsps.ts";
+import { MCP_BY_ID } from "./mcps.ts";
+import { PLATFORM_BY_ID } from "./platforms.ts";
+import { SKILL_BY_ID } from "./skills.ts";
 import type { HarnessConfig, PlatformId } from "./types";
-
 
 export type PackFile = {
   path: string;
   language: string;
   body: string;
 };
+
+/** Fail fast on stale ids (e.g. a persisted config from an older app version). */
+function requireKnownIds(config: HarnessConfig): void {
+  const tables = [
+    ["crew role", CREW_BY_ID, config.crew],
+    ["skill", SKILL_BY_ID, config.skills],
+    ["MCP", MCP_BY_ID, config.mcps],
+    ["LSP", LSP_BY_ID, config.lsps],
+    ["platform", PLATFORM_BY_ID, config.platforms],
+  ] as const;
+  for (const [kind, table, ids] of tables) {
+    for (const id of ids) {
+      if (!table[id as keyof typeof table]) {
+        throw new Error(`[helix] unknown ${kind} id: ${String(id)}`);
+      }
+    }
+  }
+}
 
 function agentsMd(config: HarnessConfig): string {
   const crewRows = config.crew
@@ -272,6 +290,7 @@ Then inside the assistant: \`/graphify .\` (Codex: \`$graphify\`).
 - Skills — progressive disclosure, Agent Skills format
 - Crew roles — Conductor, Scout, Architect, Builder, Prover, Auditor
 - MCP — ${config.mcps.map((id) => MCP_BY_ID[id].name).join(", ") || "none"}
+- LSP — ${config.lsps.map((id) => LSP_BY_ID[id].name).join(", ") || "none (editor defaults)"}
 - Hooks — ${config.hooksEnabled ? "format/lint + graph-first hint + .env deny" : "off"}
 
 Vendor files (CLAUDE.md, GEMINI.md, CONVENTIONS.md, …) are pointers. Edit AGENTS.md only.
@@ -318,7 +337,11 @@ function filesForPlatform(id: PlatformId, config: HarnessConfig): PackFile[] {
       files.push({ path: ".cursor/mcp.json", language: "json", body: cursorMcp(config) });
       break;
     case "gemini":
-      files.push({ path: "GEMINI.md", language: "markdown", body: pointer("Gemini / Antigravity") });
+      files.push({
+        path: "GEMINI.md",
+        language: "markdown",
+        body: pointer("Gemini / Antigravity"),
+      });
       break;
     case "copilot":
       files.push({
@@ -356,6 +379,7 @@ function filesForPlatform(id: PlatformId, config: HarnessConfig): PackFile[] {
 }
 
 export function generatePack(config: HarnessConfig): PackFile[] {
+  requireKnownIds(config);
   const files: PackFile[] = [
     { path: "README.md", language: "markdown", body: readme(config) },
     { path: "AGENTS.md", language: "markdown", body: agentsMd(config) },
@@ -393,9 +417,7 @@ export function generatePack(config: HarnessConfig): PackFile[] {
 }
 
 export function packAsText(files: PackFile[]): string {
-  return files
-    .map((f) => `===== ${f.path} =====\n${f.body.trimEnd()}\n`)
-    .join("\n");
+  return files.map((f) => `===== ${f.path} =====\n${f.body.trimEnd()}\n`).join("\n");
 }
 
 export { agentsMd };

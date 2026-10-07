@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Pause, Play, RotateCcw, StepForward } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { CrewHelix } from "@/components/crew-helix";
 import { KnowledgeGraph } from "@/components/knowledge-graph";
 import { Shell } from "@/components/shell";
@@ -12,6 +11,10 @@ import { SAMPLE_ISSUE, SIM_DURATION, SIM_EVENTS } from "@/lib/harness/simulation
 import type { CrewId } from "@/lib/harness/types";
 import { formatTokens } from "@/lib/harness/tokens";
 import { cn } from "@/lib/utils";
+
+const TokenChart = lazy(() =>
+  import("@/components/token-chart").then((m) => ({ default: m.TokenChart })),
+);
 
 export const Route = createFileRoute("/run")({ component: RunPage });
 
@@ -171,44 +174,9 @@ function RunPage() {
         </p>
         <div className="h-44 sm:h-56">
           {mounted ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chart} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <XAxis dataKey="t" hide />
-                <YAxis hide />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--color-card)",
-                    border: "1px solid var(--color-border)",
-                    borderRadius: 12,
-                    fontSize: 12,
-                    color: "var(--color-foreground)",
-                  }}
-                  formatter={(value, name) => [
-                    formatTokens(Number(value ?? 0)),
-                    name === "helix" ? "Helix" : "Naive",
-                  ]}
-                  labelFormatter={(label) => `${label}s`}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="naive"
-                  stroke="var(--color-steel)"
-                  fill="var(--color-steel)"
-                  fillOpacity={0.12}
-                  strokeWidth={1.4}
-                  isAnimationActive={false}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="helix"
-                  stroke="var(--color-paper)"
-                  fill="var(--color-paper)"
-                  fillOpacity={0.22}
-                  strokeWidth={1.8}
-                  isAnimationActive={false}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            <Suspense fallback={<div className="shimmer h-full rounded-xl" />}>
+              <TokenChart data={chart} />
+            </Suspense>
           ) : (
             <div className="h-full rounded-xl bg-secondary" />
           )}
