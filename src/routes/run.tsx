@@ -7,9 +7,10 @@ import { Shell } from "@/components/shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { HOT_PATH } from "@/lib/harness/graph";
-import { SAMPLE_ISSUE, SIM_DURATION, SIM_EVENTS } from "@/lib/harness/simulation";
+import { adaptSimEvents, SAMPLE_ISSUE, SIM_DURATION } from "@/lib/harness/simulation";
 import type { CrewId } from "@/lib/harness/types";
 import { formatTokens } from "@/lib/harness/tokens";
+import { selectConfig, useHarness } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 const TokenChart = lazy(() =>
@@ -26,6 +27,9 @@ function RunPage() {
       !window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
   const [mounted, setMounted] = useState(false);
+  const config = selectConfig(useHarness());
+  const adapted = useMemo(() => adaptSimEvents(config), [config]);
+  const events = adapted.events;
 
   useEffect(() => {
     setMounted(true);
@@ -45,25 +49,27 @@ function RunPage() {
     return () => window.clearInterval(id);
   }, [playing]);
 
-  const visible = SIM_EVENTS.filter((e) => e.t <= t);
-  const current = visible[visible.length - 1] ?? SIM_EVENTS[0];
-  const last = SIM_EVENTS[SIM_EVENTS.length - 1];
+  const visible = events.filter((e) => e.t <= t);
+  const current = visible[visible.length - 1] ?? events[0];
+  const last = events[events.length - 1];
   const activeRole = (current.role === "system" ? "conductor" : current.role) as CrewId;
   const chart = useMemo(
     () =>
-      SIM_EVENTS.filter((e) => e.t <= t).map((e) => ({
-        t: e.t / 1000,
-        helix: e.tokens,
-        naive: e.naiveTokens,
-      })),
-    [t],
+      events
+        .filter((e) => e.t <= t)
+        .map((e) => ({
+          t: e.t / 1000,
+          helix: e.tokens,
+          naive: e.naiveTokens,
+        })),
+    [events, t],
   );
 
   const hot =
     current.role === "scout" || current.role === "auditor" ? HOT_PATH : ["rl", "bypass", "auth"];
 
   function step() {
-    const next = SIM_EVENTS.find((e) => e.t > t);
+    const next = events.find((e) => e.t > t);
     setPlaying(false);
     setT(next ? next.t : SIM_DURATION);
   }
@@ -87,6 +93,12 @@ function RunPage() {
             {SAMPLE_ISSUE.title}
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{SAMPLE_ISSUE.body}</p>
+          {adapted.dropped.length > 0 && (
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+              Timeline skips {adapted.dropped.join(", ")} — disabled on the crew rail. Token figures
+              rescale with your live config.
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={() => setPlaying((p) => !p)}>

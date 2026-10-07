@@ -1,9 +1,10 @@
 import { create } from "zustand";
-import { DEFAULT_CREW } from "./harness/crew.ts";
-import { DEFAULT_LSPS } from "./harness/lsps.ts";
-import { DEFAULT_MCPS } from "./harness/mcps.ts";
-import { DEFAULT_PLATFORMS } from "./harness/platforms.ts";
-import { DEFAULT_SKILLS } from "./harness/skills.ts";
+import { createJSONStorage, persist } from "zustand/middleware";
+import { CREW_BY_ID, DEFAULT_CREW } from "./harness/crew.ts";
+import { DEFAULT_LSPS, LSP_BY_ID } from "./harness/lsps.ts";
+import { DEFAULT_MCPS, MCP_BY_ID } from "./harness/mcps.ts";
+import { DEFAULT_PLATFORMS, PLATFORM_BY_ID } from "./harness/platforms.ts";
+import { DEFAULT_SKILLS, SKILL_BY_ID } from "./harness/skills.ts";
 import type { CrewId, HarnessConfig, LspId, McpId, PlatformId, SkillId } from "./harness/types";
 
 type HarnessStore = HarnessConfig & {
@@ -31,23 +32,70 @@ const DEFAULTS: HarnessConfig = {
   hooksEnabled: true,
 };
 
+/** Defaults for tests and for scaling scripted figures to the live config. */
+export const DEFAULT_HARNESS_CONFIG: HarnessConfig = { ...DEFAULTS };
+
 function toggleIn<T>(list: T[], id: T): T[] {
   return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
 }
 
-export const useHarness = create<HarnessStore>()((set, get) => ({
-  ...DEFAULTS,
-  toggleCrew: (id) => {
-    if (id === "conductor") return;
-    set({ crew: toggleIn(get().crew, id) });
-  },
-  toggleSkill: (id) => set({ skills: toggleIn(get().skills, id) }),
-  toggleMcp: (id) => set({ mcps: toggleIn(get().mcps, id) }),
-  toggleLsp: (id) => set({ lsps: toggleIn(get().lsps, id) }),
-  togglePlatform: (id) => set({ platforms: toggleIn(get().platforms, id) }),
-  setFlag: (key, value) => set({ [key]: value }),
-  reset: () => set(DEFAULTS),
-}));
+function knownIds<T extends string>(ids: unknown, table: Record<string, unknown>): T[] {
+  if (!Array.isArray(ids)) return [];
+  return ids.filter((id): id is T => typeof id === "string" && id in table);
+}
+
+/** Drop stale ids a persisted older config may carry; booleans coerce. */
+function sanitizePersisted(raw: unknown): HarnessConfig {
+  const c = (raw ?? {}) as Partial<HarnessConfig>;
+  return {
+    crew: knownIds<CrewId>(c.crew, CREW_BY_ID),
+    skills: knownIds<SkillId>(c.skills, SKILL_BY_ID),
+    mcps: knownIds<McpId>(c.mcps, MCP_BY_ID),
+    lsps: knownIds<LspId>(c.lsps, LSP_BY_ID),
+    platforms: knownIds<PlatformId>(c.platforms, PLATFORM_BY_ID),
+    graphFirst: c.graphFirst !== false,
+    progressiveDisclosure: c.progressiveDisclosure !== false,
+    defaultSingleAgent: c.defaultSingleAgent !== false,
+    hooksEnabled: c.hooksEnabled !== false,
+  };
+}
+
+/** No-op storage for SSR — real localStorage only exists in the browser. */
+function ssrSafeStorage() {
+  if (typeof window !== "undefined" && typeof window.localStorage !== "undefined") {
+    return window.localStorage;
+  }
+  return {
+    getItem: () => null,
+    setItem: () => {},
+    removeItem: () => {},
+  };
+}
+
+export const useHarness = create<HarnessStore>()(
+  persist(
+    (set, get) => ({
+      ...DEFAULTS,
+      toggleCrew: (id) => {
+        if (id === "conductor") return;
+        set({ crew: toggleIn(get().crew, id) });
+      },
+      toggleSkill: (id) => set({ skills: toggleIn(get().skills, id) }),
+      toggleMcp: (id) => set({ mcps: toggleIn(get().mcps, id) }),
+      toggleLsp: (id) => set({ lsps: toggleIn(get().lsps, id) }),
+      togglePlatform: (id) => set({ platforms: toggleIn(get().platforms, id) }),
+      setFlag: (key, value) => set({ [key]: value }),
+      reset: () => set(DEFAULTS),
+    }),
+    {
+      name: "helix-harness",
+      version: 1,
+      storage: createJSONStorage(() => ssrSafeStorage()),
+      partialize: (s) => selectConfig(s),
+      merge: (persisted, current) => ({ ...current, ...sanitizePersisted(persisted) }),
+    },
+  ),
+);
 
 export function selectConfig(s: HarnessStore): HarnessConfig {
   return {
