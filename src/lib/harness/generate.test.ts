@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { generatePack, packAsText } from "./generate.ts";
+import { DEFAULT_HARNESS_CONFIG } from "../store.ts";
 import type { HarnessConfig } from "./types.ts";
 
 const BASE: HarnessConfig = {
@@ -54,8 +55,70 @@ describe("generatePack", () => {
     assert.ok(!codex.some((p) => p.startsWith(".claude/")));
     const claude = generatePack({ ...BASE, platforms: ["claude-code"] }).map((f) => f.path);
     assert.ok(claude.includes("CLAUDE.md"));
-    assert.ok(claude.includes(".claude/agents/conductor.md"));
+    assert.ok(claude.includes(".claude/agents/scout.md"));
     assert.ok(claude.includes(".claude/settings.json"));
+  });
+
+  it("never emits a conductor agent file; dispatch lives in AGENTS.md", () => {
+    const claude = generatePack({
+      ...BASE,
+      crew: ["conductor", "scout", "architect", "builder", "prover", "auditor"],
+      platforms: ["claude-code"],
+    });
+    const paths = claude.map((f) => f.path);
+    assert.ok(!paths.some((p) => p.includes("conductor")));
+    const agents = claude.find((f) => f.path === "AGENTS.md");
+    assert.match(agents?.body ?? "", /trivial|standard|complex/);
+  });
+
+  it("gives every emitted agent a tools allow-list, a model, and a delegating description", () => {
+    const claude = generatePack({
+      ...BASE,
+      crew: ["scout", "architect", "builder", "prover", "auditor"],
+      platforms: ["claude-code"],
+    });
+    const agents = claude.filter((f) => f.path.startsWith(".claude/agents/"));
+    assert.ok(agents.length > 0);
+    for (const a of agents) {
+      assert.match(a.body, /^tools: .+/m, `${a.path} needs a tools allow-list`);
+      assert.match(a.body, /^model: (haiku|sonnet|opus|inherit)/m, `${a.path} needs a model tier`);
+      assert.match(
+        a.body,
+        /^description: Use proactively .+\.$/m,
+        `${a.path} needs a delegating description`,
+      );
+    }
+    for (const id of ["scout", "auditor"]) {
+      const file = agents.find((a) => a.path === `.claude/agents/${id}.md`);
+      const toolsLine = (file?.body.match(/^tools: (.+)$/m) ?? [])[1] ?? "";
+      assert.ok(
+        !toolsLine.includes("Edit") && !toolsLine.includes("Write"),
+        `${id} must stay read-only`,
+      );
+    }
+  });
+
+  it("emits each skill once, at the location the enabled platform reads", () => {
+    const claudeOnly = generatePack({ ...BASE, platforms: ["claude-code"] }).map((f) => f.path);
+    assert.ok(!claudeOnly.some((p) => p.startsWith("skills/")));
+    assert.ok(claudeOnly.some((p) => p.startsWith(".claude/skills/graph-first/")));
+    const codexOnly = generatePack({ ...BASE, platforms: ["codex"] }).map((f) => f.path);
+    assert.ok(codexOnly.includes("skills/graph-first/SKILL.md"));
+    assert.ok(!codexOnly.some((p) => p.startsWith(".claude/skills/")));
+  });
+
+  it("keeps the default AGENTS.md under 60 lines and ~500 rough tokens", () => {
+    const agents = generatePack(DEFAULT_HARNESS_CONFIG).find((f) => f.path === "AGENTS.md");
+    assert.ok(agents);
+    assert.ok(agents.body.split("\n").length < 60, `got ${agents.body.split("\n").length} lines`);
+    assert.ok(
+      agents.body.length / 4 < 500,
+      `got ~${Math.round(agents.body.length / 4)} rough tokens`,
+    );
+    assert.ok(
+      !agents.body.includes("## Skills"),
+      "skill bodies load via frontmatter, not the always-on file",
+    );
   });
 
   it("dedupes shared skill and mcp paths across platform families", () => {
