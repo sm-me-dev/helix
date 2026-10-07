@@ -1,4 +1,10 @@
-import type { SimEvent } from "./types";
+import type { CrewId, HarnessConfig, SimEvent } from "./types.ts";
+import { breakdown } from "./tokens.ts";
+import { DEFAULT_CREW } from "./crew.ts";
+import { DEFAULT_LSPS } from "./lsps.ts";
+import { DEFAULT_MCPS } from "./mcps.ts";
+import { DEFAULT_PLATFORMS } from "./platforms.ts";
+import { DEFAULT_SKILLS } from "./skills.ts";
 
 export const SAMPLE_ISSUE = {
   id: "LED-1841",
@@ -41,11 +47,7 @@ export const SIM_EVENTS: SimEvent[] = [
     body: "Three files, not twenty-eight. Auth stamps a user but never a limiter class. RateLimiter still looks at X-Client-Class, which the gateway now strips.",
     tokens: 6400,
     naiveTokens: 48200,
-    files: [
-      "src/http/gateway.ts:40-88",
-      "src/http/auth.ts:12-71",
-      "src/http/rate-limit.ts:1-120",
-    ],
+    files: ["src/http/gateway.ts:40-88", "src/http/auth.ts:12-71", "src/http/rate-limit.ts:1-120"],
   },
   {
     t: 5600,
@@ -110,3 +112,78 @@ export const SIM_EVENTS: SimEvent[] = [
 ];
 
 export const SIM_DURATION = 17000;
+
+const NUMBER_WORDS = ["Zero", "One", "Two", "Three", "Four", "Five", "Six"];
+
+export type AdaptedSim = {
+  events: SimEvent[];
+  /** always-on index relative to the default config — scales scripted helix tokens. */
+  scale: number;
+  /** Distinct crew roles present (drives the merge summary count). */
+  summaries: number;
+  /** Optional roles the config disabled (their passes are skipped). */
+  dropped: CrewId[];
+};
+
+/**
+ * Shape the canned timeline to the live config. Roles the user disabled drop
+ * out (conductor/system always stay), helix-side tokens scale with the live
+ * always-on index, and the merge event restates its summary count and ratio.
+ * Naive-side tokens are untouched — they are the no-harness baseline.
+ */
+export function adaptSimEvents(config: HarnessConfig): AdaptedSim {
+  const inCrew = new Set(config.crew);
+  const kept = SIM_EVENTS.filter(
+    (e) => e.role === "conductor" || e.role === "system" || inCrew.has(e.role),
+  );
+  const events = kept.length > 0 ? kept : SIM_EVENTS.slice(0, 1);
+
+  const live = breakdown(config);
+  const base = baselineAlwaysOn();
+  const scale = base > 0 ? live.alwaysOn / base : 1;
+
+  const roles = new Set(events.map((e) => e.role));
+  roles.delete("system");
+  const summaries = roles.size;
+  const summaryWord = NUMBER_WORDS[summaries] ?? String(summaries);
+  const dropped = (["scout", "architect", "builder", "prover", "auditor"] as CrewId[]).filter(
+    (r) => !inCrew.has(r),
+  );
+
+  const last = events[events.length - 1];
+  const scaledLast = Math.round(last.tokens * scale);
+  const ratio = last.naiveTokens / Math.max(scaledLast, 1);
+
+  const rewritten = events.map((e, i) =>
+    i === events.length - 1
+      ? {
+          ...e,
+          tokens: scaledLast,
+          body: e.body
+            .replace(/^[A-Z][a-z]+ summaries/, `${summaryWord} summaries`)
+            .replace(/[\d.]+× less/, `${ratio.toFixed(1)}× less`),
+        }
+      : { ...e, tokens: Math.round(e.tokens * scale) },
+  );
+
+  return { events: rewritten, scale, summaries, dropped };
+}
+
+/** Default-config always-on index — the scale denominator. Memoized. */
+let cachedBaseline: number | null = null;
+function baselineAlwaysOn(): number {
+  if (cachedBaseline === null) {
+    cachedBaseline = breakdown({
+      crew: DEFAULT_CREW,
+      skills: DEFAULT_SKILLS,
+      mcps: DEFAULT_MCPS,
+      lsps: DEFAULT_LSPS,
+      platforms: DEFAULT_PLATFORMS,
+      graphFirst: true,
+      progressiveDisclosure: true,
+      defaultSingleAgent: true,
+      hooksEnabled: true,
+    }).alwaysOn;
+  }
+  return cachedBaseline;
+}
