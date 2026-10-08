@@ -26,7 +26,9 @@ Supported agents: `opencode` (`opencode run --format json`, `--auto` inside a
 temp fixture copy), `codex` (`codex exec --json`, workspace-write sandbox),
 `claude-code` (`claude -p --output-format json`, best-effort parsing).
 Reports land in `evals/results/<stamp>-<agent>.json` + `.md` and render on
-the website's /evals page.
+the website's /evals page. Per-cell raw logs (`*-<task>-<arm>-<run>.log`,
+~100KB each) stay local-only via the repo's `*.log` ignore — the committed
+JSON carries the graded fields plus a 20-line tail.
 
 The opencode agent needs a clean HOME holding only `auth.json` (so personal
 skills, hooks, and MCPs stay out of the measurement):
