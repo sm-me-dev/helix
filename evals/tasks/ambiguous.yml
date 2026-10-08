@@ -1,6 +1,9 @@
 id: ambiguous
-title: Make the limiter better
-prompt: Make the limiter better.
+title: Make the limiter right for Acme
+prompt: >
+  Acme, our biggest customer, says the limiter is wrong for them. Make it
+  right for Acme. There is nothing about Acme anywhere in the repo — no
+  plan, no key, no ticket.
 pass: "true"
 timeoutSec: 300
 expectAsk: true

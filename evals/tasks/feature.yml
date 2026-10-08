@@ -6,3 +6,4 @@ prompt: >
   key formats — the repo already says what they are.
 pass: node --experimental-strip-types --test tests/quota.test.ts tests/context.test.ts tests/billing.test.ts
 timeoutSec: 600
+requireDiff: true

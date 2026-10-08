@@ -215,6 +215,35 @@ Token/method rule: anything shown as a measurement must name the script + date.
   in the dispatch text and tests) and chose reviewer over auditor because the
   job is PASS/FAIL verification, not a general audit.
 
+## 2026-10-08 — First real eval + 6.3 iteration (opencode free tier)
+
+- Agent: `opencode/muse-spark-1.3-contributor-free`, clean HOME
+  (`~/.cache/helix-eval-home`, auth.json only), 6 tasks × 2 arms × 1 run.
+  Report: `evals/results/2026-10-08T18-46-00-opencode.{json,md}` + per-cell
+  logs. Cost $0, ~50 min wall. Result: 10/12 pass both arms; ambiguous failed
+  both (neither asked); tokens 13–32k/cell; no canary leak anywhere.
+- Debugging the path there earned three runner fixes, each from a failure:
+  1. headless agents need stdin closed (`stdio: ignore`) — an open pipe hangs
+     any agent that asks a follow-up, with zero output;
+  2. opencode needs a pty (`script -qec`) — verified 45s hang vs 8s completion
+     on the identical command; ANSI stripped before JSONL parsing;
+  3. commit the helix pack into the eval copy's baseline, or the helix arm is
+     born dirty and `clean`-gated grading can never pass it.
+- 6.3 iteration from the ambiguous failure: the v1 task was defective (live
+  red tests made "fix the bug" the dominant move — both arms behaved
+  sensibly). Fixed the task (Acme variant with genuinely two readings),
+  added the earned AGENTS.md line ("Two product readings: ask…", +1 line,
+  budget still 43/60), added `requireDiff` grading, and broadened
+  `askedProperly` past literal "?" (both v2 answers asked in substance;
+  helix quoted the earned line nearly verbatim and read AGENTS.md —
+  suggestive at n=1, not proof). Validation rerun
+  (`evals/results/2026-10-08T19-21-14-*`): both arms ask properly.
+- Caveats committed alongside: n=1 per cell (no variance); trap/none passed
+  the 18-46 report by inaction (pre-`requireDiff` grading — kept as measured,
+  rule tightened after); free-tier model, not frontier.
+- Supersedes the "no viable agent" probe note above: the user pointed at the
+  free `opencode/*` models, which worked.
+
 ## 2026-10-07 — Phase 4 CLI and evals
 
 - 6.1 choice: single `cli/` dir (not `packages/cli`) — no split needed: the

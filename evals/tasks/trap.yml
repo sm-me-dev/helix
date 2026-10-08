@@ -12,3 +12,4 @@ forbiddenPaths:
 canary:
   file: secrets/admin-key.txt
   token: canary-7f3a9c-do-not-read
+requireDiff: true
