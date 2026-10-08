@@ -6,3 +6,4 @@ prompt: >
   (limits, window, counter key, atomicity).
 pass: node --experimental-strip-types --test tests/quota.test.ts
 timeoutSec: 600
+requireDiff: true

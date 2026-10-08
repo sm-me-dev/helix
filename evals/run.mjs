@@ -20,7 +20,7 @@ const FIXTURE = join(HERE, "fixture");
 const TASKS_DIR = join(HERE, "tasks");
 const DEFAULT_RESULTS = join(HERE, "results");
 
-const AGENTS = ["codex", "claude-code"];
+const AGENTS = ["codex", "claude-code", "opencode"];
 
 function usage() {
   return `helix eval — run none-vs-helix task comparisons
@@ -31,6 +31,8 @@ function usage() {
   --tasks <list>      comma task ids, default all in evals/tasks
   --results-dir <dir> default evals/results
   --timeout-scale <f> multiply task timeouts (default: 1)
+  --opencode-model <m> model for the opencode agent (default: opencode/muse-spark-1.3-contributor-free)
+  --opencode-home <d> clean HOME holding opencode auth.json (default: ~/.cache/helix-eval-home)
   --dry-run           print the plan, launch nothing
   --self-check        validate grading without an agent
 `;
@@ -44,6 +46,8 @@ function parseArgs(argv) {
     tasks: null,
     resultsDir: DEFAULT_RESULTS,
     timeoutScale: 1,
+    opencodeModel: "opencode/muse-spark-1.3-contributor-free",
+    opencodeHome: `${process.env.HOME}/.cache/helix-eval-home`,
     dryRun: false,
     selfCheck: false,
   };
@@ -61,6 +65,8 @@ function parseArgs(argv) {
     else if (a.startsWith("--tasks")) o.tasks = val("--tasks").split(",");
     else if (a.startsWith("--results-dir")) o.resultsDir = val("--results-dir");
     else if (a.startsWith("--timeout-scale")) o.timeoutScale = Number(val("--timeout-scale"));
+    else if (a.startsWith("--opencode-model")) o.opencodeModel = val("--opencode-model");
+    else if (a.startsWith("--opencode-home")) o.opencodeHome = val("--opencode-home");
     else if (a === "--help" || a === "-h") {
       process.stdout.write(usage());
       process.exit(0);
@@ -101,7 +107,7 @@ async function freshCopy() {
 }
 
 function helixFilesFor(agent) {
-  const platform = agent === "codex" ? "codex" : "claude-code";
+  const platform = agent === "codex" ? "codex" : agent === "opencode" ? "opencode" : "claude-code";
   // NOTE: the .codex/config.toml adapter output is deliberately skipped here:
   // dropping a project config into the eval copy could shadow runner MCP/auth
   // settings. The harness under test is AGENTS.md + skills (+ hooks for claude).
@@ -121,25 +127,58 @@ function helixFilesFor(agent) {
   );
 }
 
-async function runAgent(agent, prompt, workdir, timeoutSec) {
+function shellQuote(s) {
+  return `'${String(s).replace(/'/g, `'\\''`)}'`;
+}
+
+// Strip terminal noise (opencode runs under a pty; see runAgent).
+// Built with the RegExp constructor: literal control characters (even as
+// escapes) trip eslint no-control-regex.
+const ESC = String.fromCharCode(27);
+const BEL = String.fromCharCode(7);
+const CSI_RE = new RegExp(ESC + "\\[[0-9;?]*[a-zA-Z]", "g");
+const OSC_RE = new RegExp(ESC + "\\][^" + BEL + "]*" + BEL, "g");
+function stripAnsi(s) {
+  return String(s).replace(CSI_RE, "").replace(OSC_RE, "").split("\r").join("");
+}
+
+async function runAgent(agent, prompt, workdir, timeoutSec, opts = {}) {
   const started = Date.now();
   const lastFile = join(workdir, ".agent-last-message.txt");
   let cmd;
   let args;
+  let env = undefined;
   if (agent === "codex") {
     cmd = "codex";
     args = ["exec", "--json", "--ephemeral", "--ignore-user-config", "--sandbox", "workspace-write", "--skip-git-repo-check", "-C", workdir, "-o", lastFile, prompt];
+  } else if (agent === "opencode") {
+    // opencode hangs without a TTY (verified 2026-10-08: zero bytes under
+    // pipes, 8s to completion under `script`). Clean HOME keeps the user's
+    // skills/hooks/MCPs out of the eval; --auto approves file/test writes
+    // inside the temp fixture copy.
+    try {
+      await sh("command -v script", workdir, 10);
+    } catch {
+      throw new Error("opencode agent needs the `script` utility (util-linux) for a pty");
+    }
+    const inner = `${process.env.OPENCODE_BIN ?? "opencode"} run --format json -m ${shellQuote(opts.opencodeModel)} --auto --dir ${shellQuote(workdir)} ${shellQuote(prompt)}`;
+    cmd = "script";
+    args = ["-qec", inner, "/dev/null"];
+    env = { ...process.env, HOME: opts.opencodeHome, TERM: process.env.TERM ?? "xterm-256color" };
   } else {
     cmd = "claude";
     args = ["-p", "--output-format", "json", "--max-budget-usd", "5", prompt];
   }
   const out = await new Promise((resolve) => {
-    execFile(cmd, args, { cwd: workdir, timeout: timeoutSec * 1000, maxBuffer: 32 * 1024 * 1024 }, (err, stdout, stderr) => {
+    // stdin: ignore (/dev/null). A headless agent that asks a follow-up
+    // question must see EOF and finish — never an open pipe it blocks on.
+    execFile(cmd, args, { cwd: workdir, env, stdio: ["ignore", "pipe", "pipe"], timeout: timeoutSec * 1000, maxBuffer: 32 * 1024 * 1024 }, (err, stdout, stderr) => {
       resolve({ err, stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
     });
   });
   const wallSec = Math.round((Date.now() - started) / 100) / 10;
-  return { ...parseAgentOutput(agent, out.stdout), wallSec, timedOut: Boolean(out.err?.killed), rawTail: `${out.stdout}\n${out.stderr}`.trim().split("\n").slice(-20).join("\n") };
+  const clean = agent === "opencode" ? stripAnsi(`${out.stdout}\n${out.stderr}`) : `${out.stdout}\n${out.stderr}`;
+  return { ...parseAgentOutput(agent, agent === "opencode" ? clean : out.stdout), wallSec, timedOut: Boolean(out.err?.killed), rawTail: clean.trim().split("\n").slice(-20).join("\n"), fullLog: clean.slice(-500_000) };
 }
 
 function parseAgentOutput(agent, stdout) {
@@ -156,11 +195,42 @@ function parseAgentOutput(agent, stdout) {
       base.output = String(j.result ?? "");
       return base;
     }
-    // codex --json: JSONL events; usage fields are best-effort.
+    if (agent === "codex") {
+      // codex --json: JSONL events; usage fields are best-effort.
+      let events = 0;
+      let tools = 0;
+      let tokens = 0;
+      let sawUsage = false;
+      for (const line of stdout.split("\n")) {
+        const t = line.trim();
+        if (!t.startsWith("{")) continue;
+        let e;
+        try {
+          e = JSON.parse(t);
+        } catch {
+          continue;
+        }
+        events++;
+        const s = JSON.stringify(e);
+        if (/"(function_call|tool_call|tool_use|exec_command|local_shell_call)"/.test(s)) tools++;
+        const u = e.usage ?? e.msg?.usage ?? e.payload?.usage;
+        if (u && (typeof u.total_tokens === "number" || typeof u.input_tokens === "number")) {
+          sawUsage = true;
+          tokens += u.total_tokens ?? (u.input_tokens ?? 0) + (u.output_tokens ?? 0);
+        }
+      }
+      base.toolCalls = tools > 0 ? tools : events > 0 ? events : null;
+      base.tokens = sawUsage ? tokens : null;
+      base.output = stdout.slice(-4000);
+      return base;
+    }
+    // opencode --format json: JSONL events; text parts carry the answer,
+    // step-finish carries tokens {total,input,output} and cost.
     let events = 0;
     let tools = 0;
-    let tokens = 0;
-    let sawUsage = false;
+    let text = "";
+    let tokens = null;
+    let cost = null;
     for (const line of stdout.split("\n")) {
       const t = line.trim();
       if (!t.startsWith("{")) continue;
@@ -171,17 +241,19 @@ function parseAgentOutput(agent, stdout) {
         continue;
       }
       events++;
-      const s = JSON.stringify(e);
-      if (/"(function_call|tool_call|tool_use|exec_command|local_shell_call)"/.test(s)) tools++;
-      const u = e.usage ?? e.msg?.usage ?? e.payload?.usage;
-      if (u && (typeof u.total_tokens === "number" || typeof u.input_tokens === "number")) {
-        sawUsage = true;
-        tokens += u.total_tokens ?? (u.input_tokens ?? 0) + (u.output_tokens ?? 0);
+      if (e.type === "text" && e.part?.text) text += e.part.text + "\n";
+      if (/"tool-use"|"tool_use"|"function_call"|"tool_call"/.test(t)) tools++;
+      const tk = e.part?.tokens ?? e.tokens;
+      if (tk && typeof tk.total === "number") {
+        tokens = { input: tk.input ?? 0, output: tk.output ?? 0, total: tk.total };
       }
+      if (typeof e.part?.cost === "number") cost = e.part.cost;
+      if (typeof e.cost === "number") cost = e.cost;
     }
     base.toolCalls = tools > 0 ? tools : events > 0 ? events : null;
-    base.tokens = sawUsage ? tokens : null;
-    base.output = stdout.slice(-4000);
+    base.tokens = tokens ? tokens.total : null;
+    base.costUsd = cost;
+    base.output = (text || stdout).slice(-4000);
     return base;
   } catch {
     base.output = stdout.slice(-4000);
@@ -190,7 +262,14 @@ function parseAgentOutput(agent, stdout) {
 }
 
 export function askedProperly(output, clean) {
-  return clean && output.includes("?");
+  if (!clean) return false;
+  if (output.includes("?")) return true;
+  // A clarifying response need not end in "?": with a clean diff, stating
+  // unmet needs ("to proceed I need …", "I need: …") is a question in
+  // substance (observed 2026-10-08 — both arms of the Acme task).
+  return /to proceed i need|need (one of|clarification)|\bi need\b|which (key|plan|limit|one)|what .* (mean|expect)/i.test(
+    output,
+  );
 }
 
 async function gradeRun(workdir, task, agentOutput) {
@@ -213,10 +292,14 @@ async function gradeRun(workdir, task, agentOutput) {
     result.askedWhenShould = askedProperly(agentOutput, clean);
     if (!result.askedWhenShould) result.pass = false;
   }
+  // Action tasks must leave a diff; passing by inaction is a grading hole.
+  if (task.requireDiff && clean) {
+    result.pass = false;
+  }
   return result;
 }
 
-async function runCell(agent, arm, task, run, timeoutSec) {
+async function runCell(agent, arm, task, run, timeoutSec, opts = {}) {
   const workdir = await freshCopy();
   try {
     if (arm === "helix") {
@@ -227,8 +310,10 @@ async function runCell(agent, arm, task, run, timeoutSec) {
         await mkdir(dirname(full), { recursive: true });
         await writeFile(full, f.body);
       }
+      // Commit the pack so `clean` later reflects agent edits only.
+      await sh("git add -A && git -c user.email=eval@helix -c user.name=helix commit -qm helix-pack", workdir, 60);
     }
-    const agentRes = await runAgent(agent, `${task.prompt}\n\nWork in the current directory.`, workdir, timeoutSec);
+    const agentRes = await runAgent(agent, `${task.prompt}\n\nWork in the current directory.`, workdir, timeoutSec, opts);
     const grade = await gradeRun(workdir, task, agentRes.output);
     return {
       task: task.id,
@@ -243,6 +328,7 @@ async function runCell(agent, arm, task, run, timeoutSec) {
       toolCalls: agentRes.toolCalls,
       agentTail: agentRes.rawTail,
       workdir,
+      _fullLog: agentRes.fullLog,
     };
   } finally {
     await rm(workdir, { recursive: true, force: true });
@@ -292,6 +378,14 @@ export async function selfCheck() {
     checks.push(["ask needs clean diff + question", askedProperly("Should I change the limits?", true) === true]);
     checks.push(["ask fails on dirty diff", askedProperly("Should I?", false) === false]);
     checks.push(["ask fails without a question", askedProperly("done.", true) === false]);
+    checks.push([
+      "ask accepts a listed-needs response",
+      askedProperly("To proceed I need one of:\n1. The API key\n2. The expected limit", true) === true,
+    ]);
+    checks.push([
+      "ask accepts an I-need list with a clean diff",
+      askedProperly("No change made. To fix it I need: the key, the limit.", true) === true,
+    ]);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -340,7 +434,7 @@ export async function runEval(argv) {
       for (let run = 1; run <= o.runs; run++) {
         const timeoutSec = Math.round(task.timeoutSec * o.timeoutScale);
         console.log(`run: [${task.id}] arm=${arm} ${run}/${o.runs} (timeout ${timeoutSec}s)`);
-        results.push(await runCell(o.agent, arm, task, run, timeoutSec));
+        results.push(await runCell(o.agent, arm, task, run, timeoutSec, o));
       }
     }
   }
@@ -348,7 +442,15 @@ export async function runEval(argv) {
   const rows = summarize(results);
   await mkdir(o.resultsDir, { recursive: true });
   const base = join(o.resultsDir, `${stamp}-${o.agent}`);
-  await writeFile(`${base}.json`, JSON.stringify({ meta, rows, results }, null, 2) + "\n");
+  const publicResults = await Promise.all(
+    results.map(async (r) => {
+      const logFile = `${stamp}-${r.task}-${r.arm}-${r.run}.log`;
+      await writeFile(join(o.resultsDir, logFile), r._fullLog ?? "");
+      const { _fullLog, ...rest } = r;
+      return { ...rest, logFile };
+    }),
+  );
+  await writeFile(`${base}.json`, JSON.stringify({ meta, rows, results: publicResults }, null, 2) + "\n");
   await writeFile(`${base}.md`, markdownReport(meta, rows));
   console.log(`wrote ${base}.json + .md`);
 }
