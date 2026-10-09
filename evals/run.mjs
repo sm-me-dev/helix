@@ -19,9 +19,12 @@ import { parseYaml } from "./yaml.mjs";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const FIXTURE = join(HERE, "fixture");
 const TASKS_DIR = join(HERE, "tasks");
+const TASKS_LARGE_DIR = join(HERE, "tasks-large");
+const TASKS_HELDOUT_DIR = join(HERE, "tasks-heldout");
 const DEFAULT_RESULTS = join(HERE, "results");
 
 const AGENTS = ["codex", "claude-code", "opencode"];
+const FIXTURES = ["small", "large", "all"];
 
 function usage() {
   return `helix eval — run none-vs-helix task comparisons
@@ -29,7 +32,9 @@ function usage() {
   --agent <id>        ${AGENTS.join("|")} (default: codex)
   --arms <list>       comma list of none,helix (default: none,helix)
   --runs <n>          repetitions per cell (default: 1)
-  --tasks <list>      comma task ids, default all in evals/tasks
+  --tasks <list>      comma task ids, default all for the fixture
+  --fixture <id>      ${FIXTURES.join("|")} (default: small; large = 356-file navigation fixture)
+  --include-heldout   also run evals/tasks-heldout (never enabled when tuning)
   --results-dir <dir> default evals/results
   --timeout-scale <f> multiply task timeouts (default: 1)
   --opencode-model <m> model for the opencode agent (default: opencode/muse-spark-1.3-contributor-free)
@@ -45,6 +50,8 @@ function parseArgs(argv) {
     arms: ["none", "helix"],
     runs: 1,
     tasks: null,
+    fixture: "small",
+    includeHeldout: false,
     resultsDir: DEFAULT_RESULTS,
     timeoutScale: 1,
     opencodeModel: "opencode/muse-spark-1.3-contributor-free",
@@ -60,10 +67,12 @@ function parseArgs(argv) {
     };
     if (a === "--dry-run") o.dryRun = true;
     else if (a === "--self-check") o.selfCheck = true;
+    else if (a === "--include-heldout") o.includeHeldout = true;
     else if (a.startsWith("--agent")) o.agent = val("--agent");
     else if (a.startsWith("--arms")) o.arms = val("--arms").split(",");
     else if (a.startsWith("--runs")) o.runs = Number(val("--runs"));
     else if (a.startsWith("--tasks")) o.tasks = val("--tasks").split(",");
+    else if (a.startsWith("--fixture")) o.fixture = val("--fixture");
     else if (a.startsWith("--results-dir")) o.resultsDir = val("--results-dir");
     else if (a.startsWith("--timeout-scale")) o.timeoutScale = Number(val("--timeout-scale"));
     else if (a.startsWith("--opencode-model")) o.opencodeModel = val("--opencode-model");
@@ -76,18 +85,29 @@ function parseArgs(argv) {
     }
   }
   if (!AGENTS.includes(o.agent)) throw new Error(`unknown agent: ${o.agent}`);
+  if (!FIXTURES.includes(o.fixture)) throw new Error(`unknown fixture: ${o.fixture}`);
   for (const arm of o.arms) {
     if (!["none", "helix"].includes(arm)) throw new Error(`unknown arm: ${arm}`);
   }
   return o;
 }
 
-export async function loadTasks() {
-  const files = (await readdir(TASKS_DIR)).filter((f) => f.endsWith(".yml")).sort();
+async function readTaskDir(dir) {
+  const files = (await readdir(dir)).filter((f) => f.endsWith(".yml")).sort();
   const tasks = [];
   for (const f of files) {
-    tasks.push({ file: f, ...parseYaml(await readFile(join(TASKS_DIR, f), "utf8")) });
+    tasks.push({ file: f, ...parseYaml(await readFile(join(dir, f), "utf8")) });
   }
+  return tasks;
+}
+
+export async function loadTasks(opts = {}) {
+  const fixture = opts.fixture ?? "small";
+  const includeHeldout = opts.includeHeldout ?? false;
+  const tasks = [];
+  if (fixture === "small" || fixture === "all") tasks.push(...(await readTaskDir(TASKS_DIR)));
+  if (fixture === "large" || fixture === "all") tasks.push(...(await readTaskDir(TASKS_LARGE_DIR)));
+  if (includeHeldout) tasks.push(...(await readTaskDir(TASKS_HELDOUT_DIR)));
   return tasks;
 }
 
@@ -100,9 +120,18 @@ function sh(cmd, cwd, timeoutSec) {
   });
 }
 
-async function freshCopy() {
+async function freshCopy(task = null) {
   const dir = await mkdtemp(join(tmpdir(), "helix-eval-"));
-  await cp(FIXTURE, dir, { recursive: true });
+  if (task?.fixture === "large") {
+    const { writeFixture, plantRuleBug } = await import("./fixture-large/generate.mjs");
+    const seed = task.setup?.seed ?? 1;
+    const { model } = writeFixture(dir, { seed });
+    if (task.setup && typeof task.setup.module === "number") {
+      plantRuleBug(dir, model, task.setup.module, task.setup.rule);
+    }
+  } else {
+    await cp(FIXTURE, dir, { recursive: true });
+  }
   await sh("git init -q && git add -A && git -c user.email=eval@helix -c user.name=helix commit -qm baseline", dir, 60);
   return dir;
 }
@@ -327,7 +356,7 @@ export async function transcriptTokens(agent, workdir, opts = {}) {
 }
 
 async function runCell(agent, arm, task, run, timeoutSec, opts = {}) {
-  const workdir = await freshCopy();
+  const workdir = await freshCopy(task);
   try {
     if (arm === "helix") {
       const { mkdir, writeFile } = await import("node:fs/promises");
@@ -453,7 +482,7 @@ export async function selfCheck() {
 
 export async function runEval(argv) {
   const o = parseArgs(argv);
-  const allTasks = await loadTasks();
+  const allTasks = await loadTasks(o);
   const tasks = o.tasks ? allTasks.filter((t) => o.tasks.includes(t.id)) : allTasks;
   if (tasks.length === 0) throw new Error("no tasks selected");
 
@@ -462,7 +491,7 @@ export async function runEval(argv) {
     return;
   }
 
-  console.log(`agent=${o.agent} arms=${o.arms.join(",")} runs=${o.runs} tasks=${tasks.map((t) => t.id).join(",")}`);
+  console.log(`agent=${o.agent} arms=${o.arms.join(",")} runs=${o.runs} fixture=${o.fixture}${o.includeHeldout ? "+heldout" : ""} tasks=${tasks.map((t) => t.id).join(",")}`);
   if (o.dryRun) {
     for (const task of tasks) {
       for (const arm of o.arms) {
@@ -487,7 +516,7 @@ export async function runEval(argv) {
       }
     }
   }
-  const meta = { agent: o.agent, arms: o.arms, runs: o.runs, startedAt, tasks: tasks.map((t) => t.id) };
+  const meta = { agent: o.agent, arms: o.arms, runs: o.runs, startedAt, fixture: o.fixture, includeHeldout: o.includeHeldout, tasks: tasks.map((t) => t.id) };
   const rows = summarize(results);
   await mkdir(o.resultsDir, { recursive: true });
   const base = join(o.resultsDir, `${stamp}-${o.agent}`);

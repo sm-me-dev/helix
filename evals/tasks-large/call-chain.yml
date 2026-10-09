@@ -1,0 +1,16 @@
+id: call-chain
+title: Trace a wrong number back to its rule file
+prompt: >
+  tests/inventory/service.test.ts reports run(7) returning the wrong number,
+  but src/inventory/service.ts only sums its own rules plus the run() of its
+  dependencies. Follow the dependency chain down to the single rule file at
+  fault (its constant disagrees with docs/invoice.md), fix that one constant,
+  and keep every currently passing test green. Do not edit tests or docs.
+pass: node --experimental-strip-types --test tests/invoice/service.test.ts tests/inventory/service.test.ts tests/order/service.test.ts
+timeoutSec: 900
+requireDiff: true
+fixture: large
+setup:
+  seed: 1
+  module: 1
+  rule: 7
