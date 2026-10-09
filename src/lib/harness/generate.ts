@@ -125,6 +125,10 @@ Then inside the assistant: \`/graphify .\` (Codex: \`$graphify\`).
 - LSP — ${config.lsps.map((id) => LSP_BY_ID[id].name).join(", ") || "none (editor defaults)"}
 - Hooks — ${config.hooksEnabled ? "format/lint + graph-first hint + Stop test gate + .env deny" : "off"}
 
+Secret denies block Read/Edit/Write/Glob and recognized shell readers (cat,
+head, …) on .env and secrets/ — not subprocess reads (a script opening files
+itself). OS sandbox is the only enforcement there.
+
 Vendor files (CLAUDE.md, GEMINI.md, CONVENTIONS.md, …) are pointers. Edit AGENTS.md only.
 
 ## Default to one agent

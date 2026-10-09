@@ -61,7 +61,20 @@ export function hooksJson(config: HarnessConfig): string {
   } = {
     permissions: {
       // Fail-closed secret protection: denies stay in permissions, not in advice hooks.
-      deny: ["Read(.env)", "Read(.env.*)", "Read(**/secrets/**)"],
+      // Read denies also block Edit/Write on the same path and best-effort cover
+      // Grep/Glob plus recognized Bash file commands (cat, head, …). Edit denies
+      // close the NotebookEdit gap. Uncoverable by rule syntax: subprocess reads
+      // (python/node opening files, `grep -r .` from the dir) — documented in
+      // the pack README, OS sandbox is the only enforcement there.
+      // Verified 2026-10-09 against https://code.claude.com/docs/en/permissions.
+      deny: [
+        "Read(.env)",
+        "Read(.env.*)",
+        "Read(**/secrets/**)",
+        "Edit(.env)",
+        "Edit(.env.*)",
+        "Edit(**/secrets/**)",
+      ],
     },
     hooks: {
       PostToolUse: [
