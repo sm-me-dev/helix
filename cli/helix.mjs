@@ -1,10 +1,12 @@
 #!/usr/bin/env -S node --experimental-strip-types
 // helix — init, doctor, measure, export, eval for the Helix harness pack.
 // Requires Node 22.6+ (type stripping). No dependencies beyond the repo.
-import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
+import { GATE_SOURCE } from "../src/lib/harness/gate.ts";
 import { generatePack } from "../src/lib/harness/generate.ts";
 import { DEFAULT_PLATFORMS } from "../src/lib/harness/platforms.ts";
 import {
@@ -25,17 +27,20 @@ const USAGE = `helix — AI coding harness pack manager
   helix init [dir] [--platform a,b] [--force]   detect the stack, write the pack
   helix doctor [dir]                            check the installed harness
   helix measure [dir]                           print the real token breakdown
+  helix gate [dir] [--all] [--dry] [--json]     secrets, lint, typecheck, affected tests
+                                                (exit 0 pass · 1 check failed · 2 usage)
   helix export --platform <id>                  print the pack as JSON (scripted use)
   helix eval [options]                          run the eval harness (see evals/README.md)
 `;
 
 function parseArgs(argv) {
   const [cmd, ...rest] = argv;
-  const opts = { dir: ".", platforms: null, force: false, platform: null, evalArgs: [] };
+  const opts = { dir: ".", platforms: null, force: false, platform: null, evalArgs: [], gateArgs: [] };
   const positional = [];
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
-    if (a === "--force") opts.force = true;
+    if (cmd === "gate" && a.startsWith("--")) opts.gateArgs.push(a);
+    else if (a === "--force") opts.force = true;
     else if (a === "--platform" && cmd === "export") opts.platform = rest[++i];
     else if (a.startsWith("--platform=")) opts.platforms = a.slice("--platform=".length).split(",");
     else if (a === "--platform") opts.platforms = (rest[++i] ?? "").split(",");
@@ -179,6 +184,13 @@ function cmdDoctor(opts) {
       }
     }
   }
+  if (files.has(".helix/gate.mjs")) {
+    try {
+      execFileSync("node", [join(dir, ".helix/gate.mjs"), "--dry"], { cwd: dir, timeout: 30000, stdio: ["ignore", "pipe", "pipe"] });
+    } catch (err) {
+      failures.push({ check: "gate:.helix/gate.mjs", detail: `--dry exits ${err?.status ?? "?"}` });
+    }
+  }
   const cfg = reconstructConfig(files);
   console.log(`mcp servers: ${cfg.mcps.length}`);
   for (const line of mcpSummary(cfg)) console.log(`  ${line}`);
@@ -187,6 +199,23 @@ function cmdDoctor(opts) {
   } else {
     for (const f of failures) console.log(`FAIL ${f.check}: ${f.detail}`);
     process.exitCode = 1;
+  }
+}
+
+// Always runs the bundled gate (known-good source) with the target repo's
+// .helix/gate.json pins; never executes a gate.mjs the repo supplied itself.
+function cmdGate(opts) {
+  const tmp = mkdtempSync(join(tmpdir(), "helix-gate-"));
+  const file = join(tmp, "gate.mjs");
+  try {
+    writeFileSync(file, GATE_SOURCE);
+    const r = spawnSync(process.execPath, [file, ...opts.gateArgs], {
+      cwd: resolve(opts.dir),
+      stdio: "inherit",
+    });
+    process.exitCode = r.status ?? 2;
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
   }
 }
 
@@ -213,6 +242,7 @@ async function main() {
   if (cmd === "init") await cmdInit(opts);
   else if (cmd === "doctor") cmdDoctor(opts);
   else if (cmd === "measure") cmdMeasure(opts);
+  else if (cmd === "gate") cmdGate(opts);
   else if (cmd === "export") cmdExport(opts);
   else if (cmd === "eval") {
     const { runEval } = await import("../evals/run.mjs");

@@ -121,6 +121,13 @@ describe("doctorPack", () => {
     assert.ok(failures.some((f) => f.check === "agents-md"));
   });
 
+  it("flags a pack whose AGENTS.md demands the gate but whose gate file is gone", () => {
+    const files = new Map(generatePack(defaultConfig(["claude-code"])).map((f) => [f.path, f.body]));
+    files.delete(".helix/gate.mjs");
+    const failures = doctorPack(files).filter((f) => f.check === "gate");
+    assert.equal(failures.length, 1);
+  });
+
   it("flags unpinned uvx --from specs", () => {
     const failures = doctorPack(
       new Map([

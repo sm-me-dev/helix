@@ -193,6 +193,12 @@ export function doctorPack(files: Map<string, string>): DoctorFailure[] {
         detail: `AGENTS.md is ~${tokens} tokens (budget 500)`,
       });
   }
+  if (agents?.includes(".helix/gate.mjs") && !files.has(".helix/gate.mjs")) {
+    failures.push({
+      check: "gate",
+      detail: "AGENTS.md tells agents to run .helix/gate.mjs but it is missing; re-run helix init",
+    });
+  }
 
   // Every emitted JSON config must parse and match its platform shape.
   const jsonChecks: [string, (v: unknown) => string | null][] = [
