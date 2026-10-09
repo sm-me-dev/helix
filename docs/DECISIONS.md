@@ -571,3 +571,13 @@ unmeasured schema is reported as a labeled estimate (the `estimate:` line in
 Rejected: keeping the check and making `doctor` fail on it (fails every default
 pack for a disclosed estimate); hardcoding a measured context7 number (never
 measured, so it would be invented). Test: `tokens.test.ts`.
+
+## 2026-10-09 — Untrack graphify-out/
+
+`graphify-out/` (graph.json 1.2 MB, GRAPH_REPORT.md, manifest.json; 1.3 MB
+total) was tracked and rewritten by every `graphify update .`, roughly 6000
+lines of churn per refresh and 2 commits touching it in the last 14 days. It is
+generated from the source, so it is now ignored (files stay on disk; run
+`graphify update .` to regenerate). Rejected: keeping it tracked so a fresh
+clone has a graph (the graph is rebuilt in seconds and a stale committed graph
+misleads agents more than a missing one). Approved by the user 2026-10-09.

@@ -76,3 +76,6 @@ artifacts/
 
 # Empty placeholder lock from scaffold — not a real lockfile
 .node_modules.lock
+
+# Graphify output: generated, ~6000-line churn per refresh; regenerate with `graphify update .`
+graphify-out/
