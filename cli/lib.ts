@@ -65,7 +65,10 @@ export function detectStack(files: {
         : files.names.has("pyproject.toml") || files.names.has("requirements.txt")
           ? "python"
           : "unknown";
-  const script = (n: string) => (pkg?.scripts?.[n] ? `${pm === "npm" ? "npm" : pm} ${n === "test" && pm === "npm" ? "test" : `run ${n}`} `.trim() : null);
+  const script = (n: string) =>
+    pkg?.scripts?.[n]
+      ? `${pm === "npm" ? "npm" : pm} ${n === "test" && pm === "npm" ? "test" : `run ${n}`} `.trim()
+      : null;
   const testCommand =
     script("test") ??
     (files.makefile?.match(/^test:/m) ? "make test" : null) ??
@@ -139,18 +142,36 @@ export function doctorPack(files: Map<string, string>): DoctorFailure[] {
   } else {
     const lines = agents.split("\n").length;
     const tokens = countTokens(agents);
-    if (lines >= 60) failures.push({ check: "agents-budget", detail: `AGENTS.md has ${lines} lines (budget 60)` });
-    if (tokens >= 500) failures.push({ check: "agents-budget", detail: `AGENTS.md is ~${tokens} tokens (budget 500)` });
+    if (lines >= 60)
+      failures.push({ check: "agents-budget", detail: `AGENTS.md has ${lines} lines (budget 60)` });
+    if (tokens >= 500)
+      failures.push({
+        check: "agents-budget",
+        detail: `AGENTS.md is ~${tokens} tokens (budget 500)`,
+      });
   }
 
   // Every emitted JSON config must parse and match its platform shape.
   const jsonChecks: [string, (v: unknown) => string | null][] = [
-    [".mcp.json", (v) => (v && typeof v === "object" && "mcpServers" in (v as object) ? null : "needs top-level mcpServers")],
-    [".cursor/mcp.json", (v) => (v && typeof v === "object" && "mcpServers" in (v as object) ? null : "needs top-level mcpServers")],
+    [
+      ".mcp.json",
+      (v) =>
+        v && typeof v === "object" && "mcpServers" in (v as object)
+          ? null
+          : "needs top-level mcpServers",
+    ],
+    [
+      ".cursor/mcp.json",
+      (v) =>
+        v && typeof v === "object" && "mcpServers" in (v as object)
+          ? null
+          : "needs top-level mcpServers",
+    ],
     [
       ".vscode/mcp.json",
       (v) => {
-        if (!v || typeof v !== "object" || !("servers" in (v as object))) return "needs top-level servers";
+        if (!v || typeof v !== "object" || !("servers" in (v as object)))
+          return "needs top-level servers";
         const servers = (v as { servers: Record<string, { type?: string }> }).servers;
         for (const [name, s] of Object.entries(servers)) {
           if (!["stdio", "http", "sse"].includes(s.type ?? "")) return `${name} needs a type`;
@@ -210,7 +231,10 @@ export function doctorPack(files: Map<string, string>): DoctorFailure[] {
       }
       for (const ref of refs) {
         if (!files.has(ref)) {
-          failures.push({ check: `hooks:${ref}`, detail: "referenced by settings.json but not shipped" });
+          failures.push({
+            check: `hooks:${ref}`,
+            detail: "referenced by settings.json but not shipped",
+          });
         }
       }
     } catch {
@@ -225,8 +249,18 @@ export function doctorPack(files: Map<string, string>): DoctorFailure[] {
       failures.push({ check: `pin:${path}`, detail: "floats on @latest" });
     }
     const bareGit = body.match(/git\+https:[^"'\s@]*["'\s]/);
-    if (bareGit && !/@v?\d/.test(body.slice(body.indexOf(bareGit[0]), body.indexOf(bareGit[0]) + 120))) {
+    if (
+      bareGit &&
+      !/@v?\d/.test(body.slice(body.indexOf(bareGit[0]), body.indexOf(bareGit[0]) + 120))
+    ) {
       failures.push({ check: `pin:${path}`, detail: "unpinned git ref" });
+    }
+    // uvx --from specs without a version pin (==, >=, ~=, or @ref).
+    for (const m of body.matchAll(/"--from"\s*,\s*"([^"]+)"/g)) {
+      const spec = m[1];
+      if (!/==|>=|~=|===|@[^"]*\d|git\+https:[^"]*@/.test(spec)) {
+        failures.push({ check: `pin:${path}`, detail: `unpinned uvx --from spec: ${spec}` });
+      }
     }
   }
 
@@ -235,12 +269,9 @@ export function doctorPack(files: Map<string, string>): DoctorFailure[] {
 
 /** Reconstruct a best-effort config from unpacked pack files (for measure/doctor). */
 export function reconstructConfig(files: Map<string, string>): HarnessConfig {
-  const crew = [...DEFAULT_CREW].filter((id) =>
-    files.has(`.claude/agents/${id}.md`),
-  );
+  const crew = [...DEFAULT_CREW].filter((id) => files.has(`.claude/agents/${id}.md`));
   const platformIds = (Object.keys(ADAPTER_BY_ID) as PlatformId[]).filter((id) => {
-    if (id === "claude-code")
-      return files.has("CLAUDE.md") || files.has(".claude/settings.json");
+    if (id === "claude-code") return files.has("CLAUDE.md") || files.has(".claude/settings.json");
     if (id === "cursor") return files.has(".cursor/mcp.json");
     if (id === "codex") return files.has(".codex/config.toml");
     if (id === "copilot") return files.has(".vscode/mcp.json");
@@ -296,7 +327,9 @@ export function graphFreshness(
 ): DoctorFailure[] {
   const report = readFile("graphify-out/GRAPH_REPORT.md");
   if (report === null) {
-    return [{ check: "graph", detail: "graphify-out/GRAPH_REPORT.md missing — run graphify update ." }];
+    return [
+      { check: "graph", detail: "graphify-out/GRAPH_REPORT.md missing — run graphify update ." },
+    ];
   }
   const m = report.match(/Built from commit: `([0-9a-f]+)/);
   const head = revParseHead();
