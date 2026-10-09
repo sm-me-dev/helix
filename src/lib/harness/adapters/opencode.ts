@@ -57,8 +57,9 @@ export const opencodeAdapter: PlatformAdapter = {
   notes:
     "Repo instructions use AGENTS.md; custom subagents live in .opencode/agents/<name>.md, " +
     "skills in .opencode/skills/<name>/SKILL.md, and MCP servers in opencode.json under mcp. " +
-    "The generated opencode.json contains only Helix's mcp object: merge it with an existing " +
-    "OpenCode config rather than replacing unrelated settings. Hooks/plugins are not emitted.",
+    "The CLI merges Helix MCP entries into an existing opencode.json, preserves unrelated " +
+    "settings, and keeps same-name user server definitions. A downloaded pack's opencode.json " +
+    "is a fragment that must be merged manually. Hooks/plugins are not emitted.",
   files(config: HarnessConfig): PackFile[] {
     const files: PackFile[] = [];
     for (const cid of config.crew) {
