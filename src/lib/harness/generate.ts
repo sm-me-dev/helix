@@ -92,7 +92,11 @@ ${crewRows}
 - Subagent bodies load on run; no file over ~400 lines, cite ranges.
 - ${hooks}
 - Every behavior change ships with a failing test first.
-- Before you finish: \`node .helix/gate.mjs\` (secrets, lint, typecheck, affected tests; failures only; exit 0 = pass).
+- Before you finish: \`node .helix/gate.mjs\` (secrets, lint, typecheck, affected tests; failures only; exit 0 = pass).${
+    config.learnOptIn === true
+      ? "\n- Learn (opt-in ledger): read `.helix/learn/COMPILED.md` when present; at most its 3 listed lines apply."
+      : ""
+  }
 ${inlined}`;
 }
 

@@ -38,6 +38,11 @@ export type HarnessConfig = {
   progressiveDisclosure: boolean;
   defaultSingleAgent: boolean;
   hooksEnabled: boolean;
+  /** Learning Ledger (Phase E): evidence-gated and OFF by default. When true,
+   * the pack points at `.helix/learn/COMPILED.md` (compiled, capped ledger
+   * output). The ledger stays opt-in until a replay eval shows tokens per
+   * passing task falling without lowering pass rate. */
+  learnOptIn?: boolean;
   /** Detected repo facts from `helix init` (cli/lib detectStack). Optional so
    * hand-built configs keep working; when present AGENTS.md cites exact
    * commands instead of telling the agent to go read package.json. */
