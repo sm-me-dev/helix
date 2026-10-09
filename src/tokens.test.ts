@@ -63,12 +63,17 @@ describe("breakdown", () => {
   it("flags catalog estimates instead of hiding them", () => {
     const b = breakdown({ ...MINIMAL, mcps: ["github"] });
     assert.ok(b.estimates.some((e) => e.includes("github")));
-    assert.ok(b.checks.some((c) => c.id === "mcp-measured" && !c.pass));
+    // A labeled estimate is a disclosure, not a failure: it must not lower the lean score.
+    assert.ok(
+      b.checks.every((c) => c.pass),
+      "no check may fail only because of a labeled estimate",
+    );
+    assert.equal(b.leanScore, 100);
   });
 
   it("derives leanScore from passing checks only", () => {
     const b = breakdown(MINIMAL);
-    assert.equal(b.checks.length, 5);
+    assert.equal(b.checks.length, 4);
     const passed = b.checks.filter((c) => c.pass).length;
     assert.equal(b.leanScore, Math.round((100 * passed) / b.checks.length));
     assert.ok(b.checks.some((c) => c.id === "no-duplicates" && c.pass));
