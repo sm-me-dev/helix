@@ -2,16 +2,16 @@
 // everything here is importable and unit-tested without touching process.
 import { DEFAULT_CREW } from "../src/lib/harness/crew.ts";
 import { generatePack } from "../src/lib/harness/generate.ts";
-import { DEFAULT_MCPS } from "../src/lib/harness/mcps.ts";
+import { DEFAULT_MCPS, MCPS } from "../src/lib/harness/mcps.ts";
 import { selectRepoMap } from "../src/lib/harness/repomap.ts";
 import { DEFAULT_PLATFORMS } from "../src/lib/harness/platforms.ts";
-import { DEFAULT_SKILLS } from "../src/lib/harness/skills.ts";
+import { DEFAULT_SKILLS, SKILLS } from "../src/lib/harness/skills.ts";
 import { breakdown, formatTokens } from "../src/lib/harness/tokens.ts";
 import { ADAPTER_BY_ID } from "../src/lib/harness/adapters/index.ts";
 import { countTokens } from "../src/lib/harness/measure.ts";
 import { mcpCostByPlatform } from "../src/lib/harness/mcp-cost.ts";
 import { mcpSchemaTokens } from "../src/lib/harness/mcps.ts";
-import type { HarnessConfig, PlatformId } from "../src/lib/harness/types.ts";
+import type { HarnessConfig, McpId, PlatformId, SkillId } from "../src/lib/harness/types.ts";
 
 export function defaultConfig(platforms: PlatformId[]): HarnessConfig {
   return {
@@ -330,7 +330,49 @@ export function doctorPack(files: Map<string, string>): DoctorFailure[] {
   return failures;
 }
 
-/** Reconstruct a best-effort config from unpacked pack files (for measure/doctor). */
+/** MCP server ids actually present in the pack's config files (unknown keys are ignored). */
+function installedMcps(files: Map<string, string>): McpId[] {
+  const known = new Set<string>(MCPS.map((m) => m.id));
+  const found = new Set<string>();
+  const jsonKeys: [string, string][] = [
+    [".mcp.json", "mcpServers"],
+    [".cursor/mcp.json", "mcpServers"],
+    [".vscode/mcp.json", "servers"],
+  ];
+  for (const [path, field] of jsonKeys) {
+    const body = files.get(path);
+    if (body === undefined) continue;
+    try {
+      const servers = (JSON.parse(body) as Record<string, unknown>)[field];
+      if (servers && typeof servers === "object") {
+        for (const key of Object.keys(servers)) if (known.has(key)) found.add(key);
+      }
+    } catch {
+      // malformed config: doctor reports it; measure just counts nothing from it
+    }
+  }
+  const toml = files.get(".codex/config.toml");
+  if (toml !== undefined) {
+    for (const m of toml.matchAll(/\[mcp_servers\.([A-Za-z0-9_-]+)\]/g)) {
+      if (known.has(m[1])) found.add(m[1]);
+    }
+  }
+  return MCPS.map((m) => m.id).filter((id) => found.has(id));
+}
+
+/** Skill ids actually present under .agents/skills or .claude/skills. */
+function installedSkills(files: Map<string, string>): SkillId[] {
+  return SKILLS.map((s) => s.id).filter(
+    (id) =>
+      files.has(`.agents/skills/${id}/SKILL.md`) || files.has(`.claude/skills/${id}/SKILL.md`),
+  );
+}
+
+/**
+ * Reconstruct the config from unpacked pack files (for measure/doctor). Crew, skills
+ * and MCP servers come from what is installed, not from the catalog defaults, so the
+ * report describes the pack on disk (an empty set is a valid, lean answer).
+ */
 export function reconstructConfig(files: Map<string, string>): HarnessConfig {
   const crew = [...DEFAULT_CREW].filter((id) => files.has(`.claude/agents/${id}.md`));
   const platformIds = (Object.keys(ADAPTER_BY_ID) as PlatformId[]).filter((id) => {
@@ -345,9 +387,9 @@ export function reconstructConfig(files: Map<string, string>): HarnessConfig {
     return false;
   });
   return {
-    crew: crew.length > 0 ? crew : [...DEFAULT_CREW],
-    skills: [...DEFAULT_SKILLS],
-    mcps: [...DEFAULT_MCPS],
+    crew,
+    skills: installedSkills(files),
+    mcps: installedMcps(files),
     platforms: platformIds.length > 0 ? platformIds : [...DEFAULT_PLATFORMS],
     graphFirst: true,
     progressiveDisclosure: true,
