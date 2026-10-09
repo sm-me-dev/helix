@@ -16,9 +16,9 @@ const BASE: HarnessConfig = {
 };
 
 describe("generatePack", () => {
-  it("always emits README.md and AGENTS.md first", () => {
+  it("always emits .helix/README.md and AGENTS.md first", () => {
     const paths = generatePack(BASE).map((f) => f.path);
-    assert.deepEqual(paths.slice(0, 2), ["README.md", "AGENTS.md"]);
+    assert.deepEqual(paths.slice(0, 2), [".helix/README.md", "AGENTS.md"]);
   });
 
   it("emits hooks only when enabled", () => {
@@ -213,7 +213,7 @@ describe("generatePack", () => {
   });
 
   it("makes no LSP claims in the pack README (no adapter emits LSP config)", () => {
-    const readme = generatePack(BASE).find((f) => f.path === "README.md");
+    const readme = generatePack(BASE).find((f) => f.path === ".helix/README.md");
     assert.ok(!readme?.body.includes("- LSP —"));
     assert.ok(!readme?.body.includes("vtsls"));
   });
@@ -234,7 +234,7 @@ describe("packAsText", () => {
   it("joins files with path separators", () => {
     const text = packAsText(generatePack(BASE));
     assert.ok(text.includes("===== AGENTS.md ====="));
-    assert.ok(text.includes("===== README.md ====="));
+    assert.ok(text.includes("===== .helix/README.md ====="));
   });
 });
 

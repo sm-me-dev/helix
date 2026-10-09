@@ -138,7 +138,7 @@ Fan-out costs ~15× tokens when the work is coupled. Helix fans out when the Sco
 export function generatePack(config: HarnessConfig): PackFile[] {
   requireKnownIds(config);
   const files: PackFile[] = [
-    { path: "README.md", language: "markdown", body: readme(config) },
+    { path: ".helix/README.md", language: "markdown", body: readme(config) },
     { path: "AGENTS.md", language: "markdown", body: agentsMd(config) },
   ];
 
