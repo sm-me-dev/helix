@@ -98,7 +98,7 @@ describe("platform capability matrix", () => {
     assert.ok(openCodePaths.includes(".opencode/skills/graph-first/SKILL.md"));
     assert.match(
       opencode.find((file) => file.path === ".opencode/agents/scout.md")?.body ?? "",
-      /mode: subagent[\\s\\S]*edit: deny/,
+      /mode: subagent[\s\S]*edit: deny/,
     );
 
     const mcpFile = opencode.find((file) => file.path === "opencode.json");
