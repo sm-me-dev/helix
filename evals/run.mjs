@@ -9,10 +9,11 @@
 // synthetic scenarios without launching any agent.
 import { execFile } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generatePack } from "../src/lib/harness/generate.ts";
+import { loadOpenCodeDb, parseClaudeCodeJsonl, sumSessions } from "../cli/report.ts";
 import { parseYaml } from "./yaml.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -298,6 +299,33 @@ async function gradeRun(workdir, task, agentOutput) {
   return result;
 }
 
+/**
+ * Tokens for one run, read from the agent's own session transcript with the same
+ * parsers as `helix report` (deduped Claude Code usage; OpenCode message rows). The
+ * agent-reported figure is NOT used for comparison: for opencode it was the last
+ * step-finish only (0.1-8% of the run total on 8 sampled sessions, 2026-10-09).
+ * Returns null when no transcript parser is verified for the agent (codex).
+ */
+export async function transcriptTokens(agent, workdir, opts = {}) {
+  try {
+    if (agent === "opencode") {
+      const db = join(opts.opencodeHome ?? join(homedir(), ".cache", "helix-eval-home"), ".local", "share", "opencode", "opencode.db");
+      const r = await loadOpenCodeDb(db, { directory: workdir });
+      return r.skipped ? null : sumSessions(r.sessions);
+    }
+    if (agent === "claude-code") {
+      const dir = join(homedir(), ".claude", "projects", workdir.replace(/[^A-Za-z0-9]/g, "-"));
+      const files = (await readdir(dir)).filter((f) => f.endsWith(".jsonl"));
+      const sessions = [];
+      for (const f of files) sessions.push(parseClaudeCodeJsonl(await readFile(join(dir, f), "utf8"), f));
+      return sessions.length > 0 ? sumSessions(sessions) : null;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 async function runCell(agent, arm, task, run, timeoutSec, opts = {}) {
   const workdir = await freshCopy();
   try {
@@ -314,6 +342,7 @@ async function runCell(agent, arm, task, run, timeoutSec, opts = {}) {
     }
     const agentRes = await runAgent(agent, `${task.prompt}\n\nWork in the current directory.`, workdir, timeoutSec, opts);
     const grade = await gradeRun(workdir, task, agentRes.output);
+    const tr = await transcriptTokens(agent, workdir, opts);
     return {
       task: task.id,
       arm,
@@ -322,8 +351,13 @@ async function runCell(agent, arm, task, run, timeoutSec, opts = {}) {
       ...grade,
       wallSec: agentRes.wallSec,
       agentTimedOut: agentRes.timedOut,
-      tokens: agentRes.tokens,
-      costUsd: agentRes.costUsd,
+      tokens: tr ? tr.total : null,
+      uncachedTokens: tr ? tr.uncached : null,
+      subagentTokens: tr ? tr.subagent : null,
+      tokensSource: tr ? "transcript" : "unavailable",
+      // audit only: agent-reported figures are not comparable across runs
+      agentReportedTokens: agentRes.tokens,
+      costUsd: tr && tr.costUsd !== null ? tr.costUsd : agentRes.costUsd,
       toolCalls: agentRes.toolCalls,
       agentTail: agentRes.rawTail,
       workdir,
@@ -342,23 +376,39 @@ function summarize(results) {
     const passed = cell.filter((r) => r.pass).length;
     const walls = cell.map((r) => r.wallSec);
     const toks = cell.map((r) => r.tokens).filter((t) => typeof t === "number");
+    const unc = cell.map((r) => r.uncachedTokens).filter((t) => typeof t === "number");
+    const mean = (xs) => (xs.length > 0 ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+    const sd = (xs) => {
+      if (xs.length < 2) return null;
+      const m = mean(xs);
+      return Math.sqrt(xs.reduce((a, b) => a + (b - m) ** 2, 0) / (xs.length - 1));
+    };
+    const avgUnc = mean(unc);
     rows.push({
       cell: key,
       runs: cell.length,
       passed,
       avgWallSec: Math.round((walls.reduce((a, b) => a + b, 0) / walls.length) * 10) / 10,
-      avgTokens: toks.length > 0 ? Math.round(toks.reduce((a, b) => a + b, 0) / toks.length) : null,
+      avgTokens: toks.length > 0 ? Math.round(mean(toks)) : null,
+      avgUncached: avgUnc === null ? null : Math.round(avgUnc),
+      sdUncached: unc.length > 1 ? Math.round(sd(unc)) : null,
+      rawUncached: unc,
+      passPer1kUncached: avgUnc ? Math.round(((passed / cell.length) / (avgUnc / 1000)) * 1000) / 1000 : null,
     });
   }
   return rows;
 }
 
 function markdownReport(meta, rows) {
-  const head = `# Helix eval — ${meta.agent} (${meta.startedAt})\n\n${rows.length} cells · ${meta.runs} run(s) each · arms: ${meta.arms.join(", ")}\n\n| cell | runs | passed | avg wall (s) | avg tokens |\n| --- | --- | --- | --- | --- |`;
+  const head = `# Helix eval — ${meta.agent} (${meta.startedAt})\n\n${rows.length} cells · ${meta.runs} run(s) each · arms: ${meta.arms.join(", ")}\n\n| cell | runs | passed | avg wall (s) | avg tokens (total) | avg uncached | sd uncached | pass rate per 1k uncached | per-run uncached |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- |`;
   const body = rows
-    .map((r) => `| ${r.cell} | ${r.runs} | ${r.passed} | ${r.avgWallSec} | ${r.avgTokens ?? "n/a"} |`)
+    .map(
+      (r) =>
+        `| ${r.cell} | ${r.runs} | ${r.passed} | ${r.avgWallSec} | ${r.avgTokens ?? "n/a"} | ${r.avgUncached ?? "n/a"} | ${r.sdUncached ?? "n/a"} | ${r.passPer1kUncached ?? "n/a"} | ${r.rawUncached.join(", ") || "n/a"} |`,
+    )
     .join("\n");
-  return `${head}\n${body}\n`;
+  const method = `\nMethod: tokens are read from the agent's session transcript (helix report parsers), total = input + output + reasoning + cache read + cache write across main and subagent sessions; uncached excludes cache reads. Agent-reported token fields are kept in results JSON for audit only. Codex has no verified transcript parser, so its tokens are n/a. Dated ${meta.startedAt}.\n`;
+  return `${head}\n${body}\n${method}`;
 }
 
 export async function selfCheck() {

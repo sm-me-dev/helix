@@ -525,7 +525,7 @@ No new dependencies. No disproved-as-false suspects beyond #5's narrowed scope.
 
 ## 2026-10-09 — Smoke-test fixes and repo-driven platform selection
 
-Evidence that the pack was not yet doing its job (script: `evals/run.mjs`;
+[Token percentages in this paragraph are INVALID: see the Phase B entry below; pass rates stand.] Evidence that the pack was not yet doing its job (script: `evals/run.mjs`;
 results: `evals/results/2026-10-08T18-46-00-opencode.md`; opencode free tier,
 n=1 per cell, 20-file fixture): the helix arm used more tokens than the
 no-harness arm in 5 of 6 cells (ambiguous +22%, feature +14%, trap +11%,
@@ -625,3 +625,46 @@ pack is already small (327 tokens); subagents and the longer AGENTS.md only
 appear with the claude-code pack (+119 AGENTS.md, +216 crew). Whether to drop
 them under a size threshold must come from the Phase D eval, not intuition.
 Rejected: picking a file-count threshold now (no measurement supports any value).
+
+## 2026-10-09 — Phase B: helix report, and the eval token bug it exposed
+
+`helix report [dir] [--claude <path>] [--opencode <db>] [--limit n] [--json]`
+(cli/report.ts, cli/report.test.mjs) parses Claude Code session JSONL and the
+OpenCode SQLite database (node:sqlite, no new dependency; skipped with a message
+when unavailable) and reports tokens, subagent tokens, repeated reads, oversized
+tool outputs (over 20k characters), retries (a call identical to an earlier call
+that errored) and wasted turns (turns whose every tool call errored). Transcript
+formats are observed locally, not vendor-documented; parsing ignores unknown
+records. Message contents are never read into the report. Tests use synthetic
+transcripts only, including one that fails if usage is summed per record
+(Claude Code writes one record per content block; blocks of one API message share
+message.id and usage). Cost is shown only where the agent reports it (OpenCode);
+Claude Code cost is "not reported" because the repo has no price table and none
+is invented.
+
+Validated on 8 real OpenCode sessions, 2026-10-09 (numbers only, no content):
+message-level token sums equal step-finish sums exactly in all 8, so using one
+source is right and using both would double count.
+
+Defect found: `parseAgentOutput` in evals/run.mjs set opencode `tokens` to the
+last step-finish event, overwriting at each event. On the 8 sampled sessions the
+last step was 0.1% to 8% of the run total, and on one re-measured eval run the
+agent-reported figure was 23,113 against a transcript total of 322,622 (7%). So
+the "+22% / +14% / +11% / +6% / +1% / -9%" token comparison recorded in the
+2026-10-09 smoke-test entry above and in
+evals/results/2026-10-08T18-46-00-opencode.md compared final-step context size,
+not total tokens, and must not be cited. Pass rates and the observation that one
+cell flipped between two runs of the same arm are unaffected. Consequence: the
+claim "the helix arm used more tokens" is UNVERIFIED, not disproved; Phase D
+re-measures it properly.
+
+Fix: evals/run.mjs now reads tokens from the agent's transcript with the same
+parsers (`transcriptTokens`), keeps the agent-reported value as
+`agentReportedTokens` for audit only, and the report table adds avg uncached
+(excludes cache reads, which dominate long sessions), sd, per-run raw values and
+pass rate per 1k uncached tokens. Codex has no verified transcript parser, so its
+tokens are n/a rather than guessed. Checked end to end with one free-tier opencode
+cell (bug-fix, none arm, pass): transcript total 322,622, uncached 27,724.
+Rejected: summing step-finish events (equals the message sum, but a second source
+invites double counting); using agent-reported totals for Claude Code (excludes
+cache tokens).
