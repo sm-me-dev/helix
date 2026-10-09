@@ -494,3 +494,31 @@ No new dependencies. No disproved-as-false suspects beyond #5's narrowed scope.
 - Rejected: marking unverified platforms "unsupported" (also a claim we cannot
   back); emitting Codex subagent files from the cross-tool `.agents/` layouts
   seen in third-party repos (not vendor docs).
+
+## 2026-10-09 — Phase 1.6/1.7 token measurement honesty and cache layout
+
+- MCP cost is now reported per platform (`helix measure`, `mcp-cost.ts`): the
+  static schema total is measured (tools/list captures, o200k_base approximation);
+  whether a client loads it on every request is a platform fact. Verified
+  2026-10-09 against https://code.claude.com/docs/en/agent-sdk/tool-search.md:
+  Claude Code defers MCP tool definitions by default (ENABLE_TOOL_SEARCH unset =
+  on, `auto` defers only above 10% of the window, `false` loads everything), costs
+  one search round-trip the first time a tool is discovered, and Haiku models do
+  not support it. Every other platform is labeled "unverified: assume loaded".
+  Consequence: the "always-on" MCP number in the UI/report is the worst case
+  (full schemas); on Claude Code with deferral the prefix cost is lower but a
+  retrieval turn is added. A third-party measurement (dev.to, one install,
+  88 tools: 20.8k deferred vs 61.0k loaded first-request input tokens) is
+  consistent with this but is NOT used as a number anywhere.
+- Per-task totals are NOT measured by `measure`; the report says so and points to
+  `helix report` (Phase 2). Static reductions can raise real totals (skill loads,
+  graph queries and tool searches add turns), so no per-task saving is claimed
+  by any phase 1 change.
+- Cache layout (cache-layout.test.ts): generated output is byte-identical across
+  runs (checked across a 1.1s gap) with a stable file order; always-on files
+  (AGENTS.md, pointers, agent and skill frontmatter files, Copilot/Cursor rules)
+  contain no timestamps, absolute paths or UUIDs. Caching lowers cost, not token
+  counts, and is reported nowhere as a token reduction. Known imperfection: the
+  detected "Repo facts" sit mid-file in AGENTS.md, so editing a test command
+  invalidates the cache from that line on; moving them last would reorder the
+  file for little gain and was not done.
