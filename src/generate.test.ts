@@ -237,3 +237,17 @@ describe("packAsText", () => {
     assert.ok(text.includes("===== README.md ====="));
   });
 });
+
+describe("skills earn their index entry", () => {
+  it("no skill is role-exclusive (those belong in the role body, not an extra load turn)", async () => {
+    const { SKILLS } = await import("./skills.ts");
+    const { CREW } = await import("./crew.ts");
+    for (const s of SKILLS) {
+      const users = CREW.filter((c) => c.skills.includes(s.id));
+      assert.ok(
+        users.length !== 1,
+        `skill ${s.id} is used by exactly one role (${users[0]?.id}); fold it into that role's job`,
+      );
+    }
+  });
+});

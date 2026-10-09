@@ -42,9 +42,7 @@ Skip when: ${c.skipWhen}
 Input: ${c.input}
 Output: ${c.output}
 
-Skills to load if present: ${skills}
-
-Rules:
+${skills ? `Skills to load if present: ${skills}\n\n` : ""}Rules:
 - Isolated window. Return a summary, not a transcript.
 - Do not do another role's job.
 - If the contract is wrong, stop and return to the main session.
