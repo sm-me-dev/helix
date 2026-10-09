@@ -1,151 +1,141 @@
-# Graph Report - helix (2026-10-07)
+# Graph Report - helix (2026-10-09)
 
 ## Corpus Check
 
-- cluster-only mode — file stats not available
+- 179 files · ~127,157 words
+- Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
 
-- 1029 nodes · 2004 edges · 70 communities (39 shown, 28 thin omitted)
-- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 30 edges (avg confidence: 0.85)
-- Token cost: 9,433 input · 2,934 output
+- 1137 nodes · 2304 edges · 65 communities (45 shown, 15 thin omitted)
+- Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 27 edges (avg confidence: 0.85)
+- Token cost: 0 input · 0 output
 
 ## Graph Freshness
 
-- Built from commit: `0deebd5f`
+- Built from commit: `e27e5e66`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 
 - Open Graph Meta & Brand Validation
-- React Router & Connector Setup
-- Core Dependencies & Utility Libraries
-- LSP & Crew Role Management
-- Project Metadata & Build Config
+- client.server.ts
+- dependencies
+- simulation.ts
+- package.json
 - Playwright Test Automation Framework
 - Sign-Out & Timeout Handling
-- PostgreSQL & Vite Build Tools
-- React Router Helix Integration
+- db.ts
+- export.tsx
 - Preview Process & Process Management
-- Route & Error Handling System
-- 2D Sprite Sheet Generator
+- routeTree.gen.ts
+- src/index.ts
 - JWT & Gate Identity Auth
-- Video Frame Processing Pipeline
-- Token & Chart Visualization
-- Preview Embedder & Auth Provider
-- Platform-Specific File Generation
-- Sprite Sheet Extraction & Layout
+- run.mjs
+- stack.tsx
+- preview-host-bridge.ts
+- tokens.ts
+- lib/store.ts
 - Node.js Utility & CLI Tools
-- PGlite Database Driver
-- TypeScript Configuration
-- Dev & Linting Dependencies
+- LazyPGliteDriver
+- compilerOptions
+- devDependencies
 - Preview & Auth Configuration
-- Layered Image Composition
+- measure-mcp.mjs
 - Build & Dev Scripts
 - Gate Identity Session Management
-- Game & Skill Documentation
-- Knowledge Graph Core
-- Game UI & Playbook Components
+- run.tsx
+- playbook.tsx
 - Auth Verification & Session Handling
 - Atomic File Operations
 - PowerShell Scripting
 - ESLint Configuration
-- Sprite Sheet Layout Guide
+- adapters/index.ts
 - Auth Popup & Session Handling
-- Sprite & Image Generation Skills
+- mcps.ts
 - Database Schema for Accounts
 - PWA Open Graph Head Management
-- Video Processing Pipeline
-- Game Animation & Asset Skills
+- shell.tsx
+- Helix decision log
 - File Linting & Staging
 - Helix Project Setup
-- Game Controls & Kart Genre
+- parts.ts
 - Commit Hook Scripts
 - Custom Override Files
 - Virtual Open Graph Identity
 - Startup & Deployment Scripts
 - Vercel Configuration
-- Grid Puzzle Game
-- Endless Runner Genre
-- First-Person Shooter Genre
-- 2D Platformer Genre
-- Tower Defense Genre
-- Voxel Game Genre
-- UI & Design Skills
-- Multiplayer Networking
-- PostgreSQL Optimization
-- Three.js Node References
-- Three.js Post-Processing
-- Three.js Shader Modules
-- Three.js Game Integration
-- App Icon Design
-- iPad Onboarding Flow
-- iPhone Onboarding Flow
+- generate.ts
+- index.tsx
+- Helix contributor rules
+- fixture/package.json
+- Helix evals — do we actually help?
+- repo-hygiene.test.mjs
+- QUOTA.md
+- fixture/README.md
+- 2026-10-08T18-46-00-opencode.md
+- 2026-10-08T19-21-14-opencode.md
+- bin
 - OG Image Generation
 - Open Graph Identity System
-- Top-Down Shooter Genre
 
 ## God Nodes (most connected - your core abstractions)
 
 1. `cn()` - 32 edges
-2. `useHarness` - 20 edges
-3. `injectGrokPwaHead()` - 17 edges
-4. `compilerOptions` - 16 edges
-5. `breakdown()` - 15 edges
-6. `formatTokens()` - 14 edges
-7. `scripts` - 14 edges
-8. `@tanstack/react-router` - 14 edges
-9. `selectConfig()` - 13 edges
-10. `filesForPlatform()` - 13 edges
+2. `breakdown()` - 25 edges
+3. `useHarness` - 21 edges
+4. `injectGrokPwaHead()` - 17 edges
+5. `compilerOptions` - 17 edges
+6. `generatePack()` - 16 edges
+7. `formatTokens()` - 16 edges
+8. `HarnessConfig` - 16 edges
+9. `@tanstack/react-router` - 15 edges
+10. `scripts` - 14 edges
 
 ## Surprising Connections (you probably didn't know these)
 
 - `hasGlobbedMigrations()` --indirect_call--> `isMigrationFile()` [INFERRED]
   vite.config.ts → scripts/migration-plan.mjs
-- `Get-NodeMajor()` --calls--> `node` [INFERRED]
-  scripts/install.ps1 → package.json
-- `Helix Project Configuration` --conceptually_related_to--> `Helix Installation Guide` [INFERRED]
-  .serena/project.yml → docs/INSTALL.md
-- `grokPwaMiddleware()` --calls--> `acceptsHtml()` [EXTRACTED]
-  server/middleware/grok-pwa.ts → scripts/grok-pwa-shared.mjs
-- `injectHeadStreaming()` --calls--> `createHeadInjector()` [EXTRACTED]
-  server/middleware/grok-pwa.ts → scripts/grok-pwa-shared.mjs
+- `measureReport()` --calls--> `breakdown()` [EXTRACTED]
+  cli/lib.ts → src/lib/harness/tokens.ts
+- `measureReport()` --calls--> `formatTokens()` [EXTRACTED]
+  cli/lib.ts → src/lib/harness/tokens.ts
+- `mcpSummary()` --calls--> `mcpSchemaTokens()` [EXTRACTED]
+  cli/lib.ts → src/lib/harness/mcps.ts
+- `helixFilesFor()` --calls--> `generatePack()` [EXTRACTED]
+  evals/run.mjs → src/lib/harness/generate.ts
 
 ## Import Cycles
 
 - None detected.
 
-## Hyperedges (group relationships)
-
-- **Game Asset Pipeline** — grok_skills_game_asset_core_skill, grok_skills_game_animation_frames_skill [EXTRACTED 1.00]
-
-## Communities (70 total, 28 thin omitted)
+## Communities (65 total, 15 thin omitted)
 
 ### Community 0 - "Open Graph Meta & Brand Validation"
 
 Cohesion: 0.06
 Nodes (72): brandWarningsOnDisk(), computeBrandWarnings(), MAX_CARD_BYTES, OG_PENDING_MAX_AGE_MS, OG_PENDING_REL_PATH, ogPendingActive(), parseBrandCheckArgs(), siteDeclaresOgTypeGame() (+64 more)
 
-### Community 1 - "React Router & Connector Setup"
+### Community 1 - "client.server.ts"
 
 Cohesion: 0.06
-Nodes (62): @tanstack/react-start, WindowStub, callTool(), CONNECTORS_HOST_PROD, CONNECTORS_HOST_STAGING, connectorsBaseFor(), crossSiteBlockedResult(), failureMemo (+54 more)
+Nodes (61): @tanstack/react-start, WindowStub, callTool(), CONNECTORS_HOST_PROD, CONNECTORS_HOST_STAGING, connectorsBaseFor(), crossSiteBlockedResult(), failureMemo (+53 more)
 
-### Community 2 - "Core Dependencies & Utility Libraries"
+### Community 2 - "dependencies"
 
 Cohesion: 0.03
-Nodes (58): dependencies, better-auth, class-variance-authority, clsx, cmdk, date-fns, @electric-sql/pglite, @hookform/resolvers (+50 more)
+Nodes (58): dependencies, better-auth, class-variance-authority, clsx, cmdk, date-fns, @electric-sql/pglite, gpt-tokenizer (+50 more)
 
-### Community 3 - "LSP & Crew Role Management"
+### Community 3 - "simulation.ts"
 
-Cohesion: 0.08
-Nodes (46): CREW, CREW_BY_ID, CrewRole, DEFAULT_CREW, DEFAULT_LSPS, Lsp, LSP_BY_ID, LSPS (+38 more)
+Cohesion: 0.13
+Nodes (19): ADAPTER_BY_ID, AdapterSource, DEFAULT_MCPS, DEFAULT_PLATFORMS, Platform, PLATFORM_BY_ID, AdaptedSim, adaptSimEvents() (+11 more)
 
-### Community 4 - "Project Metadata & Build Config"
+### Community 4 - "package.json"
 
 Cohesion: 0.04
-Nodes (55): name, private, sideEffects, type, clsx, cmdk, date-fns, eslint (+47 more)
+Nodes (54): name, private, sideEffects, type, clsx, cmdk, date-fns, eslint (+46 more)
 
 ### Community 5 - "Playwright Test Automation Framework"
 
@@ -157,90 +147,90 @@ Nodes (45): playwright, checkedOutputPath(), checkedUrl(), fail(), LOOPBACK_HOST
 Cohesion: 0.07
 Nodes (41): DEPLOYED_SIGN_OUT_TIMEOUT_MS, PREVIEW_SIGN_OUT_TIMEOUT_MS, runPreSignInSignOut(), runSignOut(), settleWithin(), signOutTimeoutMs(), deployed(), hangs() (+33 more)
 
-### Community 7 - "PostgreSQL & Vite Build Tools"
+### Community 7 - "db.ts"
 
-Cohesion: 0.09
-Nodes (26): pg, @tailwindcss/vite, vite, @vitejs/plugin-react, APP_ENV_ROUTE, appEnvPlugin(), grokPwaPlugin(), main() (+18 more)
+Cohesion: 0.08
+Nodes (27): @electric-sql/pglite, pg, @tailwindcss/vite, vite, @vitejs/plugin-react, APP_ENV_ROUTE, appEnvPlugin(), grokPwaPlugin() (+19 more)
 
-### Community 8 - "React Router Helix Integration"
+### Community 8 - "export.tsx"
 
-Cohesion: 0.17
-Nodes (21): class-variance-authority, lucide-react, react, @tanstack/react-router, CrewHelix(), HelixMark(), NAV, Shell() (+13 more)
+Cohesion: 0.25
+Nodes (11): HelixMark(), Term(), AlertDialog(), AlertDialogActions(), AlertDialogContent(), AlertDialogDescription(), AlertDialogTitle(), AlertDialogTrigger() (+3 more)
 
 ### Community 9 - "Preview Process & Process Management"
 
 Cohesion: 0.14
 Nodes (25): cmdlineOf(), isAlive(), killPid(), LOG_FILE, looksLikePreviewProcess(), parseListenerInodes(), parsePgid(), parsePid() (+17 more)
 
-### Community 10 - "Route & Error Handling System"
+### Community 10 - "routeTree.gen.ts"
 
-Cohesion: 0.10
-Nodes (26): AppErrorComponent(), errorMessage(), getRouter(), Route, Route, Route, Route, Route (+18 more)
+Cohesion: 0.12
+Nodes (21): Route, Route, Route, Route, Route, Route, CrewRoute, EvalsRoute (+13 more)
 
-### Community 11 - "2D Sprite Sheet Generator"
+### Community 11 - "src/index.ts"
 
-Cohesion: 0.15
-Nodes (25): bbox_touches_edge(), build_evolution_descs(), build_parser(), build_prompt(), center_single_sprite(), clean_edges(), cmd_build_prompt(), cmd_list_options() (+17 more)
+Cohesion: 0.12
+Nodes (20): authenticate(), LIMITS, Plan, planForApiKey(), planLimit(), anonymousContext(), RequestContext, gateway() (+12 more)
 
 ### Community 12 - "JWT & Gate Identity Auth"
 
 Cohesion: 0.12
 Nodes (20): jose, GATE_JWKS_PATH, GateEndpoints, GateIdentity, gateIdentityFromHeaders(), GateJwks, gateKeyResolver(), GateLinkedAccount (+12 more)
 
-### Community 13 - "Video Frame Processing Pipeline"
+### Community 13 - "run.mjs"
 
-Cohesion: 0.19
-Nodes (26): build_exports(), build_parser(), chroma_key_rgba(), clean_frames(), cmd_clean(), cmd_extract(), cmd_process(), cmd_sample() (+18 more)
+Cohesion: 0.11
+Nodes (28): AGENTS, askedProperly(), BEL, CSI_RE, DEFAULT_RESULTS, ESC, FIXTURE, freshCopy() (+20 more)
 
-### Community 14 - "Token & Chart Visualization"
+### Community 14 - "stack.tsx"
 
-Cohesion: 0.15
-Nodes (16): recharts, Term(), TokenChart(), TokenPoint, LeanBadge(), TokenMeter(), breakdown(), formatTokens() (+8 more)
+Cohesion: 0.20
+Nodes (16): LeanBadge(), TokenMeter(), packAsText(), mcpSchemaTokens(), breakdown(), formatTokens(), frontmatter(), skillTokens() (+8 more)
 
-### Community 15 - "Preview Embedder & Auth Provider"
+### Community 15 - "preview-host-bridge.ts"
 
-Cohesion: 0.14
-Nodes (19): zod, PreviewHostBridge(), AuthProvider(), isGrokEmbedderOrigin(), isRemintPreviewPair(), isSandboxPreviewGuestHost(), resolveParentEmbedderOrigin(), collectRoutePathsFromTree() (+11 more)
+Cohesion: 0.13
+Nodes (20): zod, PreviewHostBridge(), CONNECTOR_TOKEN_READY_EVENT, AuthProvider(), isGrokEmbedderOrigin(), isRemintPreviewPair(), isSandboxPreviewGuestHost(), resolveParentEmbedderOrigin() (+12 more)
 
-### Community 16 - "Platform-Specific File Generation"
+### Community 16 - "tokens.ts"
 
-Cohesion: 0.18
-Nodes (22): agentFile(), agentsMd(), clinerules(), conventionsMd(), copilotInstructions(), cursorMcp(), cursorRule(), filesForPlatform() (+14 more)
+Cohesion: 0.09
+Nodes (41): cmdDoctor(), cmdExport(), cmdInit(), cmdMeasure(), confirm(), detectDir(), main(), parseArgs() (+33 more)
 
-### Community 17 - "Sprite Sheet Extraction & Layout"
+### Community 17 - "lib/store.ts"
 
-Cohesion: 0.22
-Nodes (19): alpha_bbox(), bbox_touches_edge(), build_parser(), clean_edges(), color_distance(), connected_components(), extract_cell(), iter_cells() (+11 more)
+Cohesion: 0.13
+Nodes (19): CREW_BY_ID, CrewRole, DEFAULT_CREW, BASE, CrewId, McpId, PackFile, RepoFacts (+11 more)
 
 ### Community 18 - "Node.js Utility & CLI Tools"
 
 Cohesion: 0.23
 Nodes (16): confirm(), die(), install_node(), is_wsl(), log_error(), log_info(), log_ok(), log_warn() (+8 more)
 
-### Community 19 - "PGlite Database Driver"
+### Community 19 - "LazyPGliteDriver"
 
-Cohesion: 0.14
-Nodes (6): @electric-sql/pglite, kysely, Client, LazyPGliteDriver, PGliteConnection, pgliteDialect()
+Cohesion: 0.15
+Nodes (5): kysely, Client, LazyPGliteDriver, PGliteConnection, pgliteDialect()
 
-### Community 20 - "TypeScript Configuration"
+### Community 20 - "compilerOptions"
 
 Cohesion: 0.11
-Nodes (17): compilerOptions, allowImportingTsExtensions, allowJs, baseUrl, checkJs, isolatedModules, jsx, lib (+9 more)
+Nodes (18): compilerOptions, allowImportingTsExtensions, allowJs, baseUrl, checkJs, isolatedModules, jsx, lib (+10 more)
 
-### Community 21 - "Dev & Linting Dependencies"
+### Community 21 - "devDependencies"
 
-Cohesion: 0.12
-Nodes (17): devDependencies, eslint, eslint-config-prettier, @eslint/js, eslint-plugin-prettier, eslint-plugin-react-hooks, eslint-plugin-react-refresh, globals (+9 more)
+Cohesion: 0.11
+Nodes (18): devDependencies, eslint, eslint-config-prettier, @eslint/js, eslint-plugin-prettier, eslint-plugin-react-hooks, eslint-plugin-react-refresh, globals (+10 more)
 
 ### Community 22 - "Preview & Auth Configuration"
 
 Cohesion: 0.15
 Nodes (11): emailAndPasswordEnabled, GROK_ISSUER_DEFAULT, PREVIEW_ALLOWED_HOSTS, PREVIEW_CLIENT_ID, PREVIEW_CLIENT_SECRET, databaseUrl, explicitBaseURL, globalAuthRef (+3 more)
 
-### Community 23 - "Layered Image Composition"
+### Community 23 - "measure-mcp.mjs"
 
-Cohesion: 0.26
-Nodes (13): Any, build_parser(), load_props(), main(), paste_prop(), placement_xy(), ArgumentParser, Image (+5 more)
+Cohesion: 0.10
+Nodes (16): gpt-tokenizer, args, doc, dryRun, dumpArg, measureStdio(), onlyArg, OUT (+8 more)
 
 ### Community 24 - "Build & Dev Scripts"
 
@@ -252,15 +242,15 @@ Nodes (14): scripts, build, build:dev, check:auth, db:migrate, dev, format, lint
 Cohesion: 0.23
 Nodes (12): better-auth, GATE_IDENTITY_HEADER, gateIdentityUserInfo(), sessionBoundToGateIdentity(), clearGateMarkerIfPresent(), emitSessionCookie(), expireSessionDataCookie(), GATE_PROVIDER_ID (+4 more)
 
-### Community 27 - "Knowledge Graph Core"
+### Community 27 - "run.tsx"
+
+Cohesion: 0.12
+Nodes (21): class-variance-authority, react, recharts, KIND_FILL, KnowledgeGraph(), choose(), onNodeKey(), TokenChart() (+13 more)
+
+### Community 28 - "playbook.tsx"
 
 Cohesion: 0.29
-Nodes (9): KIND_FILL, KnowledgeGraph(), choose(), onNodeKey(), GRAPH_EDGES, GRAPH_NODES, HOT_PATH, NODE_EXPLAIN (+1 more)
-
-### Community 28 - "Game UI & Playbook Components"
-
-Cohesion: 0.24
-Nodes (6): Switch(), MCPS, Practice, PRACTICES, PlaybookPage(), TABS
+Nodes (5): Practice, PracticeConfidence, PRACTICES, PlaybookPage(), Route
 
 ### Community 29 - "Auth Verification & Session Handling"
 
@@ -282,62 +272,92 @@ Nodes (5): engines, node, Get-NodeMajor(), Invoke-Step(), Write-Info()
 Cohesion: 0.29
 Nodes (6): eslint-config-prettier, @eslint/js, eslint-plugin-react-hooks, eslint-plugin-react-refresh, globals, typescript-eslint
 
-### Community 33 - "Sprite Sheet Layout Guide"
+### Community 33 - "adapters/index.ts"
 
-Cohesion: 0.38
-Nodes (6): draw_dashed_line(), main(), parse_args(), Namespace, Create a layout-only guide image for sprite sheet generation., ImageDraw
+Cohesion: 0.18
+Nodes (16): copilotAdapter, ADAPTERS, aiderAdapter, ampAdapter, antigravityAdapter, clineAdapter, devinAdapter, factoryAdapter (+8 more)
 
 ### Community 34 - "Auth Popup & Session Handling"
 
 Cohesion: 0.48
 Nodes (6): completionHtml(), completionResponse(), handleAuthPopupRequest(), PopupMessage, readCookie(), SESSION_TOKEN_COOKIE
 
-### Community 35 - "Sprite & Image Generation Skills"
+### Community 35 - "mcps.ts"
 
-Cohesion: 0.33
-Nodes (6): Sprite Modes Reference, Sprite Prompt Rules, Generate2dsprite Skill, OG Brand Assets Skill, imagine_image_to_image, imagine_text_to_image
+Cohesion: 0.13
+Nodes (16): cursorAdapter, CREW, Mcp, mcpMeasurementFresh(), McpRemote, MCPS, McpServerConfig, McpStdio (+8 more)
 
 ### Community 36 - "Database Schema for Accounts"
 
 Cohesion: 0.60
 Nodes (4): "account", "session", "user", "verification"
 
-### Community 38 - "Video Processing Pipeline"
+### Community 38 - "shell.tsx"
 
-Cohesion: 0.50
-Nodes (4): Video2dsprite Pipeline, Video2dsprite Prompt Rules, Video2dsprite Skill, xAI API Skill
+Cohesion: 0.15
+Nodes (14): lucide-react, sonner, @tanstack/react-router, NAV, Shell(), AppErrorComponent(), errorMessage(), getRouter() (+6 more)
 
-### Community 39 - "Game Animation & Asset Skills"
+### Community 39 - "Helix decision log"
 
-Cohesion: 0.67
-Nodes (3): Game Animation Frames Skill, Game Asset Core Skill, Generate 2D Map Skill
+Cohesion: 0.14
+Nodes (13): 2026-10-07 — 1.1 real hooks (verified protocol above), 2026-10-07 — 1.2/1.3/1.4 orchestrator, routing, skills + 1.7 lean file, 2026-10-07 — 1.5/1.6 MCP correctness + adapters (verified 2026-10-07), 2026-10-07 — 1.8 repo identity, 2026-10-07 — 1.9 failing-test verdict, 2026-10-07 — Eval agent probes (no viable agent in this environment), 2026-10-07 — Phase 0 baseline (no code changes yet), 2026-10-07 — Phase 2 honest measurement (+5 more)
 
 ### Community 40 - "File Linting & Staging"
 
 Cohesion: 0.67
 Nodes (3): lint-staged, *.{js,jsx,ts,tsx}, *.{json,md,yml,yaml}
 
+### Community 42 - "parts.ts"
+
+Cohesion: 0.29
+Nodes (12): claudeAdapter, hookFiles(), clinerules(), conventionsMd(), copilotInstructions(), cursorRule(), formatHintHook(), hooksJson() (+4 more)
+
+### Community 49 - "generate.ts"
+
+Cohesion: 0.27
+Nodes (8): codexAdapter, agentFile(), skillFile(), agentsMd(), codexToml(), MCP_BY_ID, Skill, SKILL_BY_ID
+
+### Community 51 - "index.tsx"
+
+Cohesion: 0.27
+Nodes (4): CrewHelix(), PLATFORMS, agentTokens(), CrewPage()
+
+### Community 52 - "Helix contributor rules"
+
+Cohesion: 0.29
+Nodes (6): Gates (run on Node 22 to match CI; Node 24 also accepted), Graphify first, Helix contributor rules, Ignore list, Verification rule (non-negotiable), Where things live
+
+### Community 53 - "fixture/package.json"
+
+Cohesion: 0.33
+Nodes (5): name, private, scripts, test, type
+
+### Community 54 - "Helix evals — do we actually help?"
+
+Cohesion: 0.33
+Nodes (5): Adding a task, Cost warning, Helix evals — do we actually help?, Reading a report, The six tasks
+
 ## Knowledge Gaps
 
-- **313 isolated node(s):** `GrokPwaEvent`, `WindowStub`, `GateJson`, `MessageRule`, `ConnectorReadiness` (+308 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 403 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **28 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **366 isolated node(s):** `DetectedStack`, `DoctorFailure`, `name`, `private`, `type` (+361 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 457 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **15 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `react` connect `React Router Helix Integration` to `React Router & Connector Setup`, `Project Metadata & Build Config`, `Sign-Out & Timeout Handling`, `Token & Chart Visualization`, `Preview Embedder & Auth Provider`, `Knowledge Graph Core`, `Game UI & Playbook Components`?**
-  _High betweenness centrality (0.119) - this node is a cross-community bridge._
-- **Why does `playwright` connect `Playwright Test Automation Framework` to `Project Metadata & Build Config`?**
-  _High betweenness centrality (0.117) - this node is a cross-community bridge._
-- **Why does `@tanstack/react-router` connect `React Router Helix Integration` to `Project Metadata & Build Config`, `Sign-Out & Timeout Handling`, `Route & Error Handling System`, `Token & Chart Visualization`, `Preview Embedder & Auth Provider`, `Game UI & Playbook Components`?**
-  _High betweenness centrality (0.081) - this node is a cross-community bridge._
-- **What connects `GrokPwaEvent`, `WindowStub`, `GateJson` to the rest of the system?**
-  _313 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Why does `playwright` connect `Playwright Test Automation Framework` to `package.json`?**
+  _High betweenness centrality (0.105) - this node is a cross-community bridge._
+- **Why does `react` connect `run.tsx` to `client.server.ts`, `package.json`, `shell.tsx`, `Sign-Out & Timeout Handling`, `export.tsx`, `stack.tsx`, `preview-host-bridge.ts`, `index.tsx`?**
+  _High betweenness centrality (0.104) - this node is a cross-community bridge._
+- **Why does `@tanstack/react-router` connect `shell.tsx` to `package.json`, `Sign-Out & Timeout Handling`, `export.tsx`, `stack.tsx`, `preview-host-bridge.ts`, `index.tsx`, `run.tsx`, `playbook.tsx`?**
+  _High betweenness centrality (0.098) - this node is a cross-community bridge._
+- **What connects `DetectedStack`, `DoctorFailure`, `name` to the rest of the system?**
+  _366 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Open Graph Meta & Brand Validation` be split into smaller, more focused modules?**
   _Cohesion score 0.058115025594700394 - nodes in this community are weakly interconnected._
-- **Should `React Router & Connector Setup` be split into smaller, more focused modules?**
-  _Cohesion score 0.05617283950617284 - nodes in this community are weakly interconnected._
-- **Should `Core Dependencies & Utility Libraries` be split into smaller, more focused modules?**
+- **Should `client.server.ts` be split into smaller, more focused modules?**
+  _Cohesion score 0.056962025316455694 - nodes in this community are weakly interconnected._
+- **Should `dependencies` be split into smaller, more focused modules?**
   _Cohesion score 0.034482758620689655 - nodes in this community are weakly interconnected._
