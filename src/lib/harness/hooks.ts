@@ -136,9 +136,12 @@ try {
 `;
 
 export const TEST_ON_STOP_HOOK = `#!/usr/bin/env node
-// Helix Stop: run the repo test command only if Edit/Write happened this session.
-// Pass (or no edits, or no test command) -> exit 0 silent.
-// Fail -> exit 2 with a short tail, the documented Stop channel to continue the turn.
+// Helix Stop: run the repo test command only if Edit/Write happened since the
+// last user prompt. Pass (or no fresh edits, or no test command) -> exit 0.
+// Fail -> exit 2 with a short tail, the documented Stop channel to continue.
+// Loop guard: stop_hook_active means we already continued once — stand down
+// (blocks at most once per turn; pre-existing failures can't loop forever).
+// Verified 2026-10-09 against https://code.claude.com/docs/en/hooks.
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -176,10 +179,17 @@ try {
   for await (const c of process.stdin) chunks.push(c);
   const input = JSON.parse(chunks.join("") || "{}");
   const cwd = input.cwd || process.cwd();
+  if (input.stop_hook_active) process.exit(0);
   let edited = false;
   try {
-    const lines = fs.readFileSync(input.transcript_path, "utf8").split("\\n").slice(-4000);
-    edited = lines.some((l) => /"name"\\s*:\\s*"(Edit|Write|MultiEdit|NotebookEdit)"/.test(l));
+    const lines = fs.readFileSync(input.transcript_path, "utf8").split("\\n");
+    let start = 0;
+    for (let i = 0; i < lines.length; i++) {
+      if (/"type"\\s*:\\s*"user"/.test(lines[i])) start = i + 1;
+    }
+    edited = lines
+      .slice(start)
+      .some((l) => /"name"\\s*:\\s*"(Edit|Write|MultiEdit|NotebookEdit)"/.test(l));
   } catch (e) {
     process.exit(0);
   }
