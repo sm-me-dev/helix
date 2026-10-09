@@ -25,7 +25,7 @@ import fs from "node:fs";
 import path from "node:path";
 ${LOG_HELPER}
 function hint() {
-  process.stderr.write("[helix] Wide filesystem search. Prefer graphify query / path / explain, then Read the cited range.\\n");
+  process.stderr.write("[helix] Wide filesystem search. Prefer mcp__graphify__query_graph / get_neighbors / shortest_path, then Read the cited range.\\n");
 }
 function wide(s) {
   return typeof s === "string" && (s.includes("**") || s === "./" || s === "." || s.endsWith("/*"));
