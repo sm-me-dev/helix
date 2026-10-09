@@ -41,6 +41,10 @@ describe("generatePack", () => {
       hooks: Record<string, unknown[]>;
     };
     assert.ok(parsed.permissions.deny.some((d) => d.includes(".env")));
+    assert.ok(
+      parsed.permissions.deny.some((d) => d.startsWith("Edit(")),
+      "NotebookEdit is not covered by Read denies — an Edit deny must exist (verified 2026-10-09, permissions docs)",
+    );
     assert.ok(Array.isArray(parsed.hooks.PostToolUse));
     assert.ok(Array.isArray(parsed.hooks.Stop));
     assert.ok(Array.isArray(parsed.hooks.PreToolUse));
