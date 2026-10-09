@@ -729,3 +729,35 @@ cache tokens).
   result; no savings are claimed.
 - Rejected: committing the generated 356 files (churn, and the hash makes
   drift visible); LLM-written filler (violates the no-fabricated-content rule).
+
+## 2026-10-09 — Phase C: Codex + Antigravity adapters emit real files
+
+- Codex (verified 2026-10-09): custom agents are `.codex/agents/<id>.toml`
+  with required `name`, `description`, `developer_instructions`
+  (https://learn.chatgpt.com/docs/agent-configuration/subagents); model
+  omitted so the agent inherits the parent's (vendor model slugs change too
+  often to pin); read-only roles get `sandbox_mode = "read-only"`. Hooks are
+  `.codex/hooks.json` with a Stop hook resolving from the git root
+  (https://learn.chatgpt.com/docs/hooks); project hooks run only after review
+  in /hooks. Only the Stop hook is emitted: Codex has no Read/Grep/Glob
+  tools and passes edits as apply_patch, so prefer-graph/format-lint have no
+  matcher to attach to. AGENTS.md discovery verified (https://learn.chatgpt.com/docs/agent-configuration/agents-md).
+- Antigravity (verified 2026-10-09): skills `.agents/skills/<skill>/SKILL.md`
+  (/docs/skills), MCP `.agents/mcp_config.json` with `serverUrl` for remote
+  (/docs/mcp — `url`/`httpUrl` unsupported), subagents
+  `.agents/agents/<id>.md` with required name+description, tools from the
+  documented set, `subagent: true`, `mainAgent: false`, model
+  inherit|flash|pro (/docs/subagents), rules AGENTS.md/GEMINI.md read natively
+  with no frontmatter (/docs/rules — so no GEMINI.md pointer is emitted).
+  Hooks verified (/docs/hooks: `.agents/hooks.json`, Stop returns
+  `{decision: continue}`) but NOT emitted: unlike Claude/Codex there is no
+  documented loop guard, so a failing Stop gate could loop.
+- Evidence: `src/lib/harness/codex-antigravity.test.ts` (13 tests: TOML
+  fields, sandboxing, Stop hook behavior in temp git repos, Antigravity
+  frontmatter/tools, shared `.agents/skills` dedupe); CLI smoke 2026-10-09
+  (`helix init --platform codex,antigravity` on a scratch repo: 19 files,
+  shared skills written once). `npm run lint`, `typecheck`, `npm test`
+  (146 + 252) green. README matrix regenerated from the catalog.
+- Rejected: pinning Codex vendor model slugs (they change; inherit instead);
+  emitting Antigravity hooks without a loop guard (could loop); emitting
+  GEMINI.md for Antigravity (AGENTS.md is read natively).

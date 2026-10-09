@@ -217,8 +217,56 @@ try {
 }
 `;
 
+export const CODEX_STOP_HOOK = `#!/usr/bin/env node
+// Helix Stop (Codex): run the portable gate when the working tree has changes outside the
+// pack's own directories. Exit 2 with the reason on stderr is the documented Stop
+// continuation channel; stop_hook_active means we already continued once, so a failing
+// gate blocks at most once per turn. Codex's transcript format is not a stable interface,
+// so unlike test-on-stop this reads git state instead. Fail open on any error.
+// Verified 2026-10-09 against https://learn.chatgpt.com/docs/hooks.
+import { execFile } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+${LOG_HELPER}
+function sh(cmd, args, cwd, timeout) {
+  return new Promise((resolve) => {
+    execFile(cmd, args, { cwd, timeout, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) =>
+      resolve({ err, stdout: String(stdout), stderr: String(stderr) }),
+    );
+  });
+}
+try {
+  const chunks = [];
+  for await (const c of process.stdin) chunks.push(c);
+  const input = JSON.parse(chunks.join("") || "{}");
+  if (input.stop_hook_active) process.exit(0);
+  const cwd = input.cwd || process.cwd();
+  const top = await sh("git", ["rev-parse", "--show-toplevel"], cwd, 10000);
+  if (top.err) process.exit(0);
+  const root = top.stdout.trim();
+  const gate = path.join(root, ".helix", "gate.mjs");
+  if (!fs.existsSync(gate)) process.exit(0);
+  const own = [".helix", ".codex", ".agents", "AGENTS.md"].map((p) => ":(top,exclude)" + p);
+  const st = await sh("git", ["status", "--porcelain", "--", ":/", ...own], root, 10000);
+  if (st.err || st.stdout.trim() === "") process.exit(0);
+  const g = await sh(process.execPath, [gate], root, 55000);
+  if (!g.err) process.exit(0);
+  if (g.err.killed || g.err.code === "ENOENT" || g.err.code === "ETIMEDOUT") {
+    log("codex-stop skipped (" + String(g.err.code || "timeout") + ")");
+    process.exit(0);
+  }
+  const tail = String(g.stdout + "\\n" + g.stderr).trim().split("\\n").slice(-30).join("\\n");
+  process.stderr.write("[helix] checks failed on uncommitted changes:\\n" + tail + "\\n");
+  process.exit(2);
+} catch (e) {
+  log("codex-stop error " + String((e && e.message) || e));
+  process.exit(0);
+}
+`;
+
 export const HOOK_SOURCES = {
   "prefer-graph": PREFER_GRAPH_HOOK,
   "format-lint": FORMAT_LINT_HOOK,
   "test-on-stop": TEST_ON_STOP_HOOK,
+  "codex-stop": CODEX_STOP_HOOK,
 } as const;

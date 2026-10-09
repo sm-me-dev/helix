@@ -47,23 +47,23 @@ primary page was checked, so those paths stay unverified.
 
 <!-- matrix:start -->
 
-| Platform           | verified   | instructions | mcp        | skills     | subagents              | hooks      | plugin     |
-| ------------------ | ---------- | ------------ | ---------- | ---------- | ---------------------- | ---------- | ---------- |
-| Claude Code        | 2026-10-07 | emitted      | emitted    | emitted    | emitted                | emitted    | unverified |
-| Cursor             | 2026-10-07 | emitted      | emitted    | unverified | unverified             | unverified | unverified |
-| Codex              | 2026-10-07 | emitted      | emitted    | emitted    | supported, not emitted | unverified | unverified |
-| Gemini CLI         | no         | unverified   | unverified | unverified | unverified             | unverified | unverified |
-| GitHub Copilot     | 2026-10-07 | emitted      | emitted    | unverified | unverified             | unverified | unverified |
-| Windsurf           | no         | unverified   | unverified | unverified | unverified             | unverified | unverified |
-| Cline              | no         | unverified   | unverified | unverified | unverified             | unverified | unverified |
-| Aider              | no         | unverified   | unverified | unverified | unverified             | unverified | unverified |
-| OpenCode           | no         | unverified   | unverified | unverified | unverified             | unverified | unverified |
-| Google Antigravity | no         | unverified   | unverified | unverified | unverified             | unverified | unverified |
-| Devin CLI          | no         | unverified   | unverified | unverified | unverified             | unverified | unverified |
-| Factory Droid      | no         | unverified   | unverified | unverified | unverified             | unverified | unverified |
-| Kiro               | no         | unverified   | unverified | unverified | unverified             | unverified | unverified |
-| Amp                | no         | unverified   | unverified | unverified | unverified             | unverified | unverified |
-| Kilo Code          | no         | unverified   | unverified | unverified | unverified             | unverified | unverified |
+| Platform           | verified   | instructions | mcp        | skills     | subagents  | hooks                  | plugin     |
+| ------------------ | ---------- | ------------ | ---------- | ---------- | ---------- | ---------------------- | ---------- |
+| Claude Code        | 2026-10-07 | emitted      | emitted    | emitted    | emitted    | emitted                | unverified |
+| Cursor             | 2026-10-07 | emitted      | emitted    | unverified | unverified | unverified             | unverified |
+| Codex              | 2026-10-09 | emitted      | emitted    | emitted    | emitted    | emitted                | unverified |
+| Gemini CLI         | no         | unverified   | unverified | unverified | unverified | unverified             | unverified |
+| GitHub Copilot     | 2026-10-07 | emitted      | emitted    | unverified | unverified | unverified             | unverified |
+| Windsurf           | no         | unverified   | unverified | unverified | unverified | unverified             | unverified |
+| Cline              | no         | unverified   | unverified | unverified | unverified | unverified             | unverified |
+| Aider              | no         | unverified   | unverified | unverified | unverified | unverified             | unverified |
+| OpenCode           | no         | unverified   | unverified | unverified | unverified | unverified             | unverified |
+| Google Antigravity | 2026-10-09 | emitted      | emitted    | emitted    | emitted    | supported, not emitted | unverified |
+| Devin CLI          | no         | unverified   | unverified | unverified | unverified | unverified             | unverified |
+| Factory Droid      | no         | unverified   | unverified | unverified | unverified | unverified             | unverified |
+| Kiro               | no         | unverified   | unverified | unverified | unverified | unverified             | unverified |
+| Amp                | no         | unverified   | unverified | unverified | unverified | unverified             | unverified |
+| Kilo Code          | no         | unverified   | unverified | unverified | unverified | unverified             | unverified |
 
 <!-- matrix:end -->
 

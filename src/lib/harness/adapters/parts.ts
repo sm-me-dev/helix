@@ -24,17 +24,11 @@ ${s.body}
 `;
 }
 
-export function agentFile(id: HarnessConfig["crew"][number]): string {
+/** The role prompt, without any platform frontmatter. Shared by every platform's agent file. */
+export function agentBody(id: HarnessConfig["crew"][number]): string {
   const c = CREW_BY_ID[id];
   const skills = c.skills.join(", ");
-  return `---
-name: ${c.id}
-description: ${c.oneLiner}
-tools: ${c.tools.join(", ")}
-model: ${c.model}
----
-
-You are the Helix **${c.name}**. ${c.job}
+  return `You are the Helix **${c.name}**. ${c.job}
 
 When: ${c.when}
 Skip when: ${c.skipWhen}
@@ -47,6 +41,18 @@ ${skills ? `Skills to load if present: ${skills}\n\n` : ""}Rules:
 - Do not do another role's job.
 - If the contract is wrong, stop and return to the main session.
 `;
+}
+
+export function agentFile(id: HarnessConfig["crew"][number]): string {
+  const c = CREW_BY_ID[id];
+  return `---
+name: ${c.id}
+description: ${c.oneLiner}
+tools: ${c.tools.join(", ")}
+model: ${c.model}
+---
+
+${agentBody(id)}`;
 }
 
 export function hooksJson(config: HarnessConfig): string {

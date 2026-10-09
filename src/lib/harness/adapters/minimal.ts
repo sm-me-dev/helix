@@ -63,15 +63,7 @@ export const geminiAdapter = pointerAdapter(
   "gemini",
   "GEMINI.md",
   "markdown",
-  () => pointer("Gemini / Antigravity"),
-  "GEMINI.md points at AGENTS.md.",
-);
-
-export const antigravityAdapter = pointerAdapter(
-  "antigravity",
-  "GEMINI.md",
-  "markdown",
-  () => pointer("Gemini / Antigravity"),
+  () => pointer("Gemini"),
   "GEMINI.md points at AGENTS.md.",
 );
 
