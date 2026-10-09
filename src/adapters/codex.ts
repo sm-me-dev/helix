@@ -17,6 +17,14 @@ export const codexAdapter: PlatformAdapter = {
   ],
   supportsSubagents: true,
   supportsSkills: true,
+  capabilities: {
+    instructions: "emitted",
+    mcp: "emitted",
+    skills: "emitted",
+    subagents: "supported",
+    hooks: "unverified",
+    plugin: "unverified",
+  },
   notes:
     "Repo skills live in .agents/skills (not skills/). MCP goes in .codex/config.toml under " +
     "[mcp_servers.*] (project scope is trusted-projects only) — never .mcp.json. " +

@@ -31,6 +31,14 @@ export const claudeAdapter: PlatformAdapter = {
   ],
   supportsSubagents: true,
   supportsSkills: true,
+  capabilities: {
+    instructions: "emitted",
+    mcp: "emitted",
+    skills: "emitted",
+    subagents: "emitted",
+    hooks: "emitted",
+    plugin: "unverified",
+  },
   notes:
     "Subagents in .claude/agents with tools allow-list and model tier in frontmatter. " +
     "Skills as .claude/skills/*/SKILL.md. Hooks in .claude/settings.json. Project MCP in " +

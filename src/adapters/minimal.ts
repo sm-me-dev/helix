@@ -22,6 +22,14 @@ function pointerAdapter(
     sources: [],
     supportsSubagents: false,
     supportsSkills: false,
+    capabilities: {
+      instructions: "unverified",
+      mcp: "unverified",
+      skills: "unverified",
+      subagents: "unverified",
+      hooks: "unverified",
+      plugin: "unverified",
+    },
     notes: `${extraNotes} ${UNVERIFIED_NOTE}`,
     files(_config: HarnessConfig): PackFile[] {
       return [{ path, language, body: body() }];
@@ -36,6 +44,14 @@ function instructionsOnly(id: PlatformId, extraNotes: string): PlatformAdapter {
     sources: [],
     supportsSubagents: false,
     supportsSkills: false,
+    capabilities: {
+      instructions: "unverified",
+      mcp: "unverified",
+      skills: "unverified",
+      subagents: "unverified",
+      hooks: "unverified",
+      plugin: "unverified",
+    },
     notes: `${extraNotes} Root AGENTS.md is the instructions file. ${UNVERIFIED_NOTE}`,
     files(_config: HarnessConfig): PackFile[] {
       return [];

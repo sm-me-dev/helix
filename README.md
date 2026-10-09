@@ -1,8 +1,10 @@
 # Helix — a coding harness that earns its tokens
 
-Helix is a drop-in harness for AI coding agents (Claude Code, Cursor, Codex,
-Gemini, Copilot, and the rest of the AGENTS.md family): tier-routed roles,
-Graphify-first context, skills that load on demand, hooks for mechanical work.
+Helix is a drop-in harness for AI coding agents: tier-routed roles, repo-map
+first context (Graphify when present, a built-in outline otherwise), skills that
+load on demand, and one portable gate command. Full support exists only where the
+vendor docs were checked: see the platform matrix below. Everywhere else the pack
+is AGENTS.md plus at most a pointer file.
 The product is the generated file pack; this repo's website is the
 configurator that builds it.
 
@@ -29,21 +31,52 @@ prompt. Requires Node 22.6+ (type stripping, no build step).
   approximation, labeled everywhere); MCP schemas come from live `tools/list`
   captures (`scripts/measure-mcp.mjs`) or are flagged as estimates; practice
   statistics carry confidence badges on `/playbook`.
-- **Not verified**: tail-platform paths (opencode, devin, factory, kiro, amp,
-  kilo, windsurf, cline, aider, gemini) — those adapters emit pointers only.
+- **Not verified**: see the matrix. Unverified cells emit nothing and claim
+  nothing; "all agents" is not a claim this project makes.
 - **Illustrative, not measured**: the `/run` timeline and the sample graph.
   Real head-to-head numbers live on `/evals` once a report is committed.
+
+## Platform matrix
+
+Generated from the adapter catalog (`npm test` fails if this drifts). "emitted"
+means vendor docs were checked on the date shown and Helix writes real files;
+"supported, not emitted" means the vendor documents it but Helix does not write it
+yet; "unverified" means neither. Gemini CLI note: press reports say it was shut
+down for consumer tiers on 2026-06-18 in favor of Antigravity CLI; no Google
+primary page was checked, so those paths stay unverified.
+
+<!-- matrix:start -->
+
+| Platform           | verified   | instructions | mcp        | skills     | subagents              | hooks      | plugin     |
+| ------------------ | ---------- | ------------ | ---------- | ---------- | ---------------------- | ---------- | ---------- |
+| Claude Code        | 2026-10-07 | emitted      | emitted    | emitted    | emitted                | emitted    | unverified |
+| Cursor             | 2026-10-07 | emitted      | emitted    | unverified | unverified             | unverified | unverified |
+| Codex              | 2026-10-07 | emitted      | emitted    | emitted    | supported, not emitted | unverified | unverified |
+| Gemini CLI         | no         | unverified   | unverified | unverified | unverified             | unverified | unverified |
+| GitHub Copilot     | 2026-10-07 | emitted      | emitted    | unverified | unverified             | unverified | unverified |
+| Windsurf           | no         | unverified   | unverified | unverified | unverified             | unverified | unverified |
+| Cline              | no         | unverified   | unverified | unverified | unverified             | unverified | unverified |
+| Aider              | no         | unverified   | unverified | unverified | unverified             | unverified | unverified |
+| OpenCode           | no         | unverified   | unverified | unverified | unverified             | unverified | unverified |
+| Google Antigravity | no         | unverified   | unverified | unverified | unverified             | unverified | unverified |
+| Devin CLI          | no         | unverified   | unverified | unverified | unverified             | unverified | unverified |
+| Factory Droid      | no         | unverified   | unverified | unverified | unverified             | unverified | unverified |
+| Kiro               | no         | unverified   | unverified | unverified | unverified             | unverified | unverified |
+| Amp                | no         | unverified   | unverified | unverified | unverified             | unverified | unverified |
+| Kilo Code          | no         | unverified   | unverified | unverified | unverified             | unverified | unverified |
+
+<!-- matrix:end -->
 
 ## How the tiers work
 
 The main session classifies every task and orchestrates — there is no
 dispatcher subagent:
 
-| Tier | When | Flow |
-| --- | --- | --- |
-| trivial | one file, clear ask, or a question | main session only |
-| standard | known files, one module | build, then a fresh-window reviewer |
-| complex | unknown surface or cross-module | scout → architect → builder → reviewer |
+| Tier     | When                               | Flow                                   |
+| -------- | ---------------------------------- | -------------------------------------- |
+| trivial  | one file, clear ask, or a question | main session only                      |
+| standard | known files, one module            | build, then a fresh-window reviewer    |
+| complex  | unknown surface or cross-module    | scout → architect → builder → reviewer |
 
 Handoffs are 12-line cards (goal, constraints, cited files, done-means, out
 of scope). The builder writes the smallest failing test first; the Stop hook
@@ -94,15 +127,15 @@ Gates for every commit: `npm run lint && npm run typecheck && npm test`
 
 ## Routes (configurator)
 
-| Route | Purpose |
-| --- | --- |
-| `/` Studio | Pitch + live token stats |
-| `/crew` | The four roles — enable, inspect, read each contract |
-| `/stack` | Skills / MCP / LSP toggles with measured-or-labeled costs + leanness checklist |
-| `/playbook` | Doctrine flags with confidence badges and sources |
-| `/run` | **Illustrative** fix timeline — scripted, live-scaled tokens |
-| `/evals` | Real eval reports (empty until one is committed) |
-| `/export` | Generated pack: preview, copy, or download per file or as text |
+| Route       | Purpose                                                                        |
+| ----------- | ------------------------------------------------------------------------------ |
+| `/` Studio  | Pitch + live token stats                                                       |
+| `/crew`     | The four roles — enable, inspect, read each contract                           |
+| `/stack`    | Skills / MCP / LSP toggles with measured-or-labeled costs + leanness checklist |
+| `/playbook` | Doctrine flags with confidence badges and sources                              |
+| `/run`      | **Illustrative** fix timeline — scripted, live-scaled tokens                   |
+| `/evals`    | Real eval reports (empty until one is committed)                               |
+| `/export`   | Generated pack: preview, copy, or download per file or as text                 |
 
 ## License
 
