@@ -4,6 +4,7 @@ import { execFile } from "node:child_process";
 import { mkdtemp, writeFile, mkdir, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { GATE_SOURCE } from "./gate.ts";
 import { HOOK_SOURCES } from "./hooks.ts";
 
 function runHook(
@@ -164,6 +165,37 @@ describe("test-on-stop hook (Stop, stdin JSON)", () => {
     );
     assert.equal(r.code, 2);
     assert.match(r.stderr, /boom-line/);
+  });
+
+  it("runs the shipped gate instead of the bare test command when present", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "helix-stop-gate-"));
+    const transcript = join(dir, "t.jsonl");
+    await writeFile(
+      transcript,
+      JSON.stringify({
+        type: "assistant",
+        message: { content: [{ type: "tool_use", name: "Edit", input: { file_path: "a.ts" } }] },
+      }) + "\n",
+    );
+    await writeFile(
+      join(dir, "package.json"),
+      JSON.stringify({
+        scripts: {
+          lint: "node -e \"console.error('lint-boom'); process.exit(1)\"",
+          test: 'node -e "process.exit(0)"',
+        },
+      }),
+    );
+    await mkdir(join(dir, ".helix"), { recursive: true });
+    await writeFile(join(dir, ".helix", "gate.mjs"), GATE_SOURCE);
+    const r = await runHook(
+      "test-on-stop",
+      JSON.stringify({ transcript_path: transcript, cwd: dir }),
+      dir,
+    );
+    assert.equal(r.code, 2);
+    assert.match(r.stderr, /FAIL lint/);
+    assert.match(r.stderr, /lint-boom/);
   });
 
   it("fails open on malformed stdin", async () => {

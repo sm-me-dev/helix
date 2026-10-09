@@ -194,7 +194,12 @@ try {
     process.exit(0);
   }
   if (!edited) process.exit(0);
-  const t = testCmd(cwd);
+  // Prefer the portable gate (secrets, lint, typecheck, affected tests) when the
+  // pack shipped one; otherwise fall back to the repo test command alone.
+  const gate = path.join(cwd, ".helix", "gate.mjs");
+  const t = fs.existsSync(gate)
+    ? { cmd: process.execPath, args: [gate], cwd }
+    : testCmd(cwd);
   if (!t) process.exit(0);
   execFile(t.cmd, t.args, { cwd: t.cwd, timeout: 55000, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => {
     if (!err) process.exit(0);
@@ -203,7 +208,7 @@ try {
       process.exit(0);
     }
     const tail = String(stdout + "\\n" + stderr).trim().split("\\n").slice(-30).join("\\n");
-    process.stderr.write("[helix] tests failed after this session edits:\\n" + tail + "\\n");
+    process.stderr.write("[helix] checks failed after this session edits:\\n" + tail + "\\n");
     process.exit(2);
   });
 } catch (e) {

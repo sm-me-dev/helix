@@ -1,6 +1,7 @@
 import { ADAPTER_BY_ID } from "./adapters/index.ts";
 import { agentFile, skillFile } from "./adapters/parts.ts";
 import { CREW_BY_ID } from "./crew.ts";
+import { GATE_SOURCE } from "./gate.ts";
 import { MCP_BY_ID } from "./mcps.ts";
 import { PLATFORM_BY_ID } from "./platforms.ts";
 import { SKILL_BY_ID } from "./skills.ts";
@@ -93,6 +94,7 @@ ${crewRows}
 - Subagent bodies load on run; no file over ~400 lines, cite ranges.
 - ${hooks}
 - Every behavior change ships with a failing test first.
+- Before you finish: \`node .helix/gate.mjs\` (secrets, lint, typecheck, affected tests; failures only; exit 0 = pass).
 ${inlined}`;
 }
 
@@ -117,6 +119,7 @@ Then inside the assistant: \`/graphify .\` (Codex: \`$graphify\`).
 ## What you just installed
 
 - \`AGENTS.md\` — always-on, short, vendor-neutral
+- \`.helix/gate.mjs\` — one command for every agent, git hook and CI job: \`node .helix/gate.mjs\` (exit 0 pass, 1 a check failed, 2 usage error; \`--all\`, \`--dry\`, \`--json\`)
 - Skills — progressive disclosure, Agent Skills format
 - Crew roles (main session orchestrates; no dispatcher file) — ${roles || "none"}
 - MCP — ${config.mcps.map((id) => MCP_BY_ID[id].name).join(", ") || "none"}
@@ -140,6 +143,20 @@ export function generatePack(config: HarnessConfig): PackFile[] {
     { path: "README.md", language: "markdown", body: readme(config) },
     { path: "AGENTS.md", language: "markdown", body: agentsMd(config) },
   ];
+
+  // The gate is platform-neutral: every agent, git hook and CI job runs the
+  // same file. gate.json pins the detected commands so the gate never re-detects.
+  files.push({ path: ".helix/gate.mjs", language: "javascript", body: GATE_SOURCE });
+  if (config.stack) {
+    const pins: Record<string, string> = { packageManager: config.stack.packageManager };
+    if (config.stack.testCommand) pins.test = config.stack.testCommand;
+    if (config.stack.lintCommand) pins.lint = config.stack.lintCommand;
+    files.push({
+      path: ".helix/gate.json",
+      language: "json",
+      body: JSON.stringify(pins, null, 2) + "\n",
+    });
+  }
 
   const seen = new Set<string>(files.map((f) => f.path));
   // Each adapter emits only at the location its platform reads; the seen-set

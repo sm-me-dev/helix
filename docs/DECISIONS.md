@@ -399,3 +399,43 @@ No new dependencies. No disproved-as-false suspects beyond #5's narrowed scope.
 - Rejected: keeping the skills and just shortening descriptions (still pays a
   load turn per use). Old persisted configs stay safe (sanitizePersisted drops
   unknown skill ids). No new dependencies.
+
+## 2026-10-09 — Phase 1.3 `helix gate`
+
+- One deterministic, agent-agnostic command: secret scan, lint, typecheck,
+  affected tests. Source of truth is `src/lib/harness/gate.ts` (`GATE_SOURCE`,
+  node: only), shipped as `.helix/gate.mjs` in every pack and run by
+  `helix gate [dir]` (the CLI always runs the bundled source, never a
+  `gate.mjs` the target repo supplied). `.helix/gate.json` pins the detected
+  package manager/test/lint commands so the gate never re-detects.
+- Exit codes: 0 = all checks passed or nothing changed; 1 = a check failed;
+  2 = usage error. Passing steps print one line; failing steps print a tail
+  capped at 25 lines / 2000 chars; secret hits print file:line + pattern name
+  and never the value. Flags: `--all`, `--dry`, `--json`.
+- Wiring: AGENTS.md tells every agent to run it before finishing (one line,
+  40-line budget held); Claude's Stop hook runs it when `.helix/gate.mjs`
+  exists (still honoring stop_hook_active and edits-since-last-prompt) and
+  falls back to the bare test command otherwise; `helix doctor` runs
+  `gate.mjs --dry` and flags an AGENTS.md that demands a missing gate. Git
+  hooks/CI call `node .helix/gate.mjs`.
+- Affected tests: only where the runner has a documented related-test mode,
+  verified 2026-10-09: Jest `--passWithNoTests --findRelatedTests <files>`
+  (https://jestjs.io/docs/cli) and Vitest `related <files> --run
+--passWithNoTests` (vitest docs/guide/cli.md). Every other runner (node:test,
+  pytest, go, cargo, ...) runs the full configured test command: no verified
+  related mode, so no guessed flags. Helix's own `npm test` is a full-suite run.
+- Evidence: 13 new tests in gate.test.ts (temp git repos: pass/fail/exit codes,
+  output cap, secrets, .env vs .env.example, untracked + spaced paths, --dry,
+  --json, gate.json pins, jest/vitest flags, pack emission) plus a Stop-hook
+  test that the hook surfaces the gate's FAIL output. Dogfood: `helix gate` on
+  this repo, 2026-10-09: PASS (lint 7.9s, typecheck 11.5s, test 9.2s, one run,
+  not a benchmark).
+- NOT claimed: any token saving. The gate removes the model's decision of which
+  commands to run and compacts failure output, but total tokens per task stay
+  unmeasured until `helix report` (Phase 2).
+- Limits: the secret scan is a small regex set (AWS, private key, GitHub, Slack,
+  sk- keys, assigned secrets), not a replacement for gitleaks; the Stop hook
+  keeps its 55s timeout, so a slow suite is skipped there (logged) and caught by
+  CI. Rejected: shelling out to gitleaks/trufflehog (new dependency, absent on
+  most machines); a per-platform gate (the point is one portable file).
+- No new dependencies.
