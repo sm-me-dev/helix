@@ -79,6 +79,23 @@ describe("doctorPack", () => {
     assert.ok(failures.some((f) => f.check === "config:.vscode/mcp.json"));
     assert.ok(failures.some((f) => f.check === "agents-md"));
   });
+
+  it("flags unpinned uvx --from specs", () => {
+    const failures = doctorPack(
+      new Map([
+        [
+          ".mcp.json",
+          JSON.stringify({
+            mcpServers: { g: { command: "uvx", args: ["--from", "graphifyy[mcp]", "graphify-mcp"] } },
+          }),
+        ],
+      ]),
+    );
+    assert.ok(
+      failures.some((f) => f.check === "pin:.mcp.json"),
+      "uvx --from without a version pin must fail doctor",
+    );
+  });
 });
 
 describe("reconstructConfig", () => {

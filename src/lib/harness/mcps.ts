@@ -49,11 +49,12 @@ export const MCPS: Mcp[] = [
       graphify: {
         kind: "stdio",
         command: "uvx",
-        args: ["--from", "graphifyy[mcp]", "graphify-mcp"],
+        args: ["--from", "graphifyy[mcp]==0.9.82", "graphify-mcp"],
       },
     },
-    source: "carried over from previous catalog; install shape not re-checked against vendor docs",
-    verifiedAt: null,
+    source:
+      "version pinned via https://pypi.org/pypi/graphifyy/json (0.9.82); server command shape carried over, not re-checked",
+    verifiedAt: "2026-10-09",
   },
   {
     id: "context7",
@@ -68,8 +69,8 @@ export const MCPS: Mcp[] = [
       context7: { kind: "remote", url: "https://mcp.context7.com/mcp" },
     },
     source:
-      "carried over from previous catalog; endpoint not re-fetched (identifier only, no network in pack)",
-    verifiedAt: null,
+      "endpoint responds (HTTP 406 to unauthenticated initialize probe 2026-10-09); tool list not enumerated — identifier only, no network in pack",
+    verifiedAt: "2026-10-09",
   },
   {
     id: "playwright",
@@ -108,8 +109,9 @@ export const MCPS: Mcp[] = [
         headers: { "X-MCP-Toolsets": "issues,pull_requests" },
       },
     },
-    source: "carried over from previous catalog; read-only toolsets kept, endpoint not re-fetched",
-    verifiedAt: null,
+    source:
+      "endpoint responds (HTTP 401 to unauthenticated initialize probe 2026-10-09); read-only toolsets kept, tool list not enumerated",
+    verifiedAt: "2026-10-09",
   },
   {
     id: "serena",
@@ -163,8 +165,8 @@ export const MCPS: Mcp[] = [
       sentry: { kind: "remote", url: "https://mcp.sentry.dev/mcp" },
     },
     source:
-      "carried over from previous catalog; endpoint not re-fetched (identifier only, no network in pack)",
-    verifiedAt: null,
+      "endpoint responds (HTTP 401 to unauthenticated initialize probe 2026-10-09); tool list not enumerated — identifier only, no network in pack",
+    verifiedAt: "2026-10-09",
   },
   {
     id: "linear",
@@ -179,8 +181,8 @@ export const MCPS: Mcp[] = [
       linear: { kind: "remote", url: "https://mcp.linear.app/mcp" },
     },
     source:
-      "carried over from previous catalog; endpoint not re-fetched (identifier only, no network in pack)",
-    verifiedAt: null,
+      "endpoint responds (HTTP 401 to unauthenticated initialize probe 2026-10-09); tool list not enumerated — identifier only, no network in pack",
+    verifiedAt: "2026-10-09",
   },
 ];
 
