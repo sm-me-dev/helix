@@ -49,6 +49,12 @@ function agentsMd(config: HarnessConfig): string {
     ? `Hooks own format, lint, and secret denies. Spend no model tokens on them.`
     : `Run the repo format/lint commands before you return.`;
 
+  // Detected facts beat generic advice: exact commands, no re-detection.
+  const repoFacts = config.stack
+    ? `Repo facts, detected by \`helix init\` — do not re-detect, never invent flags:
+- stack: ${config.stack.language} · ${config.stack.packageManager}; test: \`${config.stack.testCommand ?? "none detected"}\`; lint: \`${config.stack.lintCommand ?? "none detected"}\`; format: \`${config.stack.formatCommand ?? "none detected"}\`.`
+    : `Read package.json / Makefile / justfile for real scripts. Never invent flags.`;
+
   // Disclosure off means the old way: everything inlined in the always-on file.
   const inlined = config.progressiveDisclosure
     ? ""
@@ -57,9 +63,6 @@ function agentsMd(config: HarnessConfig): string {
         .join("\n")}`;
 
   return `# Helix
-
-Always-on layer. Skills load on demand; this file stays short.
-
 ## Dispatch (you are the orchestrator; no dispatcher subagent)
 
 - trivial (one file, clear ask, or question): main session only.
@@ -77,7 +80,7 @@ Always-on layer. Skills load on demand; this file stays short.
 
 ## Commands
 
-Read package.json / Makefile / justfile for real scripts. Never invent flags.
+${repoFacts}
 - Graph: query_graph ".." / get_neighbors NAME / shortest_path A B
 - MCPs: ${mcpList || "(none)"}
 
@@ -87,12 +90,9 @@ Read package.json / Makefile / justfile for real scripts. Never invent flags.
 | --- | --- | --- |
 ${crewRows}
 
-Reviewer never shares a window with Builder.
-
 ## Budget
 
-- One-sentence subagent descriptions; body loads on run.
-- No file over ~400 lines; use graph neighbors or a range.
+- Subagent bodies load on run; no file over ~400 lines, cite ranges.
 - ${hooks}
 - Every behavior change ships with a failing test first.
 ${inlined}`;
