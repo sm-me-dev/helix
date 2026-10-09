@@ -109,7 +109,7 @@ Never paste transcripts, raw tool dumps, or "in case it's useful" files. The rec
     body: `If a rule is deterministic, it is a hook:
 - format / lint on write
 - deny .env and secret paths
-- PreToolUse: large Read → suggest graphify.query_graph
+- PreToolUse: large Read → suggest mcp__graphify__query_graph
 - Stop: run the test command if a source file changed
 
 Prompts rot. Hooks do not.`,

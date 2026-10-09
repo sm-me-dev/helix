@@ -38,7 +38,7 @@ function agentsMd(config: HarnessConfig): string {
   const mcpList = config.mcps.map((id) => MCP_BY_ID[id].name).join(", ");
 
   const graph = config.graphFirst
-    ? `Graph first: query, path, explain. Read a file only when the graph cites it.`
+    ? `Graph first: query_graph, get_neighbors, shortest_path. Read a file only when the graph cites it.`
     : `Prefer targeted reads over glob. Name files before opening them.`;
 
   const fanout = config.defaultSingleAgent
@@ -78,7 +78,7 @@ Always-on layer. Skills load on demand; this file stays short.
 ## Commands
 
 Read package.json / Makefile / justfile for real scripts. Never invent flags.
-- Graph: graphify query ".." / path A B / explain NAME
+- Graph: query_graph ".." / get_neighbors NAME / shortest_path A B
 - MCPs: ${mcpList || "(none)"}
 
 ## Crew
