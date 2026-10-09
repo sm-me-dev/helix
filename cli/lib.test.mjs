@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  configForStack,
   defaultConfig,
   detectStack,
   diffLines,
@@ -46,6 +47,46 @@ describe("detectStack", () => {
       justfile: null,
     });
     assert.deepEqual(d.existingAgentFiles, ["AGENTS.md", ".mcp.json"]);
+  });
+
+  it("counts files and spots UI by framework dep or component files", () => {
+    const ui = detectStack({
+      names: new Set(["package.json", "src/app.tsx", "index.html"]),
+      packageJson: { dependencies: { react: "^19.0.0" } },
+      makefile: null,
+      justfile: null,
+    });
+    assert.equal(ui.fileCount, 3);
+    assert.equal(ui.uiPresent, true);
+    const cli = detectStack({
+      names: new Set(["go.mod", "main.go"]),
+      packageJson: null,
+      makefile: null,
+      justfile: null,
+    });
+    assert.equal(cli.fileCount, 2);
+    assert.equal(cli.uiPresent, false);
+  });
+});
+
+describe("configForStack", () => {
+  it("drops graphify and graph-first under 20 files", () => {
+    const c = configForStack(["claude-code"], { fileCount: 5, uiPresent: false });
+    assert.ok(!c.mcps.includes("graphify"));
+    assert.equal(c.graphFirst, false);
+  });
+
+  it("drops playwright without a UI, keeps it with one", () => {
+    const noUi = configForStack(["claude-code"], { fileCount: 200, uiPresent: false });
+    assert.ok(!noUi.mcps.includes("playwright"));
+    const ui = configForStack(["claude-code"], { fileCount: 200, uiPresent: true });
+    assert.ok(ui.mcps.includes("playwright"));
+    assert.ok(ui.mcps.includes("graphify"));
+  });
+
+  it("keeps the full crew (isolation is per-task, not init-time)", () => {
+    const c = configForStack(["claude-code"], { fileCount: 5, uiPresent: false });
+    assert.deepEqual(c.crew, ["scout", "architect", "builder", "reviewer"]);
   });
 });
 
