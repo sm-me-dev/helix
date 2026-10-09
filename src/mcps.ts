@@ -42,7 +42,7 @@ export const MCPS: Mcp[] = [
       "get_pr_impact",
       "triage_prs",
     ],
-    schemaTokens: 980,
+    schemaTokens: 1336, // tools/list 2026-10-07 via scripts/measure-mcp.mjs; live value wins when fresh
     skipIf: "The repo is under ~20 files and already fits in one read.",
     defaultOn: true,
     servers: {
@@ -84,7 +84,7 @@ export const MCPS: Mcp[] = [
       "browser_snapshot",
       "browser_console_messages",
     ],
-    schemaTokens: 1320,
+    schemaTokens: 4413, // tools/list 2026-10-07 via scripts/measure-mcp.mjs; live value wins when fresh
     skipIf: "No UI, or tests already drive the browser in CI.",
     defaultOn: true,
     servers: {
@@ -119,7 +119,7 @@ export const MCPS: Mcp[] = [
     maintainer: "Oraios",
     job: "LSP as tools: go-to-def, refs, rename. Complements Graphify on symbol-precise edits.",
     tools: ["find_symbol", "find_referencing_symbols", "rename_symbol"],
-    schemaTokens: 860,
+    schemaTokens: 8204, // tools/list 2026-10-07 via scripts/measure-mcp.mjs; live value wins when fresh
     skipIf: "Graphify neighbors already give you the call sites.",
     defaultOn: false,
     servers: {
@@ -143,7 +143,7 @@ export const MCPS: Mcp[] = [
     maintainer: "Google",
     job: "Performance traces, console, and network for front-end debugging.",
     tools: ["performance_start_trace", "list_console_messages", "list_network_requests"],
-    schemaTokens: 1100,
+    schemaTokens: 5914, // tools/list 2026-10-07 via scripts/measure-mcp.mjs; live value wins when fresh
     skipIf: "You are not chasing a runtime or perf bug in the browser.",
     defaultOn: false,
     servers: {

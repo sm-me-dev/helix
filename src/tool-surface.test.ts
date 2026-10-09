@@ -4,7 +4,8 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CREW } from "./crew.ts";
-import { MCPS } from "./mcps.ts";
+import { MCPS, mcpMeasurementFresh } from "./mcps.ts";
+import measurements from "./mcp-measurements.json" with { type: "json" };
 
 const here = dirname(fileURLToPath(import.meta.url));
 const captureNames = (server: string): Set<string> => {
@@ -54,6 +55,24 @@ describe("tool surface matches captures", () => {
           `${c.id}: mcp__${server}__${tool} missing from fixtures/captures/${server}.tools.json`,
         );
       }
+    }
+  });
+
+  it("catalog schemaTokens track tools/list measurements within 2x", () => {
+    const servers = (measurements as { servers: Record<string, { tokens: number | null }> })
+      .servers;
+    for (const m of MCPS) {
+      const measured = servers[m.id]?.tokens;
+      if (typeof measured !== "number") continue; // unmeasured: flagged elsewhere
+      const ratio = m.schemaTokens / measured;
+      assert.ok(
+        ratio >= 0.5 && ratio <= 2,
+        `${m.id}: catalog ${m.schemaTokens} vs measured ${measured} (ratio ${ratio.toFixed(2)}) — re-run scripts/measure-mcp.mjs`,
+      );
+      assert.ok(
+        mcpMeasurementFresh(m.id),
+        `${m.id}: measurement stale, re-run scripts/measure-mcp.mjs`,
+      );
     }
   });
 
