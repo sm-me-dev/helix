@@ -354,3 +354,23 @@ stop_hook_active semantics confirmed).
     flagged estimates.
 
 No new dependencies. No disproved-as-false suspects beyond #5's narrowed scope.
+
+## 2026-10-09 — Phase 1.1 detection-based defaults
+
+- `helix init` now derives MCPs from repo facts via `configForStack`
+  (cli/lib.ts): Graphify off and graph-first off under 20 files (its own
+  skipIf: the graph costs more than it saves); Playwright off unless a UI is
+  detected (UI framework dep, or .tsx/.jsx/.vue/.svelte/.html files).
+  Evidence: unit tests in cli/lib.test.mjs plus a manual `helix init` on a
+  2-file scratch repo (enabled only context7, graph-first off), 2026-10-09.
+- Crew stays whole at init time. Rejected: dropping subagents at init —
+  isolation (fresh-window review) and breadth (scout on a large surface) are
+  per-task decisions, not repo-time ones; single-agent routing for small tasks
+  is already the orchestrator's default tier (see Phase 3 tiered crew).
+- The 20-file threshold is the catalog's existing skipIf, not a new
+  measurement. No new dependencies.
+- Test hygiene: app-data.test.ts "gate 401 in the preview" failed whenever
+  NODE_ENV=production (the env-token preview path is deliberately off in
+  production), turning the gate red from shells that export it. The test now
+  pins NODE_ENV=test. Cause confirmed by running it with NODE_ENV unset (25/25)
+  vs production (24/25). Test-only change; product code untouched.

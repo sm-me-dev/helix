@@ -31,7 +31,30 @@ export type DetectedStack = {
   lintCommand: string | null;
   formatCommand: string | null;
   existingAgentFiles: string[];
+  /** Source files walked (excluding node_modules/.git/graphify-out). */
+  fileCount: number;
+  /** True when the repo renders UI (markup/components or a UI framework dep). */
+  uiPresent: boolean;
 };
+
+/** Detection-based defaults: narrow the full defaults by repo facts.
+ * Graphify off under ~20 files (its own skipIf — the graph costs more than
+ * it saves); Playwright off unless a UI is detected; crew stays whole
+ * (isolation/breadth is a per-task call, not an init-time one). */
+export function configForStack(
+  platforms: PlatformId[],
+  facts: { fileCount: number; uiPresent: boolean },
+): HarnessConfig {
+  const config = defaultConfig(platforms);
+  if (facts.fileCount < 20) {
+    config.mcps = config.mcps.filter((id) => id !== "graphify");
+    config.graphFirst = false;
+  }
+  if (!facts.uiPresent) {
+    config.mcps = config.mcps.filter((id) => id !== "playwright");
+  }
+  return config;
+}
 
 /** Stack detection from files present in a directory (no execution). */
 export function detectStack(files: {
@@ -92,6 +115,26 @@ export function detectStack(files: {
     ".cursor/rules/helix.mdc",
     ".github/copilot-instructions.md",
   ];
+  const deps = new Set([
+    ...Object.keys(pkg?.dependencies ?? {}),
+    ...Object.keys(pkg?.devDependencies ?? {}),
+  ]);
+  const uiDeps = [
+    "react",
+    "react-dom",
+    "vue",
+    "svelte",
+    "next",
+    "nuxt",
+    "@sveltejs/kit",
+    "solid-js",
+    "preact",
+    "angular",
+    "@angular/core",
+  ];
+  const uiPresent =
+    uiDeps.some((d) => deps.has(d)) ||
+    [...files.names].some((n) => /\.(tsx|jsx|vue|svelte)$/.test(n) || n.endsWith(".html"));
   return {
     language,
     packageManager: pm,
@@ -99,6 +142,8 @@ export function detectStack(files: {
     lintCommand,
     formatCommand,
     existingAgentFiles: candidates.filter((c) => files.names.has(c)),
+    fileCount: files.names.size,
+    uiPresent,
   };
 }
 

@@ -8,6 +8,7 @@ import { createInterface } from "node:readline";
 import { generatePack } from "../src/lib/harness/generate.ts";
 import { DEFAULT_PLATFORMS } from "../src/lib/harness/platforms.ts";
 import {
+  configForStack,
   defaultConfig,
   detectStack,
   diffLines,
@@ -105,7 +106,7 @@ async function cmdInit(opts) {
   console.log(`test: ${stack.testCommand ?? "(none detected)"} · lint: ${stack.lintCommand ?? "(none)"}`);
   const platforms = opts.platforms ?? [...DEFAULT_PLATFORMS];
   const config = {
-    ...defaultConfig(platforms),
+    ...configForStack(platforms, stack),
     stack: {
       language: stack.language,
       packageManager: stack.packageManager,
@@ -114,6 +115,9 @@ async function cmdInit(opts) {
       formatCommand: stack.formatCommand,
     },
   };
+  console.log(
+    `mcps: ${config.mcps.join(", ") || "(none)"} · graph-first: ${config.graphFirst ? "on" : "off"} (${stack.fileCount} files${stack.uiPresent ? ", UI detected" : ", no UI"})`,
+  );
   const pack = generatePack(config);
   let wrote = 0;
   let skipped = 0;
