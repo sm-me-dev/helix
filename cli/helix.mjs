@@ -35,11 +35,13 @@ const USAGE = `helix — AI coding harness pack manager
 
 function parseArgs(argv) {
   const [cmd, ...rest] = argv;
-  const opts = { dir: ".", platforms: null, force: false, platform: null, evalArgs: [], gateArgs: [] };
+  const opts = { dir: ".", platforms: null, force: false, help: false, platform: null, evalArgs: [], gateArgs: [] };
   const positional = [];
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
-    if (cmd === "gate" && a.startsWith("--")) opts.gateArgs.push(a);
+    // eval has its own --help; every other command shows the shared usage.
+    if ((a === "--help" || a === "-h") && cmd !== "eval") opts.help = true;
+    else if (cmd === "gate" && a.startsWith("--")) opts.gateArgs.push(a);
     else if (a === "--force") opts.force = true;
     else if (a === "--platform" && cmd === "export") opts.platform = rest[++i];
     else if (a.startsWith("--platform=")) opts.platforms = a.slice("--platform=".length).split(",");
@@ -95,8 +97,14 @@ function detectDir(dir) {
 }
 
 async function confirm(question) {
+  // No terminal (CI, pipe, agent shell): never prompt, never overwrite. Pass
+  // --force to overwrite non-interactively.
+  if (!process.stdin.isTTY) return false;
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   return new Promise((resolve) => {
+    // Closing stdin mid-prompt (Ctrl-D) must resolve, or the process exits 13
+    // with an unsettled top-level await.
+    rl.once("close", () => resolve(false));
     rl.question(`${question} [y/N] `, (answer) => {
       rl.close();
       resolve(/^y(es)?$/i.test(answer.trim()));
@@ -254,7 +262,8 @@ function cmdExport(opts) {
 
 async function main() {
   const { cmd, opts } = parseArgs(process.argv.slice(2));
-  if (cmd === "init") await cmdInit(opts);
+  if (opts.help || cmd === "--help" || cmd === "-h" || cmd === "help") process.stdout.write(USAGE);
+  else if (cmd === "init") await cmdInit(opts);
   else if (cmd === "doctor") cmdDoctor(opts);
   else if (cmd === "measure") cmdMeasure(opts);
   else if (cmd === "gate") cmdGate(opts);
