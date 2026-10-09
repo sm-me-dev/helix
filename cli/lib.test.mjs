@@ -169,6 +169,38 @@ describe("reconstructConfig", () => {
     assert.ok(cfg.platforms.includes("codex"));
     assert.ok(!cfg.platforms.includes("cursor"));
   });
+
+  it("reads mcps, skills and crew from the files, not from the catalog defaults", () => {
+    const files = new Map([
+      ["AGENTS.md", "# x\n"],
+      [".mcp.json", JSON.stringify({ mcpServers: { context7: { url: "https://x" } } })],
+      [".agents/skills/graph-first/SKILL.md", "---\nname: graph-first\n---\n"],
+      [".claude/agents/scout.md", "---\nname: scout\n---\n"],
+    ]);
+    const cfg = reconstructConfig(files);
+    assert.deepEqual(cfg.mcps, ["context7"]);
+    assert.deepEqual(cfg.skills, ["graph-first"]);
+    assert.deepEqual(cfg.crew, ["scout"]);
+  });
+
+  it("reports an empty mcp, skill and crew set for a universal pack", () => {
+    const files = new Map([
+      ["AGENTS.md", "# x\n"],
+      [".helix/gate.json", "{}"],
+    ]);
+    const cfg = reconstructConfig(files);
+    assert.deepEqual(cfg.mcps, []);
+    assert.deepEqual(cfg.skills, []);
+    assert.deepEqual(cfg.crew, []);
+  });
+
+  it("reads codex toml and vscode servers", () => {
+    const files = new Map([
+      [".codex/config.toml", '[mcp_servers.context7]\nurl = "https://x"\n'],
+      [".vscode/mcp.json", JSON.stringify({ servers: { github: { type: "http", url: "https://y" } } })],
+    ]);
+    assert.deepEqual([...reconstructConfig(files).mcps].sort(), ["context7", "github"]);
+  });
 });
 
 describe("mcpSummary and graphFreshness", () => {

@@ -581,3 +581,47 @@ generated from the source, so it is now ignored (files stay on disk; run
 `graphify update .` to regenerate). Rejected: keeping it tracked so a fresh
 clone has a graph (the graph is rebuilt in seconds and a stale committed graph
 misleads agents more than a missing one). Approved by the user 2026-10-09.
+
+## 2026-10-09 — Phase A: measure and doctor read the installed pack
+
+Reproduced on scratch repos (`helix init --yes --platform <id>` then `helix
+measure`): every pack reported always-on 6.9k tokens (mcp 6.2k, 3 servers),
+including an opencode pack that wrote no MCP config and a claude-code pack whose
+`.mcp.json` holds only context7. Cause: `reconstructConfig` (cli/lib.ts) took
+skills and MCP servers from the catalog defaults and crew from defaults when none
+were found, so `measure` and `doctor` described the catalog, not the files on
+disk. Fix: crew, skills and MCP servers are now read from the installed files
+(`.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json` by key, `.codex/config.toml`
+`[mcp_servers.*]` tables, `.agents|.claude/skills/<id>/SKILL.md`,
+`.claude/agents/<id>.md`); unknown keys are ignored and an empty set is a valid
+answer. Tests: three new cases in `cli/lib.test.mjs` (failed first).
+
+Always-on tokens per pack, 2026-10-09, script `helix measure` (o200k_base BPE,
+approximation of frontier tokenizers; MCP figure is the catalog estimate for
+context7, not measured), scratch repo with 2 files, before the fix (all packs
+6.9k) vs after:
+
+| pack                 | always-on | AGENTS.md | skills | mcp | crew |
+| -------------------- | --------- | --------- | ------ | --- | ---- |
+| opencode (universal) | 327       | 327       | 0      | 0   | 0    |
+| gemini               | 327       | 327       | 0      | 0   | 0    |
+| cursor, copilot      | 747       | 327       | 0      | 420 | 0    |
+| codex                | 821       | 327       | 74     | 420 | 0    |
+| claude-code          | 1.2k      | 446       | 74     | 420 | 216  |
+
+Caveats: measure counts only files the pack wrote. Platform-owned files that
+Helix does not write (for example Gemini settings) are not counted, so the gemini
+row is a lower bound. Always-on size is not per-task cost; per-task totals need
+`helix report` (Phase B).
+
+What this does and does not show: the earlier 6.9k figure was a measurement
+error, not the real size of the packs, so it is not the explanation for the
+eval result (evals/results/2026-10-08T18-46-00-opencode.md). Which files the
+eval's helix arm actually wrote is not recorded there; that is unverified. No
+saving is claimed.
+
+Lean default for small repos (open question, behavior unchanged): the universal
+pack is already small (327 tokens); subagents and the longer AGENTS.md only
+appear with the claude-code pack (+119 AGENTS.md, +216 crew). Whether to drop
+them under a size threshold must come from the Phase D eval, not intuition.
+Rejected: picking a file-count threshold now (no measurement supports any value).
