@@ -12,6 +12,14 @@ export const cursorAdapter: PlatformAdapter = {
   ],
   supportsSubagents: false,
   supportsSkills: false,
+  capabilities: {
+    instructions: "emitted",
+    mcp: "emitted",
+    skills: "unverified",
+    subagents: "unverified",
+    hooks: "unverified",
+    plugin: "unverified",
+  },
   notes:
     "Project rules in .cursor/rules (*.mdc with frontmatter). Project MCP in .cursor/mcp.json " +
     "under mcpServers. Cursor reads AGENTS.md natively. Custom-agent and project-skill paths " +

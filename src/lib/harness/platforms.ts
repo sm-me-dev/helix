@@ -1,5 +1,6 @@
 import { ADAPTER_BY_ID } from "./adapters/index.ts";
-import type { AdapterSource } from "./adapters/types.ts";
+import { CAPABILITIES } from "./adapters/types.ts";
+import type { AdapterSource, CapabilityMatrix } from "./adapters/types.ts";
 import type { PlatformId } from "./types";
 
 export type Platform = {
@@ -10,6 +11,7 @@ export type Platform = {
   notes: string;
   verifiedAt: string | null;
   sources: AdapterSource[];
+  capabilities: CapabilityMatrix;
 };
 
 function entry(
@@ -28,6 +30,7 @@ function entry(
     notes: `${notes} ${adapter.notes}`,
     verifiedAt: adapter.verifiedAt,
     sources: adapter.sources,
+    capabilities: adapter.capabilities,
   };
 }
 
@@ -61,7 +64,13 @@ export const PLATFORMS: Platform[] = [
     ["AGENTS.md", ".agents/skills/*/SKILL.md", ".codex/config.toml"],
     "AGENTS.md is the entry. MCP lives in config.toml, skills in .agents/skills.",
   ),
-  entry("gemini", "Gemini CLI", "gemini", ["AGENTS.md", "GEMINI.md"], "Pointer only."),
+  entry(
+    "gemini",
+    "Gemini CLI",
+    "gemini",
+    ["AGENTS.md", "GEMINI.md"],
+    "Pointer only. Press reports (9to5google, 2026-06-17) say Gemini CLI was shut down for consumer tiers on 2026-06-18 in favor of Antigravity CLI; not checked against a Google primary page.",
+  ),
   entry(
     "copilot",
     "GitHub Copilot",
@@ -79,7 +88,13 @@ export const PLATFORMS: Platform[] = [
   entry("cline", "Cline", "rules-file", ["AGENTS.md", ".clinerules"], "Pointer only."),
   entry("aider", "Aider", "aider", ["AGENTS.md", "CONVENTIONS.md"], "Pointer only."),
   entry("opencode", "OpenCode", "agents-md", ["AGENTS.md"], "Instructions file only."),
-  entry("antigravity", "Google Antigravity", "gemini", ["AGENTS.md", "GEMINI.md"], "Pointer only."),
+  entry(
+    "antigravity",
+    "Google Antigravity",
+    "gemini",
+    ["AGENTS.md", "GEMINI.md"],
+    "Pointer only. Reported to keep skills, hooks and subagents (secondary sources); its file paths are unverified.",
+  ),
   entry("devin", "Devin CLI", "agents-md", ["AGENTS.md"], "Instructions file only."),
   entry("factory", "Factory Droid", "agents-md", ["AGENTS.md"], "Instructions file only."),
   entry("kiro", "Kiro", "agents-md", ["AGENTS.md"], "Instructions file only."),
@@ -99,3 +114,21 @@ export const DEFAULT_PLATFORMS: PlatformId[] = [
   "gemini",
   "copilot",
 ];
+
+const CELL = {
+  emitted: "emitted",
+  supported: "supported, not emitted",
+  unverified: "unverified",
+} as const;
+
+/** The README's platform matrix. Generated, never hand-edited: a test fails
+ * when README.md drifts from this output. */
+export function platformMatrixMarkdown(): string {
+  const head = `| Platform | verified | ${CAPABILITIES.join(" | ")} |`;
+  const sep = `| --- | --- | ${CAPABILITIES.map(() => "---").join(" | ")} |`;
+  const rows = PLATFORMS.map(
+    (p) =>
+      `| ${p.name} | ${p.verifiedAt ?? "no"} | ${CAPABILITIES.map((c) => CELL[p.capabilities[c]]).join(" | ")} |`,
+  );
+  return [head, sep, ...rows].join("\n");
+}

@@ -14,6 +14,14 @@ export const copilotAdapter: PlatformAdapter = {
   ],
   supportsSubagents: false,
   supportsSkills: false,
+  capabilities: {
+    instructions: "emitted",
+    mcp: "emitted",
+    skills: "unverified",
+    subagents: "unverified",
+    hooks: "unverified",
+    plugin: "unverified",
+  },
   notes:
     ".github/copilot-instructions.md is the instructions file. Workspace MCP lives in " +
     ".vscode/mcp.json under a top-level servers key with a required type on every server " +

@@ -464,3 +464,33 @@ No new dependencies. No disproved-as-false suspects beyond #5's narrowed scope.
   subdir, node_modules skip, option errors, pack wiring) and cli/lib.test.mjs
   (configForStack without graphify, doctor on an outline pack). Not measured:
   how often agents use the map versus broad reads (needs Phase 2 telemetry).
+
+## 2026-10-09 — Phase 1.5 per-platform honesty
+
+- Each adapter now carries a `capabilities` matrix (instructions, mcp, skills,
+  subagents, hooks, plugin), each `emitted` | `supported` | `unverified`. Tests
+  (platforms.test.ts): no claim without `verifiedAt` and a source; boolean flags
+  consistent with the matrix; no skill/agent/hook/MCP file is generated for a
+  platform whose capability is not `emitted` (probed over all 15 platforms with
+  a full crew); README's matrix is generated (`platformMatrixMarkdown`) and a
+  test fails on drift. README's "and the rest of the AGENTS.md family" claim is
+  gone.
+- Result today: Claude Code emits everything but plugins (plugin = unverified
+  until the packaging investigation); Codex emits instructions/MCP/skills,
+  subagents documented but not emitted; Cursor and Copilot emit instructions
+  and MCP only; 11 platforms are unverified, so their pack is AGENTS.md plus at
+  most a pointer file. No new capability was promoted: the 2026-10-07 vendor
+  checks still stand and nothing newer was re-verified for them in this pass.
+  Not re-verifying them is a known gap, not an assertion that they are current.
+- Finding (secondary sources only): Gemini CLI was reported shut down for free,
+  Pro and Ultra users on 2026-06-18, replaced by the closed-source Antigravity
+  CLI (`agy`); sources: 9to5google 2026-06-17 quoting Google's announcement,
+  The Register via dealroom (May 2026), The New Stack. Enterprise users keep
+  Gemini CLI. I could not fetch Google's primary migration page, so the Gemini
+  and Antigravity adapters stay `unverified` and their notes say so. `gemini`
+  remains in DEFAULT_PLATFORMS (changing defaults is a user-visible decision;
+  flagged for the owner). Antigravity's config paths seen in third-party docs
+  (~/.gemini/antigravity/mcp_config.json) are NOT used.
+- Rejected: marking unverified platforms "unsupported" (also a claim we cannot
+  back); emitting Codex subagent files from the cross-tool `.agents/` layouts
+  seen in third-party repos (not vendor docs).
