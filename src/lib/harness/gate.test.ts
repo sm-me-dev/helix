@@ -63,7 +63,7 @@ describe("helix gate", () => {
   });
 
   it("fails with exit 1, shows only the failing step's capped tail", () => {
-    const noisy = `node -e "for(let i=0;i<500;i++)console.log('line '+i);process.exit(3)"`;
+    const noisy = `node -e "for(let i=0;i<500;i++)console.log('line '+i);process.exitCode=3"`;
     const dir = repo({ "package.json": pkg({ test: OK, lint: noisy }), "a.js": "1" });
     writeFileSync(join(dir, "a.js"), "2");
     const r = gate(dir);
