@@ -76,6 +76,14 @@ describe("configForStack", () => {
     assert.equal(c.graphFirst, false);
   });
 
+  it("falls back to the outline map when graphify is not installed, even on a big repo", () => {
+    const c = configForStack(["claude-code"], { fileCount: 500, uiPresent: false, graphifyAvailable: false });
+    assert.ok(!c.mcps.includes("graphify"));
+    assert.equal(c.graphFirst, false);
+    const kept = configForStack(["claude-code"], { fileCount: 500, uiPresent: false, graphifyAvailable: true });
+    assert.ok(kept.mcps.includes("graphify"));
+  });
+
   it("drops playwright without a UI, keeps it with one", () => {
     const noUi = configForStack(["claude-code"], { fileCount: 200, uiPresent: false });
     assert.ok(!noUi.mcps.includes("playwright"));
@@ -119,6 +127,14 @@ describe("doctorPack", () => {
     assert.ok(failures.some((f) => f.check === "config:.mcp.json"));
     assert.ok(failures.some((f) => f.check === "config:.vscode/mcp.json"));
     assert.ok(failures.some((f) => f.check === "agents-md"));
+  });
+
+  it("passes an outline-fallback pack with no graphify and flags a missing map file", () => {
+    const cfg = { ...defaultConfig(["claude-code"]), graphFirst: false, mcps: [] };
+    const files = new Map(generatePack(cfg).map((f) => [f.path, f.body]));
+    assert.deepEqual(doctorPack(files).filter((f) => f.check !== "mcp-measured"), []);
+    files.delete(".helix/map.mjs");
+    assert.ok(doctorPack(files).some((f) => f.check === "map"));
   });
 
   it("flags a pack whose AGENTS.md demands the gate but whose gate file is gone", () => {

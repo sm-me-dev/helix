@@ -2,6 +2,7 @@ import { ADAPTER_BY_ID } from "./adapters/index.ts";
 import { agentFile, skillFile } from "./adapters/parts.ts";
 import { CREW_BY_ID } from "./crew.ts";
 import { GATE_SOURCE } from "./gate.ts";
+import { MAP_SOURCE, REPO_MAP_PROVIDERS } from "./repomap.ts";
 import { MCP_BY_ID } from "./mcps.ts";
 import { PLATFORM_BY_ID } from "./platforms.ts";
 import { SKILL_BY_ID } from "./skills.ts";
@@ -36,9 +37,7 @@ function agentsMd(config: HarnessConfig): string {
 
   const mcpList = config.mcps.map((id) => MCP_BY_ID[id].name).join(", ");
 
-  const graph = config.graphFirst
-    ? `Graph first: query_graph, get_neighbors, shortest_path. Read a file only when the graph cites it.`
-    : `Prefer targeted reads over glob. Name files before opening them.`;
+  const graph = REPO_MAP_PROVIDERS[config.graphFirst ? "graphify" : "outline"].instruction;
 
   const fanout = config.defaultSingleAgent
     ? `Default to one agent when the change is local and files are in context.`
@@ -80,8 +79,7 @@ function agentsMd(config: HarnessConfig): string {
 ## Commands
 
 ${repoFacts}
-- Graph: query_graph ".." / get_neighbors NAME / shortest_path A B
-- MCPs: ${mcpList || "(none)"}
+${config.graphFirst ? `- Graph: query_graph ".." / get_neighbors NAME / shortest_path A B\n` : ""}- MCPs: ${mcpList || "(none)"}
 
 ## Crew
 
@@ -147,6 +145,9 @@ export function generatePack(config: HarnessConfig): PackFile[] {
   // The gate is platform-neutral: every agent, git hook and CI job runs the
   // same file. gate.json pins the detected commands so the gate never re-detects.
   files.push({ path: ".helix/gate.mjs", language: "javascript", body: GATE_SOURCE });
+  if (!config.graphFirst) {
+    files.push({ path: ".helix/map.mjs", language: "javascript", body: MAP_SOURCE });
+  }
   if (config.stack) {
     const pins: Record<string, string> = { packageManager: config.stack.packageManager };
     if (config.stack.testCommand) pins.test = config.stack.testCommand;

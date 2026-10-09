@@ -3,6 +3,7 @@
 import { DEFAULT_CREW } from "../src/lib/harness/crew.ts";
 import { generatePack } from "../src/lib/harness/generate.ts";
 import { DEFAULT_MCPS } from "../src/lib/harness/mcps.ts";
+import { selectRepoMap } from "../src/lib/harness/repomap.ts";
 import { DEFAULT_PLATFORMS } from "../src/lib/harness/platforms.ts";
 import { DEFAULT_SKILLS } from "../src/lib/harness/skills.ts";
 import { breakdown, formatTokens } from "../src/lib/harness/tokens.ts";
@@ -43,10 +44,16 @@ export type DetectedStack = {
  * (isolation/breadth is a per-task call, not an init-time one). */
 export function configForStack(
   platforms: PlatformId[],
-  facts: { fileCount: number; uiPresent: boolean },
+  facts: { fileCount: number; uiPresent: boolean; graphifyAvailable?: boolean },
 ): HarnessConfig {
   const config = defaultConfig(platforms);
-  if (facts.fileCount < 20) {
+  // Graphify when present and worthwhile, otherwise the built-in outline map.
+  if (
+    selectRepoMap({
+      graphifyAvailable: facts.graphifyAvailable ?? true,
+      fileCount: facts.fileCount,
+    }) === "outline"
+  ) {
     config.mcps = config.mcps.filter((id) => id !== "graphify");
     config.graphFirst = false;
   }
@@ -192,6 +199,12 @@ export function doctorPack(files: Map<string, string>): DoctorFailure[] {
         check: "agents-budget",
         detail: `AGENTS.md is ~${tokens} tokens (budget 500)`,
       });
+  }
+  if (agents?.includes(".helix/map.mjs") && !files.has(".helix/map.mjs")) {
+    failures.push({
+      check: "map",
+      detail: "AGENTS.md points at .helix/map.mjs but it is missing; re-run helix init",
+    });
   }
   if (agents?.includes(".helix/gate.mjs") && !files.has(".helix/gate.mjs")) {
     failures.push({
