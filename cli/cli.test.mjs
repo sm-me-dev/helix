@@ -86,6 +86,25 @@ describe("helix cli", () => {
     assert.ok(!existsSync(join(fresh, "README.md")));
   });
 
+  it("merges OpenCode MCP output into existing config even with --force", () => {
+    const dir = scratch();
+    const path = join(dir, "opencode.json");
+    writeFileSync(
+      path,
+      JSON.stringify({
+        "$schema": "https://opencode.ai/config.json",
+        theme: "nord",
+        mcp: { internal: { type: "local", command: ["node", "internal.mjs"] } },
+      }),
+    );
+    const r = helix(dir, ["init", "--platform", "opencode", "--force"]);
+    assert.equal(r.status, 0, r.stderr);
+    const merged = JSON.parse(readFileSync(path, "utf8"));
+    assert.equal(merged.theme, "nord");
+    assert.deepEqual(merged.mcp.internal, { type: "local", command: ["node", "internal.mjs"] });
+    assert.equal(merged.mcp.context7.type, "remote");
+  });
+
   it("unknown command exits 2 with usage", () => {
     const r = helix(scratch(), ["bogus"]);
     assert.equal(r.status, 2);
