@@ -37,11 +37,9 @@ function emittedCrew(config: HarnessConfig) {
   return [...config.crew];
 }
 
-function buildChecks(
-  config: HarnessConfig,
-  parts: { agentsMd: number },
-  unmeasuredMcps: string[],
-): TokenCheck[] {
+// Unmeasured MCP schemas are NOT a check: they are reported as labeled estimates
+// (see `estimates` in breakdown) so measure and doctor agree and neither fails on a disclosure.
+function buildChecks(config: HarnessConfig, parts: { agentsMd: number }): TokenCheck[] {
   const pack = generatePack(config);
   const paths = pack.map((f) => f.path);
   const settings = pack.find((f) => f.path === ".claude/settings.json");
@@ -84,14 +82,6 @@ function buildChecks(
       label: `at most 5 MCP servers (now ${config.mcps.length})`,
       pass: config.mcps.length <= 5,
     },
-    {
-      id: "mcp-measured",
-      label:
-        unmeasuredMcps.length === 0
-          ? "every enabled MCP schema measured via tools/list"
-          : `unmeasured MCP schemas: ${unmeasuredMcps.join(", ")}`,
-      pass: unmeasuredMcps.length === 0,
-    },
   ];
 }
 
@@ -126,7 +116,7 @@ export function breakdown(config: HarnessConfig): TokenBreakdown {
   }
   estimates.push("naive baseline: representative fixtures (fixtures/baseline/*), not a live host");
 
-  const checks = buildChecks(config, { agentsMd: agentsMdTokens }, unmeasured);
+  const checks = buildChecks(config, { agentsMd: agentsMdTokens });
   const passed = checks.filter((c) => c.pass).length;
   const leanScore = Math.round((100 * passed) / checks.length);
 

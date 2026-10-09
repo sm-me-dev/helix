@@ -557,3 +557,17 @@ run); detecting only from PATH (machine-dependent, wrong for team repos).
 Roles: model subagents exist for context, plan, build and verify; testing is
 the deterministic `helix gate` (zero tokens), not a model role. Unverified:
 whether the role split lowers total tokens on large repos.
+
+## 2026-10-09 — Phase A: measure and doctor agree on estimates
+
+Reproduced on a scratch repo (`helix init --yes`, then `doctor` and `measure`):
+`doctor` printed "healthy" and labeled context7 "(estimate)", while `measure`
+printed `FAIL unmeasured MCP schemas: context7` and a lean score of 80.
+context7 is a remote server that `scripts/measure-mcp.mjs` cannot launch
+(streamable-HTTP is out of scope there), so it cannot be measured by that
+script today. The `mcp-measured` check was removed from the lean checks: an
+unmeasured schema is reported as a labeled estimate (the `estimate:` line in
+`measure`, `(estimate)` in `doctor`), not a failure. Lean score is now 4 checks.
+Rejected: keeping the check and making `doctor` fail on it (fails every default
+pack for a disclosed estimate); hardcoding a measured context7 number (never
+measured, so it would be invented). Test: `tokens.test.ts`.
