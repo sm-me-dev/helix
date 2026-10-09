@@ -290,3 +290,31 @@ export function codexToml(ids: McpId[]): string {
   }
   return lines.join("\n") + "\n";
 }
+
+
+/** OpenCode shape (opencode.json): local command arrays and remote URLs under mcp. */
+export function openCodeMcpJson(ids: McpId[]): string {
+  const out: Record<string, unknown> = {};
+  for (const id of ids) {
+    for (const [name, server] of Object.entries(MCP_BY_ID[id].servers)) {
+      out[name] =
+        server.kind === "stdio"
+          ? {
+              type: "local",
+              command: [server.command, ...server.args],
+              enabled: true,
+            }
+          : {
+              type: "remote",
+              url: server.url,
+              enabled: true,
+              ...(server.headers ? { headers: server.headers } : {}),
+            };
+    }
+  }
+  return JSON.stringify(
+    { "$schema": "https://opencode.ai/config.json", mcp: out },
+    null,
+    2,
+  ) + "\n";
+}

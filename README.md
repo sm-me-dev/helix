@@ -19,14 +19,16 @@ git clone <this-repo> && cd helix && npm ci
 commands, existing agent files), then writes the pack. It never overwrites an
 existing file without showing a diff and asking — pass `--force` to skip the
 prompt. Requires Node 22.6+ (type stripping, no build step).
+When an `opencode.json` already exists, the CLI merges MCP entries into it and
+preserves unrelated settings (existing same-name MCP definitions take precedence).
 
 ## What is verified and what is not
 
-- **Verified 2026-10-07 against vendor docs**: Claude hook protocol (stdin
-  JSON, exit codes), subagent frontmatter (`tools`, `model`, delegating
-  `description`), skill paths, MCP config keys per platform (VS Code
-  `servers`+`type`, Claude/Cursor `mcpServers`, Codex `config.toml`), Cursor
-  rules/MCP, Codex skills. Each catalog entry carries `source` + `verifiedAt`.
+- **Verified against vendor docs (dates per platform matrix)**: Claude hooks,
+  subagents and skills; Cursor rules, native subagents, skills and MCP; Codex
+  agents, skills, hooks and MCP; OpenCode subagents, skills and MCP; Antigravity
+  subagents, skills and MCP; VS Code MCP schema. Each catalog entry carries
+  `source` + `verifiedAt`.
 - **Measured, not invented**: token counts use o200k_base BPE (an
   approximation, labeled everywhere); MCP schemas come from live `tools/list`
   captures (`scripts/measure-mcp.mjs`) or are flagged as estimates; practice
@@ -47,23 +49,23 @@ primary page was checked, so those paths stay unverified.
 
 <!-- matrix:start -->
 
-| Platform           | verified   | instructions | mcp        | skills     | subagents  | hooks                  | plugin     |
-| ------------------ | ---------- | ------------ | ---------- | ---------- | ---------- | ---------------------- | ---------- |
-| Claude Code        | 2026-10-07 | emitted      | emitted    | emitted    | emitted    | emitted                | unverified |
-| Cursor             | 2026-10-07 | emitted      | emitted    | unverified | unverified | unverified             | unverified |
-| Codex              | 2026-10-09 | emitted      | emitted    | emitted    | emitted    | emitted                | unverified |
-| Gemini CLI         | no         | unverified   | unverified | unverified | unverified | unverified             | unverified |
-| GitHub Copilot     | 2026-10-07 | emitted      | emitted    | unverified | unverified | unverified             | unverified |
-| Windsurf           | no         | unverified   | unverified | unverified | unverified | unverified             | unverified |
-| Cline              | no         | unverified   | unverified | unverified | unverified | unverified             | unverified |
-| Aider              | no         | unverified   | unverified | unverified | unverified | unverified             | unverified |
-| OpenCode           | no         | unverified   | unverified | unverified | unverified | unverified             | unverified |
-| Google Antigravity | 2026-10-09 | emitted      | emitted    | emitted    | emitted    | supported, not emitted | unverified |
-| Devin CLI          | no         | unverified   | unverified | unverified | unverified | unverified             | unverified |
-| Factory Droid      | no         | unverified   | unverified | unverified | unverified | unverified             | unverified |
-| Kiro               | no         | unverified   | unverified | unverified | unverified | unverified             | unverified |
-| Amp                | no         | unverified   | unverified | unverified | unverified | unverified             | unverified |
-| Kilo Code          | no         | unverified   | unverified | unverified | unverified | unverified             | unverified |
+| Platform | verified | instructions | mcp | skills | subagents | hooks | plugin |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Claude Code | 2026-10-07 | emitted | emitted | emitted | emitted | emitted | unverified |
+| Cursor | 2026-10-09 | emitted | emitted | emitted | emitted | unverified | unverified |
+| Codex | 2026-10-09 | emitted | emitted | emitted | emitted | emitted | unverified |
+| Gemini CLI | no | unverified | unverified | unverified | unverified | unverified | unverified |
+| GitHub Copilot | 2026-10-07 | emitted | emitted | unverified | unverified | unverified | unverified |
+| Windsurf | no | unverified | unverified | unverified | unverified | unverified | unverified |
+| Cline | no | unverified | unverified | unverified | unverified | unverified | unverified |
+| Aider | no | unverified | unverified | unverified | unverified | unverified | unverified |
+| OpenCode | 2026-10-09 | emitted | emitted | emitted | emitted | unverified | unverified |
+| Google Antigravity | 2026-10-09 | emitted | emitted | emitted | emitted | supported, not emitted | unverified |
+| Devin CLI | no | unverified | unverified | unverified | unverified | unverified | unverified |
+| Factory Droid | no | unverified | unverified | unverified | unverified | unverified | unverified |
+| Kiro | no | unverified | unverified | unverified | unverified | unverified | unverified |
+| Amp | no | unverified | unverified | unverified | unverified | unverified | unverified |
+| Kilo Code | no | unverified | unverified | unverified | unverified | unverified | unverified |
 
 <!-- matrix:end -->
 

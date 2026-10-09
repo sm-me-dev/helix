@@ -866,3 +866,33 @@ cache tokens).
   including one red-then-green on the compile cap) plus CLI end-to-end on
   scratch dirs (init→capture→accept→2 confirms→active→compile 10 tokens→decay
   demotes). `npm run lint`, typecheck, `npm test` (255 + 157) green.
+
+## 2026-10-09 — Native Cursor and OpenCode adapters
+
+- Added native Cursor custom-agent files under `.cursor/agents/*.md`, lazy
+  skills under `.cursor/skills/<name>/SKILL.md`, and refreshed the capability
+  matrix from vendor docs. Cursor subagent models inherit the selected parent
+  model; pinning model IDs would age badly and can be unavailable by plan.
+- Added an OpenCode adapter for `.opencode/agents/*.md`,
+  `.opencode/skills/<name>/SKILL.md`, and the native `opencode.json` `mcp`
+  schema. The CLI merges Helix MCP entries into an existing OpenCode JSON file,
+  preserves unrelated settings, and keeps same-name existing MCP definitions.
+  A pack downloaded outside the CLI still contains a fragment that needs merging.
+- Official sources checked 2026-10-09:
+  - https://cursor.com/docs/subagents
+  - https://cursor.com/help/customization/skills
+  - https://cursor.com/docs/mcp
+  - https://opencode.ai/docs/agents/
+  - https://opencode.ai/docs/skills/
+  - https://opencode.ai/docs/mcp-servers/
+  - https://opencode.ai/docs/rules/
+- Added adapter tests for emitted paths, read-only role metadata, and OpenCode
+  local/remote MCP serialization. Tests have not been executed locally through
+  the connected GitHub file workflow; CI must be the final arbiter.
+- Evaluation caveat: the committed five-run large-fixture report shows Helix
+  reducing tokens on call-chain and cross-module tasks, but increasing tokens
+  on trace-bug despite equal pass counts (5/5 per arm). Do not present token
+  savings as a universal guarantee; repeat across agents and task families.
+- Alternatives rejected: making all non-trivial work multi-agent (higher cost
+  without proven benefit); adding vendor model IDs for Cursor (less portable);
+  replacing an existing full OpenCode config with a generated partial config.

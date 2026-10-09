@@ -23,7 +23,7 @@ const runTests = (dir) => {
   );
 };
 const count = (out, label) =>
-  Number(new RegExp(`ℹ ${label} (\\d+)`).exec(out)?.[1] ?? NaN);
+  Number(new RegExp(`(?:ℹ |# )${label} (\\d+)`).exec(out)?.[1] ?? NaN);
 
 test("same seed gives byte-identical output; a new seed differs", () => {
   const a = tmp();
