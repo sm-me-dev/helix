@@ -54,7 +54,7 @@ export const PLATFORMS: Platform[] = [
     "cursor",
     "Cursor",
     "cursor",
-    ["AGENTS.md", ".cursor/rules/helix.mdc", ".cursor/mcp.json"],
+    ["AGENTS.md", ".cursor/rules/helix.mdc", ".cursor/agents/*.md", ".cursor/skills/*/SKILL.md", ".cursor/mcp.json"],
     "Rules plus project MCP. Agent reads AGENTS.md natively.",
   ),
   entry(
@@ -94,7 +94,7 @@ export const PLATFORMS: Platform[] = [
   ),
   entry("cline", "Cline", "rules-file", ["AGENTS.md", ".clinerules"], "Pointer only."),
   entry("aider", "Aider", "aider", ["AGENTS.md", "CONVENTIONS.md"], "Pointer only."),
-  entry("opencode", "OpenCode", "agents-md", ["AGENTS.md"], "Instructions file only."),
+  entry("opencode", "OpenCode", "agents-md", ["AGENTS.md", ".opencode/agents/*.md", ".opencode/skills/*/SKILL.md", "opencode.json"], "Native project agents, skills and MCP config."),
   entry(
     "antigravity",
     "Google Antigravity",

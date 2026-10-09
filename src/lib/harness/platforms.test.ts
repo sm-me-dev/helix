@@ -44,7 +44,7 @@ describe("platform capability matrix", () => {
       skills: /SKILL\.md$/,
       subagents: /(^|\/)agents\/[^/]+\.md$/,
       hooks: /(^\.helix\/hooks\/|\.claude\/settings\.json$)/,
-      mcp: /(mcp\.json|config\.toml)$/,
+      mcp: /(mcp\.json|config\.toml|opencode\.json)$/,
     };
     for (const p of PLATFORMS) {
       const paths = generatePack(cfg(p.id)).map((f) => f.path);
@@ -77,4 +77,44 @@ describe("platform capability matrix", () => {
         );
     assert.deepEqual(norm(m[1]), norm(platformMatrixMarkdown()));
   });
+
+  it("emits native Cursor and OpenCode agents, skills, and valid MCP shapes", () => {
+    const cursor = generatePack(cfg("cursor"));
+    const cursorPaths = cursor.map((file) => file.path);
+    assert.ok(cursorPaths.includes(".cursor/agents/scout.md"));
+    assert.ok(cursorPaths.includes(".cursor/skills/graph-first/SKILL.md"));
+    assert.match(
+      cursor.find((file) => file.path === ".cursor/agents/reviewer.md")?.body ?? "",
+      /readonly: true/,
+    );
+    assert.match(
+      cursor.find((file) => file.path === ".cursor/agents/builder.md")?.body ?? "",
+      /readonly: false/,
+    );
+
+    const opencode = generatePack(cfg("opencode"));
+    const openCodePaths = opencode.map((file) => file.path);
+    assert.ok(openCodePaths.includes(".opencode/agents/scout.md"));
+    assert.ok(openCodePaths.includes(".opencode/skills/graph-first/SKILL.md"));
+    assert.match(
+      opencode.find((file) => file.path === ".opencode/agents/scout.md")?.body ?? "",
+      /mode: subagent[\s\S]*edit: deny/,
+    );
+
+    const mcpFile = opencode.find((file) => file.path === "opencode.json");
+    assert.ok(mcpFile);
+    const parsed = JSON.parse(mcpFile.body) as {
+      "$schema": string;
+      mcp: Record<string, { type: string; command?: string[]; url?: string; enabled?: boolean }>;
+    };
+    assert.equal(parsed["$schema"], "https://opencode.ai/config.json");
+    assert.deepEqual(parsed.mcp.graphify.command?.slice(0, 3), [
+      "uvx",
+      "--from",
+      "graphifyy[mcp]==0.9.82",
+    ]);
+    assert.equal(parsed.mcp.context7.type, "remote");
+    assert.equal(parsed.mcp.context7.enabled, true);
+  });
+
 });
