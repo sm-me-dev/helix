@@ -801,3 +801,30 @@ cache tokens).
   launched 2026-10-09 ~11:21 UTC as background pid; results land in
   `evals/results/`. Pilot cells (trace-bug none, 2/2 pass) are committed as
   measured pilot data, not as the eval result.
+
+## 2026-10-09 — Phase D.3 large-fixture result (paired, n=5, opencode free tier)
+
+- Script `evals/run.mjs` (`--fixture large`), tokens from transcripts
+  (`cli/report.ts` parsers), method+date in
+  `evals/results/2026-10-09T11-24-31-opencode.{json,md}`. 30/30 cells pass
+  (both arms 15/15 — ceiling, no discrimination on pass rate). Subagent tokens
+  are 0 in all 30 runs: the opencode agent never spawned model subagents in
+  either arm, so the with/without-subagents comparison is vacuous here.
+- Uncached tokens (primary metric), mean ± sd over 5 runs:
+  call-chain none 28,293±3,007 vs helix 23,410±7,032 (-17%, t≈1.4);
+  cross-module none 22,170±10,179 vs helix 17,595±7,646 (-21%, t≈0.8, one none
+  outlier at 38,867); trace-bug none 28,034±1,357 vs helix 31,128±5,933 (+11%,
+  t≈1.1). No cell is significant at n=5. Overall uncached mean -8.1% for helix;
+  total tokens (incl. cache reads) +2.0% for helix (trace-bug total +35%:
+  the helix arm re-reads more). Pass rate per 1k uncached favors helix 2 of 3
+  cells (0.043 vs 0.035; 0.057 vs 0.045; 0.032 vs 0.036).
+- Verdict under the decision rule: pass tied at ceiling with a small uncached
+  token cut overall, so no redesign is triggered — but this is NOT a
+  demonstrated win. The tasks are too easy to separate the arms (30/30 pass),
+  variance overlaps everywhere, and total tokens are flat. Stated plainly: the
+  pack still does not beat the no-harness baseline convincingly.
+- Consequences, all recorded as open: (1) the small-repo lean threshold
+  (Phase A.2) cannot be derived from this data; behavior stays unchanged.
+  (2) No tuning was done (no failures to tune on) and the held-out set was
+  never run — it stays unspent. (3) Harder tasks (redder failures, tighter
+  pass criteria) or larger n are needed before any saving may be claimed.
