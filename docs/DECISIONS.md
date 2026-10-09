@@ -668,3 +668,41 @@ cell (bug-fix, none arm, pass): transcript total 322,622, uncached 27,724.
 Rejected: summing step-finish events (equals the message sum, but a second source
 invites double counting); using agent-reported totals for Claude Code (excludes
 cache tokens).
+
+## 2026-10-09 — Phase C.3 Claude Code plugin packaging (investigation only)
+
+- Source (vendor docs, fetched 2026-10-09, verifiedAt 2026-10-09):
+  code.claude.com/docs/en/plugins-reference and /plugin-marketplaces.
+- Verified: a plugin is a directory with optional `.claude-plugin/plugin.json`
+  (only `name` required, kebab-case). Components: `skills/`, `agents/`,
+  `commands/`, `hooks/hooks.json`, `.mcp.json`, `.lsp.json`, `bin/` (put on the
+  Bash tool PATH while enabled), `settings.json` (only `agent` and
+  `subagentStatusLine` take effect). Components are namespaced
+  (`helix:reviewer`). `${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PLUGIN_DATA}` resolve
+  in hook commands and MCP configs. Setting `version` pins users until it
+  changes. A marketplace is a git repo with `.claude-plugin/marketplace.json`;
+  plugin sources can be a relative path, `github`, `git-subdir`, `url`,
+  `archive`, `npm` or `command`. `claude plugin validate` checks manifests.
+  Plugin names starting with `claude-` or `anthropic-` are reserved (`helix`
+  is fine).
+- Verified limitation that shapes the design: a `CLAUDE.md` at the plugin root
+  is NOT loaded as context. A plugin therefore cannot ship the always-on
+  AGENTS.md block. Repo facts (gate command, layout, three rules) must still
+  live in the repo's own instructions file; the plugin can carry the
+  versioned, repo-independent parts: skills, subagents, hooks, MCP config and a
+  `helix` binary in `bin/`.
+- Consequence: packaging is a partial win only. It removes copied
+  skills/agents/hooks (versioned updates, one place to fix a hook bug) but
+  `helix init` still writes the small repo-specific instructions file.
+- NOT verified (not read): namespacing effect on subagent names used in our
+  AGENTS.md text (we reference `scout`, a plugin would expose `helix:scout`),
+  and behavior of hooks from plugins versus `.claude/settings.json` ordering.
+  Both must be tested against a real `claude` install before shipping.
+- Decision: do not implement yet. Next step is a failing test for
+  `helix plugin` that emits `plugin.json`, `skills/`, `agents/`,
+  `hooks/hooks.json`, `.mcp.json` and a marketplace entry from the existing
+  generator, plus `claude plugin validate` run in a scratch dir if `claude` is
+  on PATH. Equivalents for other platforms stay `unverified`; the capability
+  matrix keeps `plugin: unverified` for all but Claude Code.
+- Rejected: shipping AGENTS.md via the plugin (not loaded); npm-only
+  distribution (adds a publish step and no benefit over a git marketplace).
