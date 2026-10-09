@@ -3,7 +3,6 @@ import { useState } from "react";
 import { Shell } from "@/components/shell";
 import { Term } from "@/components/term";
 import { Switch } from "@/components/ui/switch";
-import { LSPS } from "@/lib/harness/lsps";
 import { MCPS, mcpSchemaTokens } from "@/lib/harness/mcps";
 import { SKILLS } from "@/lib/harness/skills";
 import { breakdown, formatTokens, skillTokens } from "@/lib/harness/tokens";
@@ -12,7 +11,7 @@ import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/stack")({ component: StackPage });
 
-const TABS = ["Skills", "MCP", "LSP"] as const;
+const TABS = ["Skills", "MCP"] as const;
 
 function StackPage() {
   const [tab, setTab] = useState<(typeof TABS)[number]>("MCP");
@@ -34,7 +33,7 @@ function StackPage() {
           </p>
         </div>
         <p className="font-mono text-sm tabular text-steel">
-          schemas {formatTokens(b.mcpSchemas + b.lspSchemas)}{" "}
+          schemas {formatTokens(b.mcpSchemas)}{" "}
           <span className="text-muted-foreground">
             <Term definition="Tokens loaded on every turn, before the task is known. Lower is cheaper.">
               always-on
@@ -129,35 +128,6 @@ function StackPage() {
                     checked={on}
                     onCheckedChange={() => store.toggleMcp(m.id)}
                     aria-label={m.name}
-                  />
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      {tab === "LSP" && (
-        <ul className="mt-6 grid gap-3">
-          {LSPS.map((l) => {
-            const on = store.lsps.includes(l.id);
-            return (
-              <li
-                key={l.id}
-                className="rounded-2xl bg-card p-4 shadow-[var(--shadow-border)] sm:p-5"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h2 className="font-medium">{l.name}</h2>
-                    <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{l.job}</p>
-                    <p className="mt-2 font-mono text-[11px] text-steel">
-                      {l.languages.join(" · ")} · {l.schemaTokens} tokens (estimate)
-                    </p>
-                  </div>
-                  <Switch
-                    checked={on}
-                    onCheckedChange={() => store.toggleLsp(l.id)}
-                    aria-label={l.name}
                   />
                 </div>
               </li>

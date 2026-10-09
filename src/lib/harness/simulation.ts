@@ -1,7 +1,6 @@
 import type { CrewId, HarnessConfig, SimEvent } from "./types.ts";
 import { breakdown } from "./tokens.ts";
 import { DEFAULT_CREW } from "./crew.ts";
-import { DEFAULT_LSPS } from "./lsps.ts";
 import { DEFAULT_MCPS } from "./mcps.ts";
 import { DEFAULT_PLATFORMS } from "./platforms.ts";
 import { DEFAULT_SKILLS } from "./skills.ts";
@@ -188,7 +187,6 @@ function baselineAlwaysOn(): number {
       crew: DEFAULT_CREW,
       skills: DEFAULT_SKILLS,
       mcps: DEFAULT_MCPS,
-      lsps: DEFAULT_LSPS,
       platforms: DEFAULT_PLATFORMS,
       graphFirst: true,
       progressiveDisclosure: true,

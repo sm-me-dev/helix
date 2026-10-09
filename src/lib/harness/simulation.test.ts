@@ -2,7 +2,6 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { adaptSimEvents, pickTier, SIM_DURATION, SIM_EVENTS, SAMPLE_ISSUE } from "./simulation.ts";
 import { DEFAULT_CREW } from "./crew.ts";
-import { DEFAULT_LSPS } from "./lsps.ts";
 import { DEFAULT_MCPS } from "./mcps.ts";
 import { DEFAULT_PLATFORMS } from "./platforms.ts";
 import { DEFAULT_SKILLS } from "./skills.ts";
@@ -82,7 +81,6 @@ const FULL: HarnessConfig = {
   crew: ["scout", "architect", "builder", "reviewer"],
   skills: [],
   mcps: [],
-  lsps: [],
   platforms: [],
   graphFirst: true,
   progressiveDisclosure: true,
@@ -96,7 +94,6 @@ describe("adaptSimEvents", () => {
       crew: DEFAULT_CREW,
       skills: DEFAULT_SKILLS,
       mcps: DEFAULT_MCPS,
-      lsps: DEFAULT_LSPS,
       platforms: DEFAULT_PLATFORMS,
       graphFirst: true,
       progressiveDisclosure: true,

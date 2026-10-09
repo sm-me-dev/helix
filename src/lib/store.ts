@@ -1,17 +1,15 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { CREW_BY_ID, DEFAULT_CREW } from "./harness/crew.ts";
-import { DEFAULT_LSPS, LSP_BY_ID } from "./harness/lsps.ts";
 import { DEFAULT_MCPS, MCP_BY_ID } from "./harness/mcps.ts";
 import { DEFAULT_PLATFORMS, PLATFORM_BY_ID } from "./harness/platforms.ts";
 import { DEFAULT_SKILLS, SKILL_BY_ID } from "./harness/skills.ts";
-import type { CrewId, HarnessConfig, LspId, McpId, PlatformId, SkillId } from "./harness/types";
+import type { CrewId, HarnessConfig, McpId, PlatformId, SkillId } from "./harness/types";
 
 type HarnessStore = HarnessConfig & {
   toggleCrew: (id: CrewId) => void;
   toggleSkill: (id: SkillId) => void;
   toggleMcp: (id: McpId) => void;
-  toggleLsp: (id: LspId) => void;
   togglePlatform: (id: PlatformId) => void;
   setFlag: (
     key: "graphFirst" | "progressiveDisclosure" | "defaultSingleAgent" | "hooksEnabled",
@@ -24,7 +22,6 @@ const DEFAULTS: HarnessConfig = {
   crew: DEFAULT_CREW,
   skills: DEFAULT_SKILLS,
   mcps: DEFAULT_MCPS,
-  lsps: DEFAULT_LSPS,
   platforms: DEFAULT_PLATFORMS,
   graphFirst: true,
   progressiveDisclosure: true,
@@ -70,7 +67,6 @@ function sanitizePersisted(raw: unknown): HarnessConfig {
     crew: knownIds<CrewId>(c.crew, CREW_BY_ID),
     skills: knownIds<SkillId>(c.skills, SKILL_BY_ID),
     mcps: knownIds<McpId>(c.mcps, MCP_BY_ID),
-    lsps: knownIds<LspId>(c.lsps, LSP_BY_ID),
     platforms: knownIds<PlatformId>(c.platforms, PLATFORM_BY_ID),
     graphFirst: c.graphFirst !== false,
     progressiveDisclosure: c.progressiveDisclosure !== false,
@@ -100,7 +96,6 @@ export const useHarness = create<HarnessStore>()(
       },
       toggleSkill: (id) => set({ skills: toggleIn(get().skills, id) }),
       toggleMcp: (id) => set({ mcps: toggleIn(get().mcps, id) }),
-      toggleLsp: (id) => set({ lsps: toggleIn(get().lsps, id) }),
       togglePlatform: (id) => set({ platforms: toggleIn(get().platforms, id) }),
       setFlag: (key, value) => set({ [key]: value }),
       reset: () => set(DEFAULTS),
@@ -122,7 +117,6 @@ export function selectConfig(s: HarnessStore): HarnessConfig {
     crew: s.crew,
     skills: s.skills,
     mcps: s.mcps,
-    lsps: s.lsps,
     platforms: s.platforms,
     graphFirst: s.graphFirst,
     progressiveDisclosure: s.progressiveDisclosure,

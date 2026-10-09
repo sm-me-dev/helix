@@ -115,7 +115,6 @@ function helixFilesFor(agent) {
     crew: ["scout", "architect", "builder", "reviewer"],
     skills: ["graph-first", "clarify-brief", "decision-table", "scoped-diff", "prove-behavior", "independent-audit", "lean-handoff", "hook-guards"],
     mcps: [],
-    lsps: [],
     platforms: [platform],
     graphFirst: true,
     progressiveDisclosure: true,
