@@ -294,3 +294,63 @@ Token/method rule: anything shown as a measurement must name the script + date.
   `evals/results/` report is therefore absent — the one Definition-of-Done
   item not met. Exact command to produce it (where credentials exist) is in
   evals/README.md. No quota was spent from this environment.
+
+## 2026-10-09 — Phase 0 correctness (audit-driven, all 10 suspects resolved)
+
+Vendor sources re-fetched 2026-10-09: https://code.claude.com/docs/en/subagents,
+/hooks, /permissions. Prior 2026-10-07 hook/MCP claims re-verified against the
+same pages (behavior unchanged; PreToolUse additionalContext + Stop exit-2 +
+stop_hook_active semantics confirmed).
+
+1. Subagent `tools:` — CONFIRMED. `graphify.query_graph` dot-notation appears
+   nowhere in the docs; MCP tools are `mcp__<server>__<tool>` (exact names) or
+   `mcp__<server>` / `mcp__<server>__*` (whole server). Scout/Architect/Reviewer
+   now use exact names. Rejected: server-level `mcp__graphify` for Scout (too
+   broad — Scout needs 4 read tools, not PR triage).
+2. `graphify.explain` — CONFIRMED, and worse than suspected: capture has 10
+   tools, catalog listed 8 with 1 phantom (explain) and missed get_community,
+   god_nodes, graph_stats. Catalog now equals the capture; playwright/serena/
+   chrome-devtools subsets also corrected to real names (e.g. `rename` ->
+   `rename_symbol`). Guard: `tool-surface.test.ts` fails on any catalog/crew
+   tool missing from `fixtures/captures/*.tools.json`.
+3. prefer-graph stderr — CONFIRMED. "Stderr from a hook that exits 0 goes to
+   the debug log only, never the transcript, and Claude never sees it."
+   Advisory hints now travel as `hookSpecificOutput.additionalContext` JSON on
+   stdout. Stop-hook exit-2 + stderr was already the documented channel.
+4. test-on-stop — CONFIRMED both halves. Honors `stop_hook_active` (blocks at
+   most once per turn; pre-existing failures can't loop) and scans only edits
+   since the last `user` transcript line instead of the last 4000 lines.
+5. `Read(.env)` vs Bash — PARTLY DISPROVED. Recognized Bash file commands
+   (cat/head/tail/sed/tee) and redirects ARE covered by Read/Edit denies, and
+   Grep/Glob get best-effort coverage; the real gap was NotebookEdit (needs an
+   Edit deny — added for .env/.env.*/secrets). Uncoverable by rule syntax:
+   subprocess reads (script opening files itself) and `grep -r .` from the
+   dir — documented in the pack README, OS sandbox is the only enforcement.
+6. Pins — CONFIRMED. graphifyy[mcp] pinned to ==0.9.82 (PyPI, 2026-10-09);
+   context7/github/sentry/linear endpoints probed live (HTTP 406/401 to
+   unauthenticated initialize — alive, tool lists not enumerated, stamped as
+   exactly that). Doctor now flags unpinned `uvx --from` specs.
+7. detectStack — CONFIRMED. `helix init` printed the stack and threw it away;
+   AGENTS.md now carries exact test/lint/format commands when init detected
+   them, generic advice otherwise. File was already 43 lines, now 37–38 (≤40
+   guard in generate.test.ts, measured on the full 4-role crew). Trimmed the
+   Always-on tagline and merged budget bullets; dropped the standalone
+   Reviewer-isolation line (kept in the role's own file where it loads).
+8. LSP toggle — CONFIRMED cosmetic: no adapter ever emitted LSP config, and no
+   platform reads an LSP pack file (editor-level; Serena MCP already fronts
+   language servers and IS emitted). Removed end-to-end: catalog, config
+   field, token math, UI tab, CLI defaults. Old persisted configs stay safe
+   (sanitizePersisted ignores the dropped key). Rejected: keeping it as
+   "advisory" (a toggle that changes nothing is the defect).
+9. packaging/CI — CONFIRMED. engines >=22.6 (CLI shebang needs
+   --experimental-strip-types), typescript moved to devDependencies,
+   actions/checkout + setup-node SHA-pinned (SHAs resolved via git ls-remote
+   2026-10-09, Dependabot keeps them fresh). Guard: scripts/repo-hygiene.test.mjs.
+10. schemaTokens — CONFIRMED, 1.4–9.5x low (serena 860 vs 8204, devtools 1100
+    vs 5914, playwright 1320 vs 4413, graphify 980 vs 1336; measured 2026-10-07
+    via scripts/measure-mcp.mjs). Catalog fallbacks now equal the measurements
+    (live value still wins when fresh); guard asserts catalog within 2x of any
+    fresh measurement. Unmeasured remotes (github/context7/sentry/linear) stay
+    flagged estimates.
+
+No new dependencies. No disproved-as-false suspects beyond #5's narrowed scope.
