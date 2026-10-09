@@ -2,9 +2,19 @@
 // helix — init, doctor, measure, export, eval for the Helix harness pack.
 // Requires Node 22.6+ (type stripping). No dependencies beyond the repo.
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  accessSync,
+  constants,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { GATE_SOURCE } from "../src/lib/harness/gate.ts";
 import { generatePack } from "../src/lib/harness/generate.ts";
@@ -14,6 +24,7 @@ import {
   defaultConfig,
   detectStack,
   diffLines,
+  detectPlatforms,
   doctorPack,
   graphFreshness,
   mcpSummary,
@@ -24,7 +35,7 @@ import {
 
 const USAGE = `helix — AI coding harness pack manager
 
-  helix init [dir] [--platform a,b] [--force]   detect the stack, write the pack
+  helix init [dir] [--platform a,b|all] [--force]  detect stack and agents, write the pack
   helix doctor [dir]                            check the installed harness
   helix measure [dir]                           print the real token breakdown
   helix gate [dir] [--all] [--dry] [--json]     secrets, lint, typecheck, affected tests
@@ -35,7 +46,15 @@ const USAGE = `helix — AI coding harness pack manager
 
 function parseArgs(argv) {
   const [cmd, ...rest] = argv;
-  const opts = { dir: ".", platforms: null, force: false, help: false, platform: null, evalArgs: [], gateArgs: [] };
+  const opts = {
+    dir: ".",
+    platforms: null,
+    force: false,
+    help: false,
+    platform: null,
+    evalArgs: [],
+    gateArgs: [],
+  };
   const positional = [];
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
@@ -84,8 +103,7 @@ function walkFiles(dir, out = new Map(), root = dir) {
   return out;
 }
 
-function detectDir(dir) {
-  const files = walkFiles(dir);
+function detectDir(dir, files = walkFiles(dir)) {
   const names = new Set(files.keys());
   const pkgRaw = files.get("package.json");
   return detectStack({
@@ -112,15 +130,44 @@ async function confirm(question) {
   });
 }
 
+function onPath(bin) {
+  return (process.env.PATH ?? "").split(delimiter).some((d) => {
+    try {
+      accessSync(join(d, bin), constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+}
+
 async function cmdInit(opts) {
   const dir = resolve(opts.dir);
-  const stack = detectDir(dir);
+  const files = walkFiles(dir);
+  const stack = detectDir(dir, files);
   console.log(`stack: ${stack.language} · ${stack.packageManager}`);
-  console.log(`test: ${stack.testCommand ?? "(none detected)"} · lint: ${stack.lintCommand ?? "(none)"}`);
-  const platforms = opts.platforms ?? [...DEFAULT_PLATFORMS];
-  const graphifyAvailable = spawnSync("graphify", ["--help"], { stdio: "ignore" }).error === undefined;
+  console.log(
+    `test: ${stack.testCommand ?? "(none detected)"} · lint: ${stack.lintCommand ?? "(none)"}`,
+  );
+  let platforms;
+  if (opts.platforms) {
+    platforms = opts.platforms.flatMap((p) => (p === "all" ? DEFAULT_PLATFORMS : [p]));
+    console.log(`platforms: ${platforms.join(", ")} (--platform)`);
+  } else {
+    const found = detectPlatforms(files.keys(), onPath);
+    platforms = found.platforms;
+    console.log(
+      found.source === "none"
+        ? "platforms: no agent config detected, writing the universal pack (AGENTS.md + .helix/); add agents with --platform claude-code,cursor,... or all"
+        : `platforms: ${platforms.join(", ")} (detected from ${found.source === "repo" ? "agent config in this repo" : "agent CLIs on PATH"})`,
+    );
+  }
+  const graphifyAvailable =
+    spawnSync("graphify", ["--help"], { stdio: "ignore" }).error === undefined;
   if (!graphifyAvailable) {
-    console.log("graphify: not on PATH, using the built-in outline map (.helix/map.mjs). Install later: uv tool install graphifyy");
+    console.log(
+      "graphify: not on PATH, using the built-in outline map (.helix/map.mjs). Install later: uv tool install graphifyy",
+    );
   }
   const config = {
     ...configForStack(platforms, { ...stack, graphifyAvailable }),
@@ -172,19 +219,28 @@ function cmdDoctor(opts) {
   // a pack on the outline fallback must not fail for lacking Graphify.
   const usesGraph = /query_graph/.test(files.get("AGENTS.md") ?? "");
   if (usesGraph) {
-    failures.push(...graphFreshness(
-      (p) => readText(join(dir, p)),
-      () => {
-        try {
-          return execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
-        } catch {
-          return null;
-        }
-      },
-    ));
+    failures.push(
+      ...graphFreshness(
+        (p) => readText(join(dir, p)),
+        () => {
+          try {
+            return execFileSync("git", ["rev-parse", "HEAD"], {
+              cwd: dir,
+              encoding: "utf8",
+            }).trim();
+          } catch {
+            return null;
+          }
+        },
+      ),
+    );
   } else if (files.has(".helix/map.mjs")) {
     try {
-      execFileSync("node", [join(dir, ".helix/map.mjs"), "--max", "200"], { cwd: dir, timeout: 30000, stdio: ["ignore", "pipe", "pipe"] });
+      execFileSync("node", [join(dir, ".helix/map.mjs"), "--max", "200"], {
+        cwd: dir,
+        timeout: 30000,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
     } catch (err) {
       failures.push({ check: "map:.helix/map.mjs", detail: `exits ${err?.status ?? "?"}` });
     }
@@ -199,7 +255,11 @@ function cmdDoctor(opts) {
     const rel = `.helix/hooks/${name}.mjs`;
     if (!files.has(rel)) continue;
     try {
-      execFileSync("node", [join(dir, rel)], { input: stdin, timeout: 30000, stdio: ["pipe", "pipe", "pipe"] });
+      execFileSync("node", [join(dir, rel)], {
+        input: stdin,
+        timeout: 30000,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
     } catch (err) {
       const code = err?.status ?? "?";
       if (code !== 0) {
@@ -209,7 +269,11 @@ function cmdDoctor(opts) {
   }
   if (files.has(".helix/gate.mjs")) {
     try {
-      execFileSync("node", [join(dir, ".helix/gate.mjs"), "--dry"], { cwd: dir, timeout: 30000, stdio: ["ignore", "pipe", "pipe"] });
+      execFileSync("node", [join(dir, ".helix/gate.mjs"), "--dry"], {
+        cwd: dir,
+        timeout: 30000,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
     } catch (err) {
       failures.push({ check: "gate:.helix/gate.mjs", detail: `--dry exits ${err?.status ?? "?"}` });
     }

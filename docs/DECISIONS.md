@@ -522,3 +522,38 @@ No new dependencies. No disproved-as-false suspects beyond #5's narrowed scope.
   detected "Repo facts" sit mid-file in AGENTS.md, so editing a test command
   invalidates the cache from that line on; moving them last would reorder the
   file for little gain and was not done.
+
+## 2026-10-09 — Smoke-test fixes and repo-driven platform selection
+
+Evidence that the pack was not yet doing its job (script: `evals/run.mjs`;
+results: `evals/results/2026-10-08T18-46-00-opencode.md`; opencode free tier,
+n=1 per cell, 20-file fixture): the helix arm used more tokens than the
+no-harness arm in 5 of 6 cells (ambiguous +22%, feature +14%, trap +11%,
+docs +6%, refactor +1%; bug-fix -9%) with equal pass rates, and `ambiguous`
+flipped between two runs of the same arm. On a 20-file repo there is nothing
+for retrieval to save, so this fixture cannot show a benefit; it does show a
+cost. No saving is claimed. A larger fixture with n>=5 is the open Phase 4 item.
+
+Running the CLI end to end (the unit suite never did) found three defects, each
+now covered by `cli/cli.test.mjs`:
+
+- `init --help` ran init (the help flag fell through to `evalArgs`).
+- Re-running `init` prompted `overwrite? [y/N]`; with stdin closed the promise
+  never settled (exit 13) and interactively it hung. Now: no prompt without a
+  TTY, differing files are kept, `--force` overwrites.
+- The pack wrote a top-level `README.md`, clobbering the user's. Moved to
+  `.helix/README.md`.
+
+Platform selection: the fixed five-platform default wrote seven agent
+directories into a 2-file repo. Now `init` emits for agents whose config is
+already in the repo (CLAUDE.md/.claude/, .cursor/, .codex/, GEMINI.md/.gemini/,
+copilot instructions, opencode.json, windsurf, cline, aider), else for agent
+CLIs found on PATH, else the universal pack only (AGENTS.md + .helix/gate +
+.helix/map). `--platform a,b` overrides; `--platform all` restores the old
+five. AGENTS.md alone is not a marker (it is the cross-agent standard). Native
+directories are kept for each agent, since each reads only its own. Rejected:
+always emitting all platforms (cost and noise for agents the user does not
+run); detecting only from PATH (machine-dependent, wrong for team repos).
+Roles: model subagents exist for context, plan, build and verify; testing is
+the deterministic `helix gate` (zero tokens), not a model role. Unverified:
+whether the role split lowers total tokens on large repos.

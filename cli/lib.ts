@@ -408,3 +408,51 @@ export function graphFreshness(
 }
 
 export { countTokens, mcpSchemaTokens };
+
+/** Repo markers that mean "this repo already uses agent X". Each is a file name
+ * or a directory prefix (trailing slash). AGENTS.md alone is deliberately not a
+ * marker: it is the cross-agent standard, not evidence of any one agent. */
+const PLATFORM_MARKERS: Array<[PlatformId, string[]]> = [
+  ["claude-code", ["CLAUDE.md", ".claude/"]],
+  ["cursor", [".cursor/", ".cursorrules"]],
+  ["codex", [".codex/"]],
+  ["gemini", ["GEMINI.md", ".gemini/"]],
+  ["copilot", [".github/copilot-instructions.md", ".github/instructions/"]],
+  ["opencode", ["opencode.json", "opencode.jsonc", ".opencode/"]],
+  ["windsurf", [".windsurf/", ".windsurfrules"]],
+  ["cline", [".clinerules"]],
+  ["aider", [".aider.conf.yml", ".aiderignore"]],
+];
+
+/** Agent CLIs whose presence on PATH implies the user runs that agent. */
+const PLATFORM_BINARIES: Array<[PlatformId, string]> = [
+  ["claude-code", "claude"],
+  ["codex", "codex"],
+  ["gemini", "gemini"],
+  ["opencode", "opencode"],
+  ["cursor", "cursor-agent"],
+  ["aider", "aider"],
+];
+
+export type PlatformDetection = {
+  platforms: PlatformId[];
+  source: "repo" | "path" | "none";
+};
+
+/** Pick platforms from repo facts first (config already committed), then from
+ * installed agent CLIs. An empty result is valid: the universal pack
+ * (AGENTS.md + .helix/) works for every agent without platform directories. */
+export function detectPlatforms(
+  names: Iterable<string>,
+  hasBinary: (bin: string) => boolean = () => false,
+): PlatformDetection {
+  const all = [...names];
+  const inRepo = PLATFORM_MARKERS.filter(([, markers]) =>
+    markers.some((m) => (m.endsWith("/") ? all.some((n) => n.startsWith(m)) : all.includes(m))),
+  ).map(([id]) => id);
+  if (inRepo.length > 0) return { platforms: inRepo, source: "repo" };
+  const onPath = PLATFORM_BINARIES.filter(([, bin]) => hasBinary(bin)).map(([id]) => id);
+  return onPath.length > 0
+    ? { platforms: onPath, source: "path" }
+    : { platforms: [], source: "none" };
+}
