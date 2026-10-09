@@ -8,6 +8,7 @@ import {
   doctorPack,
   graphFreshness,
   mcpSummary,
+  mergeOpenCodeConfig,
   measureReport,
   packJson,
   reconstructConfig,
@@ -234,5 +235,43 @@ describe("measureReport and packJson", () => {
   it("emits scriptable JSON for one platform", () => {
     const parsed = JSON.parse(packJson(defaultConfig(["codex"])));
     assert.ok(parsed.files.some((f) => f.path === ".codex/config.toml"));
+  });
+});
+
+
+describe("mergeOpenCodeConfig", () => {
+  it("preserves unrelated config and existing same-name MCP definitions", () => {
+    const existing = {
+      "$schema": "https://example.invalid/open-code-config.json",
+      theme: "nord",
+      mcp: {
+        graphify: { type: "local", command: ["custom-graphify", "--private-option"] },
+        internal: { type: "local", command: ["node", "internal-mcp.mjs"] },
+      },
+    };
+    const generated = {
+      "$schema": "https://opencode.ai/config.json",
+      mcp: {
+        graphify: { type: "local", command: ["uvx", "--from", "graphifyy[mcp]"] },
+        context7: { type: "remote", url: "https://example.invalid/mcp" },
+      },
+    };
+    const result = mergeOpenCodeConfig(JSON.stringify(existing), JSON.stringify(generated));
+    const merged = JSON.parse(result.content);
+    assert.equal(merged.theme, "nord");
+    assert.equal(merged["$schema"], existing["$schema"]);
+    assert.deepEqual(merged.mcp.graphify, existing.mcp.graphify);
+    assert.deepEqual(merged.mcp.internal, existing.mcp.internal);
+    assert.deepEqual(merged.mcp.context7, generated.mcp.context7);
+    assert.deepEqual(result.preservedMcpServers, ["graphify"]);
+  });
+
+  it("fails closed on malformed or wrong-shaped JSON", () => {
+    assert.throws(() => mergeOpenCodeConfig("{", "{}"), /JSON|position/i);
+    assert.throws(() => mergeOpenCodeConfig("[]", '{"mcp":{}}'), /must be a JSON object/);
+    assert.throws(
+      () => mergeOpenCodeConfig("{}", '{"mcp":[]}'),
+      /generated mcp config must be a JSON object/,
+    );
   });
 });
