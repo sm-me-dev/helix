@@ -20,12 +20,16 @@ function log(msg) {
 
 export const PREFER_GRAPH_HOOK = `#!/usr/bin/env node
 // Helix PreToolUse (matcher Read|Grep|Glob): steer wide searches to Graphify.
-// Advisory only, exit 0 always. A Read with an explicit line range passes untouched.
+// Advisory only, exit 0 always. The hint travels in hookSpecificOutput
+// additionalContext on stdout — stderr on exit 0 reaches only the debug log,
+// never the model (verified 2026-10-09 against
+// https://code.claude.com/docs/en/hooks). A Read with an explicit line range
+// passes untouched (no output at all).
 import fs from "node:fs";
 import path from "node:path";
 ${LOG_HELPER}
 function hint() {
-  process.stderr.write("[helix] Wide filesystem search. Prefer mcp__graphify__query_graph / get_neighbors / shortest_path, then Read the cited range.\\n");
+  process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", additionalContext: "Wide filesystem search in this repo. The mcp__graphify__query_graph / get_neighbors / shortest_path tools usually answer it; then Read the cited range." } }) + "\\n");
 }
 function wide(s) {
   return typeof s === "string" && (s.includes("**") || s === "./" || s === "." || s.endsWith("/*"));

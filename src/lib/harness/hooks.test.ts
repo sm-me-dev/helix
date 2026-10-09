@@ -43,24 +43,29 @@ describe("hook sources", () => {
 });
 
 describe("prefer-graph hook (PreToolUse, stdin JSON)", () => {
-  it("steers a wide Glob toward the graph without blocking", async () => {
+  it("steers a wide Glob toward the graph via additionalContext on stdout", async () => {
     const r = await runHook(
       "prefer-graph",
       hookInput("Glob", { pattern: "src/**/*.ts" }),
       tmpdir(),
     );
     assert.equal(r.code, 0);
-    assert.match(r.stderr, /graphify/i);
+    assert.equal(r.stderr, "");
+    const out = JSON.parse(r.stdout);
+    assert.equal(out.hookSpecificOutput.hookEventName, "PreToolUse");
+    assert.match(out.hookSpecificOutput.additionalContext, /graphify/i);
   });
 
-  it("steers a wide Grep toward the graph without blocking", async () => {
+  it("steers a wide Grep toward the graph via additionalContext on stdout", async () => {
     const r = await runHook(
       "prefer-graph",
       hookInput("Grep", { pattern: "TODO", path: "./" }),
       tmpdir(),
     );
     assert.equal(r.code, 0);
-    assert.match(r.stderr, /graphify/i);
+    assert.equal(r.stderr, "");
+    const out = JSON.parse(r.stdout);
+    assert.match(out.hookSpecificOutput.additionalContext, /graphify/i);
   });
 
   it("passes a Read with an explicit line range untouched", async () => {
