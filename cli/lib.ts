@@ -498,3 +498,34 @@ export function detectPlatforms(
     ? { platforms: onPath, source: "path" }
     : { platforms: [], source: "none" };
 }
+
+
+/** Merge Helix's OpenCode MCP entries without destroying unrelated user config.
+ * Existing same-name servers win because they may contain credentials or custom args. */
+export function mergeOpenCodeConfig(
+  existingText: string,
+  generatedText: string,
+): { content: string; preservedMcpServers: string[] } {
+  const asObject = (value: unknown, label: string): Record<string, unknown> => {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error(label + " must be a JSON object");
+    }
+    return value as Record<string, unknown>;
+  };
+  const existing = asObject(JSON.parse(existingText), "existing OpenCode config");
+  const generated = asObject(JSON.parse(generatedText), "generated OpenCode config");
+  const existingMcp =
+    existing.mcp === undefined ? {} : asObject(existing.mcp, "existing mcp config");
+  const generatedMcp = asObject(generated.mcp, "generated mcp config");
+  const preservedMcpServers = Object.keys(existingMcp).filter((name) => name in generatedMcp);
+  const merged = {
+    ...generated,
+    ...existing,
+    "$schema": existing["$schema"] ?? generated["$schema"],
+    mcp: { ...generatedMcp, ...existingMcp },
+  };
+  return {
+    content: JSON.stringify(merged, null, 2) + "\n",
+    preservedMcpServers,
+  };
+}
