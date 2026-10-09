@@ -439,3 +439,28 @@ No new dependencies. No disproved-as-false suspects beyond #5's narrowed scope.
   CI. Rejected: shelling out to gitleaks/trufflehog (new dependency, absent on
   most machines); a per-platform gate (the point is one portable file).
 - No new dependencies.
+
+## 2026-10-09 — Phase 1.4 repo-map provider fallback
+
+- `src/lib/harness/repomap.ts` defines the provider interface (`graphify` |
+  `outline`) and `selectRepoMap`: Graphify when it is on PATH and the repo has
+  20+ files, otherwise the built-in outline. `helix init` probes PATH, prints
+  the fallback and the install command, and never fails for lack of Graphify.
+- The fallback is `.helix/map.mjs` (dependency-free, shipped only when
+  graph-first is off): files plus top-level symbols for TS/JS, Python, Go, Rust,
+  capped at 6000 chars (~1.5k tokens) by default, narrowed by a subdir argument.
+  It is a regex outline: no references, no call edges, no cross-file
+  resolution. It is not tree-sitter and not an LSP, and the docs say so.
+- AGENTS.md on the fallback path no longer mentions graph tools (it did: the
+  Commands section listed query_graph unconditionally). Tested.
+- `helix doctor` checks graph freshness only when AGENTS.md tells agents to use
+  the graph; an outline pack passes without graphify-out/, and a pack pointing at
+  a missing map.mjs fails (`map` check).
+- Rejected: ctags (not guaranteed installed; flag set not verified against its
+  docs), tree-sitter (native/WASM dependency per language), LSP (needs a running
+  server per language and platform support is unverified; see the earlier
+  decision that LSP toggles were cosmetic). No new dependencies.
+- Evidence: repomap.test.ts (provider choice, symbols per language, cap,
+  subdir, node_modules skip, option errors, pack wiring) and cli/lib.test.mjs
+  (configForStack without graphify, doctor on an outline pack). Not measured:
+  how often agents use the map versus broad reads (needs Phase 2 telemetry).

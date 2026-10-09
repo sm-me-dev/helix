@@ -110,8 +110,12 @@ async function cmdInit(opts) {
   console.log(`stack: ${stack.language} · ${stack.packageManager}`);
   console.log(`test: ${stack.testCommand ?? "(none detected)"} · lint: ${stack.lintCommand ?? "(none)"}`);
   const platforms = opts.platforms ?? [...DEFAULT_PLATFORMS];
+  const graphifyAvailable = spawnSync("graphify", ["--help"], { stdio: "ignore" }).error === undefined;
+  if (!graphifyAvailable) {
+    console.log("graphify: not on PATH, using the built-in outline map (.helix/map.mjs). Install later: uv tool install graphifyy");
+  }
   const config = {
-    ...configForStack(platforms, stack),
+    ...configForStack(platforms, { ...stack, graphifyAvailable }),
     stack: {
       language: stack.language,
       packageManager: stack.packageManager,
@@ -156,16 +160,27 @@ function cmdDoctor(opts) {
   const dir = resolve(opts.dir);
   const files = walkFiles(dir);
   const failures = doctorPack(files);
-  failures.push(...graphFreshness(
-    (p) => readText(join(dir, p)),
-    () => {
-      try {
-        return execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
-      } catch {
-        return null;
-      }
-    },
-  ));
+  // Graph freshness only matters when the pack tells agents to use the graph;
+  // a pack on the outline fallback must not fail for lacking Graphify.
+  const usesGraph = /query_graph/.test(files.get("AGENTS.md") ?? "");
+  if (usesGraph) {
+    failures.push(...graphFreshness(
+      (p) => readText(join(dir, p)),
+      () => {
+        try {
+          return execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
+        } catch {
+          return null;
+        }
+      },
+    ));
+  } else if (files.has(".helix/map.mjs")) {
+    try {
+      execFileSync("node", [join(dir, ".helix/map.mjs"), "--max", "200"], { cwd: dir, timeout: 30000, stdio: ["ignore", "pipe", "pipe"] });
+    } catch (err) {
+      failures.push({ check: "map:.helix/map.mjs", detail: `exits ${err?.status ?? "?"}` });
+    }
+  }
   // Live hook check: every shipped hook must run clean against empty + wide input.
   const hookSamples = [
     ["prefer-graph", JSON.stringify({ tool_name: "Glob", tool_input: { pattern: "src/**" } })],
