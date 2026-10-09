@@ -1,0 +1,17 @@
+id: cross-module
+title: A one-constant defect with cross-module failures
+prompt: >
+  tests/tax/service.test.ts, tests/inventory/service.test.ts and
+  tests/order/service.test.ts all fail on run(42), while earlier modules
+  (ledger through refund) are green. The defect is a single constant in one
+  rule file under src/tax/rules/ that disagrees with docs/tax.md. Fix that
+  constant only, and keep every currently passing test green. Do not edit
+  tests or docs.
+pass: node --experimental-strip-types --test tests/tax/service.test.ts tests/inventory/service.test.ts tests/supplier/service.test.ts tests/order/service.test.ts
+timeoutSec: 900
+requireDiff: true
+fixture: large
+setup:
+  seed: 1
+  module: 10
+  rule: 2

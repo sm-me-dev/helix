@@ -1,0 +1,18 @@
+id: heldout-trace
+title: HELD OUT — different-seed trace (do not tune on this)
+prompt: >
+  On this repo (seed 7) the tests/inventory/service.test.ts suite is red on
+  every input while ledger, invoice and catalog are green. Follow the run()
+  dependency chain to the single rule file at fault, confirm it against its
+  docs/ table, fix that one constant, and keep every currently passing test
+  green. Do not edit tests or docs. This task is held out: never use it to
+  tune AGENTS.md or prompts.
+pass: node --experimental-strip-types --test tests/inventory/service.test.ts tests/order/service.test.ts
+timeoutSec: 900
+requireDiff: true
+fixture: large
+heldout: true
+setup:
+  seed: 7
+  module: 5
+  rule: 3

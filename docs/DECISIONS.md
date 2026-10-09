@@ -761,3 +761,24 @@ cache tokens).
 - Rejected: pinning Codex vendor model slugs (they change; inherit instead);
   emitting Antigravity hooks without a loop guard (could loop); emitting
   GEMINI.md for Antigravity (AGENTS.md is read natively).
+
+## 2026-10-09 — Phase D.2 large-fixture tasks + runner (tuning set + held-out set)
+
+- `evals/tasks-large/`: trace-bug (shipment r4; customer/warehouse/pricing red,
+  ledger/invoice/catalog green), call-chain (invoice r7), cross-module (tax r2).
+  `evals/tasks-heldout/`: heldout-bug (pricing r5, seed 1), heldout-trace
+  (warehouse r3, seed 7). Every task carries `fixture: large` plus
+  `setup: {seed, module, rule}`; held-out files carry `heldout: true` and the
+  runner excludes them unless `--include-heldout` is passed.
+- `evals/run.mjs`: `--fixture small|large|all` (default small, current behavior
+  unchanged), `--include-heldout` (default off). `freshCopy(task)` generates the
+  356-file repo from the seeded PRNG and plants the task's bug instead of copying
+  the 20-file fixture. Verified per task (2026-10-09): pristine green, planted
+  red on the task's own pass command (script: `evals/large-tasks.test.mjs`,
+  which also enforces held-out ID separation).
+- Pilot (opencode free tier, `trace-bug`, none arm, n=2 across two runs):
+  2/2 pass, wall 99s/135s, transcript total 238k/302k, uncached 21k/31k
+  (results: `evals/results/2026-10-09T11-1*-opencode.{json,md}`). Pipeline
+  validated end to end; full n>=5 paired eval still to run.
+- Rejected: committing generated repos (hash makes drift visible); putting
+  held-out tasks in the default set (they would stop being held out).
