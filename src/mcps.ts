@@ -258,6 +258,22 @@ export function vscodeMcpJson(ids: McpId[]): string {
   return JSON.stringify({ servers: vscodeServers(ids) }, null, 2) + "\n";
 }
 
+/** Antigravity shape (.agents/mcp_config.json): `mcpServers`, with `serverUrl` for remote
+ * servers; the docs say `url` and `httpUrl` are not supported.
+ * Verified 2026-10-09 against https://antigravity.google/docs/mcp. */
+export function antigravityMcpJson(ids: McpId[]): string {
+  const out: Record<string, unknown> = {};
+  for (const id of ids) {
+    for (const [name, s] of Object.entries(MCP_BY_ID[id].servers)) {
+      out[name] =
+        s.kind === "stdio"
+          ? { command: s.command, args: s.args }
+          : { serverUrl: s.url, ...(s.headers ? { headers: s.headers } : {}) };
+    }
+  }
+  return JSON.stringify({ mcpServers: out }, null, 2) + "\n";
+}
+
 /** Codex shape (.codex/config.toml): `[mcp_servers.<name>]` tables. */
 export function codexToml(ids: McpId[]): string {
   const lines: string[] = [];

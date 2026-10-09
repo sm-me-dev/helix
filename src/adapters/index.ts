@@ -3,10 +3,10 @@ import { claudeAdapter } from "./claude.ts";
 import { codexAdapter } from "./codex.ts";
 import { copilotAdapter } from "./copilot.ts";
 import { cursorAdapter } from "./cursor.ts";
+import { antigravityAdapter } from "./antigravity.ts";
 import {
   aiderAdapter,
   ampAdapter,
-  antigravityAdapter,
   clineAdapter,
   devinAdapter,
   factoryAdapter,
