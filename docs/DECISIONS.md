@@ -828,3 +828,41 @@ cache tokens).
   (2) No tuning was done (no failures to tune on) and the held-out set was
   never run — it stays unspent. (3) Harder tasks (redder failures, tighter
   pass criteria) or larger n are needed before any saving may be claimed.
+
+## 2026-10-09 — Phase E: Learning Ledger core behind a flag (gate: stays opt-in)
+
+- Implemented the deterministic, zero-model-token core only:
+  `src/lib/harness/learn.ts` (pure, no node: imports) — entry schema (id,
+  type, text <= 280 chars / 2 lines, anchor glob + optional node/hash,
+  evidence pointers, used/helped/hurt, confirmations, timestamps, status
+  candidate|active|demoted, origin repo+trusted); deterministic ids so
+  independent confirmations dedupe; capture of session-end facts into
+  observations (never lessons); human accept into quarantine; promotion after
+  2 distinct helping sessions or human accept via diff review; decay on
+  symbol-hash change, reverted commit, or 20 unused sessions; untrusted
+  origins treated as data (skipped without --trust-untrusted, sizes capped,
+  control chars stripped, hook/settings/permission-writing lessons refused);
+  compile to the cheapest form (<=3 lines toward AGENTS.md, repo-wide
+  procedure/decision as gate-rule candidates in prose, path-scoped rules)
+  under a hard 300-token cap with an omitted count; graph-conditioned
+  retrieval (glob + node match, most-helped first, capped).
+- `helix learn` CLI (`cli/learn.ts`): init (never overwrites), capture,
+  accept, confirm, human-accept, list, compile (writes COMPILED.md, warns on
+  every skip/refusal), decay. Pack wiring is one conditional line in AGENTS.md
+  behind `learnOptIn` (optional flag, default off; default pack byte-identical,
+  flag-on pack 39 lines). Lessons can never write hooks/settings/permissions
+  (refused by regex + compile output is prose, never code).
+- Explicitly NOT implemented: model-based offline reflection (deferred;
+  "save nothing" is the outcome until a human accepts), N-confirmation
+  auto-promotion beyond helped>=2, and the replay-eval gate run.
+- Gate result (negative, as the spec allows): the decision gate needs a replay
+  eval over chronological per-repo task streams with ledger content, which does
+  not exist yet — no ledger has ever been populated from a real session, and
+  Phase D gives no per-task saving to project forward. So the ledger stays
+  opt-in (default off) and no enabling claim is made. Rejected: enabling by
+  default on theory; auto-applying untrusted-repo content; letting lessons
+  touch hooks/settings/permissions.
+- Evidence: `src/lib/harness/learn.test.ts` (11 tests, synthetic entries only,
+  including one red-then-green on the compile cap) plus CLI end-to-end on
+  scratch dirs (init→capture→accept→2 confirms→active→compile 10 tokens→decay
+  demotes). `npm run lint`, typecheck, `npm test` (255 + 157) green.

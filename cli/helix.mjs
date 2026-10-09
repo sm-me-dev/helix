@@ -18,6 +18,7 @@ import { delimiter, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { GATE_SOURCE } from "../src/lib/harness/gate.ts";
 import { generatePack } from "../src/lib/harness/generate.ts";
+import { cmdLearn } from "./learn.ts";
 import { DEFAULT_PLATFORMS } from "../src/lib/harness/platforms.ts";
 import {
   configForStack,
@@ -46,6 +47,7 @@ const USAGE = `helix — AI coding harness pack manager
                                                 retries from real session transcripts
   helix export --platform <id>                  print the pack as JSON (scripted use)
   helix eval [options]                          run the eval harness (see evals/README.md)
+  helix learn <sub> [dir] [flags]               Learning Ledger: opt-in, evidence-gated
 `;
 
 function parseArgs(argv) {
@@ -59,6 +61,7 @@ function parseArgs(argv) {
     evalArgs: [],
     gateArgs: [],
     reportArgs: [],
+    learnArgs: [],
   };
   const positional = [];
   for (let i = 0; i < rest.length; i++) {
@@ -67,6 +70,7 @@ function parseArgs(argv) {
     if ((a === "--help" || a === "-h") && cmd !== "eval") opts.help = true;
     else if (cmd === "gate" && a.startsWith("--")) opts.gateArgs.push(a);
     else if (cmd === "report") opts.reportArgs.push(a);
+    else if (cmd === "learn") opts.learnArgs.push(a);
     else if (a === "--force") opts.force = true;
     else if (a === "--platform" && cmd === "export") opts.platform = rest[++i];
     else if (a.startsWith("--platform=")) opts.platforms = a.slice("--platform=".length).split(",");
@@ -411,6 +415,7 @@ async function main() {
   else if (cmd === "gate") cmdGate(opts);
   else if (cmd === "report") await cmdReport(opts);
   else if (cmd === "export") cmdExport(opts);
+  else if (cmd === "learn") await cmdLearn(opts.learnArgs);
   else if (cmd === "eval") {
     const { runEval } = await import("../evals/run.mjs");
     await runEval(opts.evalArgs);
