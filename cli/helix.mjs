@@ -29,6 +29,7 @@ import {
   doctorPack,
   graphFreshness,
   mcpSummary,
+  mergeOpenCodeConfig,
   measureReport,
   packJson,
   reconstructConfig,
@@ -198,8 +199,29 @@ async function cmdInit(opts) {
   for (const f of pack) {
     const full = join(dir, f.path);
     const existing = readText(full);
+    let body = f.body;
+    if (f.path === "opencode.json" && existing !== null) {
+      try {
+        const merged = mergeOpenCodeConfig(existing, f.body);
+        body = merged.content;
+        if (merged.preservedMcpServers.length > 0) {
+          console.warn(
+            "preserved existing OpenCode MCP definitions: " +
+              merged.preservedMcpServers.join(", "),
+          );
+        }
+      } catch (error) {
+        console.warn(
+          "skip opencode.json: could not safely merge existing config (" +
+            (error instanceof Error ? error.message : String(error)) +
+            ")",
+        );
+        skipped++;
+        continue;
+      }
+    }
     if (existing !== null && !opts.force) {
-      const diff = diffLines(existing, f.body);
+      const diff = diffLines(existing, body);
       if (diff === "identical") {
         console.log(`keep  ${f.path} (identical)`);
         skipped++;
@@ -214,7 +236,7 @@ async function cmdInit(opts) {
     const parts = f.path.split("/");
     parts.pop();
     mkdirSync(parts.length > 0 ? join(dir, ...parts) : dir, { recursive: true });
-    writeFileSync(full, f.body);
+    writeFileSync(full, body);
     console.log(`${existing === null ? "write " : "wrote "} ${f.path}`);
     wrote++;
   }
