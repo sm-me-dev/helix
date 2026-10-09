@@ -30,7 +30,6 @@ const ADAPTERS: PlatformAdapter[] = [
   windsurfAdapter,
   clineAdapter,
   aiderAdapter,
-  opencodeAdapter,
   antigravityAdapter,
   devinAdapter,
   factoryAdapter,
