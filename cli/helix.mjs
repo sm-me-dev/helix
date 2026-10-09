@@ -19,7 +19,7 @@ import { createInterface } from "node:readline";
 import { GATE_SOURCE } from "../src/lib/harness/gate.ts";
 import { generatePack } from "../src/lib/harness/generate.ts";
 import { cmdLearn } from "./learn.ts";
-import { DEFAULT_PLATFORMS } from "../src/lib/harness/platforms.ts";
+import { DEFAULT_PLATFORMS, PLATFORM_BY_ID } from "../src/lib/harness/platforms.ts";
 import {
   configForStack,
   defaultConfig,
@@ -152,6 +152,22 @@ function onPath(bin) {
   });
 }
 
+function knownPlatforms() {
+  return Object.keys(PLATFORM_BY_ID);
+}
+
+/** User-controlled ids fail clean (exit 2 + known list), never a stack trace. */
+function checkPlatforms(platforms) {
+  const unknown = (platforms ?? []).filter((p) => !(p in PLATFORM_BY_ID));
+  if (unknown.length > 0) {
+    console.error(`helix: unknown platform ${unknown.map((p) => `"${p}"`).join(", ")}`);
+    console.error(`known platforms: ${knownPlatforms().join(", ")}`);
+    process.exitCode = 2;
+    return false;
+  }
+  return true;
+}
+
 async function cmdInit(opts) {
   const dir = resolve(opts.dir);
   const files = walkFiles(dir);
@@ -190,10 +206,18 @@ async function cmdInit(opts) {
       formatCommand: stack.formatCommand,
     },
   };
+  if (!checkPlatforms(config.platforms)) return;
   console.log(
     `mcps: ${config.mcps.join(", ") || "(none)"} · graph-first: ${config.graphFirst ? "on" : "off"} (${stack.fileCount} files${stack.uiPresent ? ", UI detected" : ", no UI"})`,
   );
-  const pack = generatePack(config);
+  let pack;
+  try {
+    pack = generatePack(config);
+  } catch (error) {
+    console.error(`helix init: ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 2;
+    return;
+  }
   let wrote = 0;
   let skipped = 0;
   for (const f of pack) {
@@ -425,7 +449,13 @@ function cmdExport(opts) {
     process.exitCode = 2;
     return;
   }
-  process.stdout.write(packJson(defaultConfig([opts.platform])));
+  if (!checkPlatforms([opts.platform])) return;
+  try {
+    process.stdout.write(packJson(defaultConfig([opts.platform])));
+  } catch (error) {
+    console.error(`helix export: ${error instanceof Error ? error.message : String(error)}`);
+    process.exitCode = 2;
+  }
 }
 
 async function main() {

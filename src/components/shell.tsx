@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { BookOpen, Boxes, Download, Play, Radio, Users } from "lucide-react";
+import { BookOpen, Boxes, Download, FlaskConical, Play, Radio, Users } from "lucide-react";
 import { type ReactNode } from "react";
 import { Toaster } from "sonner";
 import { HelixMark } from "@/components/mark";
@@ -12,6 +12,7 @@ const NAV = [
   { to: "/stack", label: "Stack", icon: Boxes },
   { to: "/playbook", label: "Playbook", icon: BookOpen },
   { to: "/run", label: "Run", icon: Play },
+  { to: "/evals", label: "Evals", icon: FlaskConical },
   { to: "/export", label: "Export", icon: Download },
 ] as const;
 
