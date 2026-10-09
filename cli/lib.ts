@@ -9,6 +9,7 @@ import { DEFAULT_SKILLS } from "../src/lib/harness/skills.ts";
 import { breakdown, formatTokens } from "../src/lib/harness/tokens.ts";
 import { ADAPTER_BY_ID } from "../src/lib/harness/adapters/index.ts";
 import { countTokens } from "../src/lib/harness/measure.ts";
+import { mcpCostByPlatform } from "../src/lib/harness/mcp-cost.ts";
 import { mcpSchemaTokens } from "../src/lib/harness/mcps.ts";
 import type { HarnessConfig, PlatformId } from "../src/lib/harness/types.ts";
 
@@ -364,6 +365,11 @@ export function measureReport(config: HarnessConfig): string {
     `lean score ${b.leanScore}  (${passed}/${b.checks.length} checks)`,
     ...b.checks.map((c) => `  ${c.pass ? "PASS" : "FAIL"} ${c.label}`),
     ...b.estimates.map((e) => `  estimate: ${e}`),
+    `mcp schema cost per platform (worst case ${formatTokens(b.mcpSchemas)} if fully loaded):`,
+    ...mcpCostByPlatform(config).map(
+      (r) => `  ${r.name}: ${r.deferral === "deferred" ? "deferred" : "assume loaded"} — ${r.note}`,
+    ),
+    "per-task total tokens (retrieval turns, skill loads) are NOT in this report: run helix report on real sessions",
     `method: ${b.method}`,
   ];
   return lines.join("\n");
