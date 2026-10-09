@@ -1,0 +1,73 @@
+{
+  "label": "before",
+  "measuredAt": "2026-10-09",
+  "method": "o200k_base BPE via gpt-tokenizer (approximation of frontier tokenizers, not the serving model's own count); frontmatter = always-on index, body = loaded on demand; static size only",
+  "skills": [
+    {
+      "id": "graph-first",
+      "index": 38,
+      "body": 104
+    },
+    {
+      "id": "clarify-brief",
+      "index": 33,
+      "body": 65
+    },
+    {
+      "id": "decision-table",
+      "index": 28,
+      "body": 60
+    },
+    {
+      "id": "scoped-diff",
+      "index": 23,
+      "body": 56
+    },
+    {
+      "id": "prove-behavior",
+      "index": 30,
+      "body": 56
+    },
+    {
+      "id": "independent-audit",
+      "index": 32,
+      "body": 61
+    },
+    {
+      "id": "lean-handoff",
+      "index": 29,
+      "body": 55
+    },
+    {
+      "id": "hook-guards",
+      "index": 36,
+      "body": 65
+    }
+  ],
+  "crew": [
+    {
+      "id": "scout",
+      "index": 77,
+      "file": 272
+    },
+    {
+      "id": "architect",
+      "index": 49,
+      "file": 204
+    },
+    {
+      "id": "builder",
+      "index": 44,
+      "file": 217
+    },
+    {
+      "id": "reviewer",
+      "index": 46,
+      "file": 207
+    }
+  ],
+  "skillIndexTotal": 249,
+  "skillBodyTotal": 522,
+  "crewFileTotal": 900,
+  "agentsMd": 403
+}

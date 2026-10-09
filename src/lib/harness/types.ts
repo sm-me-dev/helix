@@ -17,15 +17,7 @@ export type PlatformId =
   | "amp"
   | "kilo";
 
-export type SkillId =
-  | "graph-first"
-  | "clarify-brief"
-  | "decision-table"
-  | "scoped-diff"
-  | "prove-behavior"
-  | "independent-audit"
-  | "lean-handoff"
-  | "hook-guards";
+export type SkillId = "graph-first" | "hook-guards";
 
 export type McpId =
   | "graphify"

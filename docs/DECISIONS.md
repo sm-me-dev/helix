@@ -374,3 +374,28 @@ No new dependencies. No disproved-as-false suspects beyond #5's narrowed scope.
   production), turning the gate red from shells that export it. The test now
   pins NODE_ENV=test. Cause confirmed by running it with NODE_ENV unset (25/25)
   vs production (24/25). Test-only change; product code untouched.
+
+## 2026-10-09 — Phase 1.2 merge tiny skills
+
+- Rule: a skill is kept only if it is shared by 2+ roles or conditionally
+  needed outside a role run. Role-exclusive skills cost an index entry every
+  session plus an extra load turn, to deliver ~60 tokens. Enforced by a test
+  in generate.test.ts.
+- Folded into role bodies: decision-table (architect), scoped-diff and
+  prove-behavior (builder), clarify-brief (scout), independent-audit
+  (reviewer). lean-handoff folded into the AGENTS.md dispatch section (the
+  12-line card was already there; added "never paste transcripts"). Kept:
+  graph-first (scout + builder), hook-guards (harness configuration).
+  Went one step past the four named in the brief because clarify-brief and
+  independent-audit met the same criterion (body ≈ 2x its index entry, one user).
+- Measured with scripts/measure-skills.mjs (o200k_base, static size, 2026-10-09;
+  raw output in fixtures/measurements/skills.{before,after}.json):
+  skill index 249 -> 74 tokens always-on; skill bodies 522 -> 169; crew files
+  900 -> 1072 (load only when a role runs); AGENTS.md 403 -> 410.
+- NOT claimed: a per-task saving. Always-on drops ~168 tokens, but the role
+  text that used to sit in optional skill bodies now loads whenever the role
+  runs. Net effect on total tokens per task is unmeasured until `helix report`
+  (Phase 2) exists.
+- Rejected: keeping the skills and just shortening descriptions (still pays a
+  load turn per use). Old persisted configs stay safe (sanitizePersisted drops
+  unknown skill ids). No new dependencies.

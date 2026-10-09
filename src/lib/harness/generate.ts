@@ -66,7 +66,7 @@ function agentsMd(config: HarnessConfig): string {
 - trivial (one file, clear ask, or question): main session only.
 - standard (known files, one module): build, then a fresh-window reviewer.
 - complex (unknown surface or cross-module): scout, architect, builder, reviewer.
-- Handoff, 12 lines max: goal, constraints, cited files, done-means, out of scope.
+- Handoff, 12 lines max: goal, constraints, cited files, done-means, out of scope. Never paste transcripts or tool dumps.
 - Two product readings: ask. A wrong guess costs more than a question.
 
 ## How to work

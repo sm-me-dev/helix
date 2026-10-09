@@ -113,7 +113,7 @@ function helixFilesFor(agent) {
   // settings. The harness under test is AGENTS.md + skills (+ hooks for claude).
   const config = {
     crew: ["scout", "architect", "builder", "reviewer"],
-    skills: ["graph-first", "clarify-brief", "decision-table", "scoped-diff", "prove-behavior", "independent-audit", "lean-handoff", "hook-guards"],
+    skills: ["graph-first", "hook-guards"],
     mcps: [],
     platforms: [platform],
     graphFirst: true,
