@@ -170,4 +170,51 @@ describe("test-on-stop hook (Stop, stdin JSON)", () => {
     const r = await runHook("test-on-stop", "not json{{{", tmpdir());
     assert.equal(r.code, 0);
   });
+
+  it("stands down when stop_hook_active is already true (no retry loop)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "helix-stop-"));
+    const transcript = join(dir, "t.jsonl");
+    const touch = JSON.stringify({
+      type: "assistant",
+      message: { content: [{ type: "tool_use", name: "Edit", input: { file_path: "a.ts" } }] },
+    });
+    await writeFile(transcript, touch + "\n");
+    await writeFile(
+      join(dir, "package.json"),
+      JSON.stringify({
+        scripts: { test: "node -e \"console.error('boom-line'); process.exit(1)\"" },
+      }),
+    );
+    const r = await runHook(
+      "test-on-stop",
+      JSON.stringify({ transcript_path: transcript, cwd: dir, stop_hook_active: true }),
+      dir,
+    );
+    assert.equal(r.code, 0);
+    assert.equal(r.stderr, "");
+  });
+
+  it("ignores edits from before the last user prompt", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "helix-stop-"));
+    const transcript = join(dir, "t.jsonl");
+    const touch = JSON.stringify({
+      type: "assistant",
+      message: { content: [{ type: "tool_use", name: "Edit", input: { file_path: "a.ts" } }] },
+    });
+    const userTurn = JSON.stringify({ type: "user", message: { content: "thanks" } });
+    await writeFile(transcript, touch + "\n" + userTurn + "\n");
+    await writeFile(
+      join(dir, "package.json"),
+      JSON.stringify({
+        scripts: { test: "node -e \"console.error('boom-line'); process.exit(1)\"" },
+      }),
+    );
+    const r = await runHook(
+      "test-on-stop",
+      JSON.stringify({ transcript_path: transcript, cwd: dir }),
+      dir,
+    );
+    assert.equal(r.code, 0);
+    assert.equal(r.stderr, "");
+  });
 });
