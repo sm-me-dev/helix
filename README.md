@@ -19,6 +19,8 @@ git clone <this-repo> && cd helix && npm ci
 commands, existing agent files), then writes the pack. It never overwrites an
 existing file without showing a diff and asking — pass `--force` to skip the
 prompt. Requires Node 22.6+ (type stripping, no build step).
+When an `opencode.json` already exists, the CLI merges MCP entries into it and
+preserves unrelated settings (existing same-name MCP definitions take precedence).
 
 ## What is verified and what is not
 
