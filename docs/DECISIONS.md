@@ -782,3 +782,22 @@ cache tokens).
   validated end to end; full n>=5 paired eval still to run.
 - Rejected: committing generated repos (hash makes drift visible); putting
   held-out tasks in the default set (they would stop being held out).
+
+## 2026-10-09 — Phase D hygiene audit (proposal only, no changes)
+
+- `.graphifyignore` already keeps `.grok/skills/**` out of the graph, but the
+  repo-root `AGENTS.md` is still the Grok sandbox contract: any coding agent in
+  this repo loads ~100 lines of game/sprite/preview instructions that are
+  irrelevant to Helix and compete with `AGENTS.project.md`. The root file is
+  platform-owned (do not touch), so the fix cannot be deletion. Proposed:
+  a two-line header pointer is also a code change to a platform-owned file —
+  ask the owner before any edit; until then contributors must point their agent
+  at `AGENTS.project.md` explicitly.
+- Template-dep prune (better-auth, @electric-sql/pglite, ~20 @radix-ui/*) and
+  the core/cli/evals/site split are proposed but NOT executed: both need owner
+  approval and a green site build afterwards (`npm run build`). No new
+  dependency added by any Phase C/D work in this session.
+- Full Phase D eval (3 large tasks x none/helix x 5 runs, opencode free tier)
+  launched 2026-10-09 ~11:21 UTC as background pid; results land in
+  `evals/results/`. Pilot cells (trace-bug none, 2/2 pass) are committed as
+  measured pilot data, not as the eval result.
