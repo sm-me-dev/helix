@@ -13,7 +13,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { GATE_SOURCE } from "../src/lib/harness/gate.ts";
@@ -32,6 +32,7 @@ import {
   packJson,
   reconstructConfig,
 } from "./lib.ts";
+import { formatReport, loadOpenCodeDb, parseClaudeCodeJsonl } from "./report.ts";
 
 const USAGE = `helix — AI coding harness pack manager
 
@@ -40,6 +41,9 @@ const USAGE = `helix — AI coding harness pack manager
   helix measure [dir]                           print the real token breakdown
   helix gate [dir] [--all] [--dry] [--json]     secrets, lint, typecheck, affected tests
                                                 (exit 0 pass · 1 check failed · 2 usage)
+  helix report [dir] [--claude <path>] [--opencode <db>] [--limit n] [--json]
+                                                tokens, repeated reads, oversized outputs and
+                                                retries from real session transcripts
   helix export --platform <id>                  print the pack as JSON (scripted use)
   helix eval [options]                          run the eval harness (see evals/README.md)
 `;
@@ -54,6 +58,7 @@ function parseArgs(argv) {
     platform: null,
     evalArgs: [],
     gateArgs: [],
+    reportArgs: [],
   };
   const positional = [];
   for (let i = 0; i < rest.length; i++) {
@@ -61,6 +66,7 @@ function parseArgs(argv) {
     // eval has its own --help; every other command shows the shared usage.
     if ((a === "--help" || a === "-h") && cmd !== "eval") opts.help = true;
     else if (cmd === "gate" && a.startsWith("--")) opts.gateArgs.push(a);
+    else if (cmd === "report") opts.reportArgs.push(a);
     else if (a === "--force") opts.force = true;
     else if (a === "--platform" && cmd === "export") opts.platform = rest[++i];
     else if (a.startsWith("--platform=")) opts.platforms = a.slice("--platform=".length).split(",");
@@ -315,6 +321,78 @@ function cmdMeasure(opts) {
   console.log(measureReport(cfg));
 }
 
+/** Claude Code keeps transcripts under ~/.claude/projects/<path with non-alphanumerics as dashes> (observed, not vendor-verified). */
+function claudeProjectDir(dir) {
+  return join(homedir(), ".claude", "projects", resolve(dir).replace(/[^A-Za-z0-9]/g, "-"));
+}
+
+function parseReportArgs(args) {
+  const o = { dir: ".", claude: null, opencode: null, limit: 5, json: false, bad: null };
+  const positional = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--json") o.json = true;
+    else if (a === "--claude") o.claude = args[++i] ?? null;
+    else if (a === "--opencode") o.opencode = args[++i] ?? null;
+    else if (a === "--limit") o.limit = Number(args[++i]);
+    else if (a.startsWith("-")) o.bad = a;
+    else positional.push(a);
+  }
+  if (positional[0]) o.dir = positional[0];
+  if (!Number.isInteger(o.limit) || o.limit < 1) o.bad = "--limit needs a positive integer";
+  return o;
+}
+
+async function cmdReport(opts) {
+  const o = parseReportArgs(opts.reportArgs);
+  if (o.bad) {
+    console.error(`helix report: bad option ${o.bad}`);
+    process.exitCode = 2;
+    return;
+  }
+  const sessions = [];
+  const skipped = [];
+
+  const claudePath = o.claude ? resolve(o.claude) : claudeProjectDir(o.dir);
+  let jsonl = [];
+  try {
+    const st = statSync(claudePath);
+    jsonl = st.isDirectory()
+      ? readdirSync(claudePath)
+          .filter((f) => f.endsWith(".jsonl"))
+          .map((f) => join(claudePath, f))
+      : [claudePath];
+  } catch {
+    if (o.claude) skipped.push(`claude-code: ${claudePath} not found`);
+  }
+  jsonl = jsonl
+    .map((f) => ({ f, t: statSync(f).mtimeMs }))
+    .sort((a, b) => b.t - a.t)
+    .slice(0, o.limit)
+    .map((x) => x.f);
+  for (const f of jsonl) {
+    const id = f.split("/").pop().replace(/\.jsonl$/, "");
+    sessions.push(parseClaudeCodeJsonl(readFileSync(f, "utf8"), id));
+  }
+
+  const dbPath = o.opencode ? resolve(o.opencode) : join(homedir(), ".local", "share", "opencode", "opencode.db");
+  let haveDb = true;
+  try {
+    accessSync(dbPath, constants.R_OK);
+  } catch {
+    haveDb = false;
+    if (o.opencode) skipped.push(`opencode: ${dbPath} not found`);
+  }
+  if (haveDb) {
+    const r = await loadOpenCodeDb(dbPath, { directory: resolve(o.dir), limit: o.limit });
+    sessions.push(...r.sessions);
+    if (r.skipped) skipped.push(r.skipped);
+  }
+
+  if (o.json) process.stdout.write(JSON.stringify({ sessions, skipped }, null, 2) + "\n");
+  else process.stdout.write(formatReport(sessions, skipped) + "\n");
+}
+
 function cmdExport(opts) {
   if (!opts.platform) {
     console.error("helix export --platform <id>");
@@ -331,6 +409,7 @@ async function main() {
   else if (cmd === "doctor") cmdDoctor(opts);
   else if (cmd === "measure") cmdMeasure(opts);
   else if (cmd === "gate") cmdGate(opts);
+  else if (cmd === "report") await cmdReport(opts);
   else if (cmd === "export") cmdExport(opts);
   else if (cmd === "eval") {
     const { runEval } = await import("../evals/run.mjs");
