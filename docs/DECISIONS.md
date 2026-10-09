@@ -896,3 +896,35 @@ cache tokens).
 - Alternatives rejected: making all non-trivial work multi-agent (higher cost
   without proven benefit); adding vendor model IDs for Cursor (less portable);
   replacing an existing full OpenCode config with a generated partial config.
+
+## 2026-10-09 — Production-readiness: CLI errors, executable bit, E2E tests, compact docs
+
+- `cli/helix.mjs` was mode 644, so the documented `./cli/helix.mjs init`
+  failed with permission denied. Set the executable bit (tracked by git).
+- Unknown `--platform` ids in `init`/`export` threw a raw stack trace (exit 1).
+  Now: `helix: unknown platform "x"` + known-platform list on stderr, exit 2.
+  Evidence: `cli/e2e-workflows.test.mjs` ("unknown platforms fail clean").
+- Added `cli/e2e-workflows.test.mjs` (10 tests): install, safe repeat,
+  doctor pass/fail/oversize, export determinism + init/export byte-parity on
+  platform files for a full-default repo, gate pass/fail-on-secret/flag
+  errors, measure, missing-flag usage. Gate tests use a system PATH (the
+  hermetic node-only PATH hides npm/sh); detection tests keep it.
+- Parity note found during testing: `init` narrows the config by detected
+  repo facts (outline map, no Playwright without UI), while `export` uses full
+  defaults — both through the same `generatePack`, so same config ⇒ identical
+  bytes (asserted). AGENTS.md alone embeds detected stack commands by design.
+- Docs: new `docs/CLI.md` (every command verified against the implementation),
+  `docs/ARCHITECTURE.md`, `CONTRIBUTING.md`; README trimmed 144 → 116 lines
+  with the generated matrix markers untouched.
+- Alternatives rejected: rewriting the CLI arg parser (targeted validation
+  covers the user-controlled ids); byte-parity on AGENTS.md between init and
+  export (would erase the detected stack facts agents rely on).
+
+## 2026-10-09 — /evals added to the main nav
+
+- Browser QA found `/evals` reachable only via a link buried in `/run`,
+  while the README advertises it as a route. Added it to `Shell` NAV with a
+  FlaskConical icon; re-ran the Chromium nav check (`/evals` present, zero
+  console errors) plus a 390px overflow pass on `/`, `/export`, `/stack`.
+- Alternatives rejected: leaving it linked only from `/run` (advertised
+  routes must all be navigable).
