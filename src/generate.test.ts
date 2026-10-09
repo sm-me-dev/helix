@@ -8,7 +8,6 @@ const BASE: HarnessConfig = {
   crew: ["scout"],
   skills: ["graph-first"],
   mcps: ["graphify"],
-  lsps: ["typescript"],
   platforms: ["codex"],
   graphFirst: true,
   progressiveDisclosure: true,
@@ -213,10 +212,10 @@ describe("generatePack", () => {
     assert.ok(!paths.includes(".mcp.json"));
   });
 
-  it("names the enabled LSPs in the pack README", () => {
+  it("makes no LSP claims in the pack README (no adapter emits LSP config)", () => {
     const readme = generatePack(BASE).find((f) => f.path === "README.md");
-    assert.ok(readme?.body.includes("- LSP —"));
-    assert.ok(readme?.body.includes("vtsls"));
+    assert.ok(!readme?.body.includes("- LSP —"));
+    assert.ok(!readme?.body.includes("vtsls"));
   });
 
   it("throws a named error on unknown ids instead of a TypeError", () => {

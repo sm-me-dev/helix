@@ -2,7 +2,6 @@
 // everything here is importable and unit-tested without touching process.
 import { DEFAULT_CREW } from "../src/lib/harness/crew.ts";
 import { generatePack } from "../src/lib/harness/generate.ts";
-import { DEFAULT_LSPS } from "../src/lib/harness/lsps.ts";
 import { DEFAULT_MCPS } from "../src/lib/harness/mcps.ts";
 import { DEFAULT_PLATFORMS } from "../src/lib/harness/platforms.ts";
 import { DEFAULT_SKILLS } from "../src/lib/harness/skills.ts";
@@ -17,7 +16,6 @@ export function defaultConfig(platforms: PlatformId[]): HarnessConfig {
     crew: [...DEFAULT_CREW],
     skills: [...DEFAULT_SKILLS],
     mcps: [...DEFAULT_MCPS],
-    lsps: [...DEFAULT_LSPS],
     platforms,
     graphFirst: true,
     progressiveDisclosure: true,
@@ -285,7 +283,6 @@ export function reconstructConfig(files: Map<string, string>): HarnessConfig {
     crew: crew.length > 0 ? crew : [...DEFAULT_CREW],
     skills: [...DEFAULT_SKILLS],
     mcps: [...DEFAULT_MCPS],
-    lsps: [...DEFAULT_LSPS],
     platforms: platformIds.length > 0 ? platformIds : [...DEFAULT_PLATFORMS],
     graphFirst: true,
     progressiveDisclosure: true,
@@ -298,7 +295,7 @@ export function measureReport(config: HarnessConfig): string {
   const b = breakdown(config);
   const passed = b.checks.filter((c) => c.pass).length;
   const lines = [
-    `always-on  ${formatTokens(b.alwaysOn)}  (agents.md ${formatTokens(b.agentsMd)} · skills ${formatTokens(b.skillIndex)} · mcp ${formatTokens(b.mcpSchemas)} · lsp ${formatTokens(b.lspSchemas)} · crew ${formatTokens(b.crewIndex)})`,
+    `always-on  ${formatTokens(b.alwaysOn)}  (agents.md ${formatTokens(b.agentsMd)} · skills ${formatTokens(b.skillIndex)} · mcp ${formatTokens(b.mcpSchemas)} · crew ${formatTokens(b.crewIndex)})`,
     `baseline   ${formatTokens(b.naiveAlwaysOn)}  (representative fixtures, not a live host)`,
     `lean score ${b.leanScore}  (${passed}/${b.checks.length} checks)`,
     ...b.checks.map((c) => `  ${c.pass ? "PASS" : "FAIL"} ${c.label}`),

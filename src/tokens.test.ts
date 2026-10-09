@@ -14,7 +14,6 @@ const MINIMAL: HarnessConfig = {
   crew: [],
   skills: [],
   mcps: [],
-  lsps: [],
   platforms: [],
   graphFirst: false,
   progressiveDisclosure: false,
@@ -62,9 +61,8 @@ describe("breakdown", () => {
   });
 
   it("flags catalog estimates instead of hiding them", () => {
-    const b = breakdown({ ...MINIMAL, mcps: ["github"], lsps: ["typescript"] });
+    const b = breakdown({ ...MINIMAL, mcps: ["github"] });
     assert.ok(b.estimates.some((e) => e.includes("github")));
-    assert.ok(b.estimates.some((e) => e.includes("LSP")));
     assert.ok(b.checks.some((c) => c.id === "mcp-measured" && !c.pass));
   });
 

@@ -37,13 +37,10 @@ export type McpId =
   | "sentry"
   | "linear";
 
-export type LspId = "serena-lsp" | "typescript" | "pyright" | "rust-analyzer" | "gopls";
-
 export type HarnessConfig = {
   crew: CrewId[];
   skills: SkillId[];
   mcps: McpId[];
-  lsps: LspId[];
   platforms: PlatformId[];
   graphFirst: boolean;
   progressiveDisclosure: boolean;
@@ -75,7 +72,6 @@ export type TokenBreakdown = {
   agentsMd: number;
   skillIndex: number;
   mcpSchemas: number;
-  lspSchemas: number;
   crewIndex: number;
   alwaysOn: number;
   naiveAlwaysOn: number;

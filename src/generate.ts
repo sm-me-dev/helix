@@ -1,7 +1,6 @@
 import { ADAPTER_BY_ID } from "./adapters/index.ts";
 import { agentFile, skillFile } from "./adapters/parts.ts";
 import { CREW_BY_ID } from "./crew.ts";
-import { LSP_BY_ID } from "./lsps.ts";
 import { MCP_BY_ID } from "./mcps.ts";
 import { PLATFORM_BY_ID } from "./platforms.ts";
 import { SKILL_BY_ID } from "./skills.ts";
@@ -15,7 +14,6 @@ function requireKnownIds(config: HarnessConfig): void {
     ["crew role", CREW_BY_ID, config.crew],
     ["skill", SKILL_BY_ID, config.skills],
     ["MCP", MCP_BY_ID, config.mcps],
-    ["LSP", LSP_BY_ID, config.lsps],
     ["platform", PLATFORM_BY_ID, config.platforms],
   ] as const;
   for (const [kind, table, ids] of tables) {
@@ -122,7 +120,6 @@ Then inside the assistant: \`/graphify .\` (Codex: \`$graphify\`).
 - Skills — progressive disclosure, Agent Skills format
 - Crew roles (main session orchestrates; no dispatcher file) — ${roles || "none"}
 - MCP — ${config.mcps.map((id) => MCP_BY_ID[id].name).join(", ") || "none"}
-- LSP — ${config.lsps.map((id) => LSP_BY_ID[id].name).join(", ") || "none (editor defaults)"}
 - Hooks — ${config.hooksEnabled ? "format/lint + graph-first hint + Stop test gate + .env deny" : "off"}
 
 Secret denies block Read/Edit/Write/Glob and recognized shell readers (cat,

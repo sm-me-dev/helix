@@ -2,7 +2,7 @@
 //
 // Every number here is COMPUTED: helix-side counts come from countTokens over
 // the actually generated output, the naive side from committed fixtures under
-// fixtures/baseline/. The only catalog numbers left are LSP schema weights
+// fixtures/baseline/. The only catalog numbers left are MCP schema weights
 // (flagged in `estimates`) and MCP schemas without a fresh tools/list
 // measurement (flagged per server — run scripts/measure-mcp.mjs).
 import { BLOATED_AGENTS_MD } from "../../../fixtures/baseline/bloated-agents-md.ts";
@@ -10,7 +10,6 @@ import { TYPICAL_MCP_SCHEMAS } from "../../../fixtures/baseline/fifteen-mcp-sche
 import { agentFile, skillFile } from "./adapters/parts.ts";
 import { CREW } from "./crew.ts";
 import { agentsMd, generatePack } from "./generate.ts";
-import { LSP_BY_ID } from "./lsps.ts";
 import { mcpSchemaTokens } from "./mcps.ts";
 import { countTokens, TOKENIZER_METHOD } from "./measure.ts";
 import { SKILLS } from "./skills.ts";
@@ -108,8 +107,7 @@ export function breakdown(config: HarnessConfig): TokenBreakdown {
   );
   const mcpParts = config.mcps.map((id) => ({ id, ...mcpSchemaTokens(id) }));
   const mcpSchemas = mcpParts.reduce((n, p) => n + p.tokens, 0);
-  const lspSchemas = config.lsps.reduce((n, id) => n + LSP_BY_ID[id].schemaTokens, 0);
-  const alwaysOn = agentsMdTokens + skillIndex + mcpSchemas + lspSchemas + crewIndex;
+  const alwaysOn = agentsMdTokens + skillIndex + mcpSchemas + crewIndex;
 
   // Naive side: fixtures for the bloated file and the overweight 15-server MCP
   // schemas; skills and crew fully inlined (frontmatter-only is the helix
@@ -117,17 +115,10 @@ export function breakdown(config: HarnessConfig): TokenBreakdown {
   const naiveSkills = SKILLS.reduce((n, s) => n + countTokens(skillFile(s.id)), 0);
   const naiveCrew = CREW.reduce((n, c) => n + countTokens(agentFile(c.id)), 0);
   const naiveAlwaysOn =
-    countTokens(BLOATED_AGENTS_MD) +
-    countTokens(TYPICAL_MCP_SCHEMAS) +
-    naiveSkills +
-    naiveCrew +
-    lspSchemas;
+    countTokens(BLOATED_AGENTS_MD) + countTokens(TYPICAL_MCP_SCHEMAS) + naiveSkills + naiveCrew;
 
   const unmeasured = mcpParts.filter((p) => !p.measured).map((p) => p.id);
   const estimates: string[] = [];
-  if (config.lsps.length > 0) {
-    estimates.push(`LSP schemas (${config.lsps.join(", ")}): catalog estimates, not measured`);
-  }
   if (unmeasured.length > 0) {
     estimates.push(
       `MCP schemas (${unmeasured.join(", ")}): catalog estimates — run scripts/measure-mcp.mjs`,
@@ -143,7 +134,6 @@ export function breakdown(config: HarnessConfig): TokenBreakdown {
     agentsMd: agentsMdTokens,
     skillIndex,
     mcpSchemas,
-    lspSchemas,
     crewIndex,
     alwaysOn,
     naiveAlwaysOn,
