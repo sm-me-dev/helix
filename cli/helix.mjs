@@ -104,7 +104,16 @@ async function cmdInit(opts) {
   console.log(`stack: ${stack.language} · ${stack.packageManager}`);
   console.log(`test: ${stack.testCommand ?? "(none detected)"} · lint: ${stack.lintCommand ?? "(none)"}`);
   const platforms = opts.platforms ?? [...DEFAULT_PLATFORMS];
-  const config = defaultConfig(platforms);
+  const config = {
+    ...defaultConfig(platforms),
+    stack: {
+      language: stack.language,
+      packageManager: stack.packageManager,
+      testCommand: stack.testCommand,
+      lintCommand: stack.lintCommand,
+      formatCommand: stack.formatCommand,
+    },
+  };
   const pack = generatePack(config);
   let wrote = 0;
   let skipped = 0;

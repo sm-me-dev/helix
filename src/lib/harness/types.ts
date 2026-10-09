@@ -49,6 +49,20 @@ export type HarnessConfig = {
   progressiveDisclosure: boolean;
   defaultSingleAgent: boolean;
   hooksEnabled: boolean;
+  /** Detected repo facts from `helix init` (cli/lib detectStack). Optional so
+   * hand-built configs keep working; when present AGENTS.md cites exact
+   * commands instead of telling the agent to go read package.json. */
+  stack?: RepoFacts;
+};
+
+/** Repo-specific, non-inferable facts. No timestamps — the always-on prefix
+ * must stay stable for cache-friendliness. */
+export type RepoFacts = {
+  language: string;
+  packageManager: string;
+  testCommand: string | null;
+  lintCommand: string | null;
+  formatCommand: string | null;
 };
 
 export type TokenCheck = {

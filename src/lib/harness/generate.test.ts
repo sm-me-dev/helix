@@ -78,6 +78,30 @@ describe("generatePack", () => {
     assert.match(agents?.body ?? "", /trivial|standard|complex/);
   });
 
+  it("stays under 40 lines and threads detected repo facts instead of generic advice", () => {
+    // Full 4-role crew: the realistic always-on file, not the 1-role BASE.
+    const full = { ...BASE, crew: ["scout", "architect", "builder", "reviewer"] as const };
+    const plain = generatePack({ ...full, crew: [...full.crew] }).find(
+      (f) => f.path === "AGENTS.md",
+    );
+    assert.ok((plain?.body.match(/\n/g) ?? []).length + 1 <= 40, "AGENTS.md over 40 lines");
+    assert.match(plain?.body ?? "", /Read package\.json/);
+    const withStack = generatePack({
+      ...BASE,
+      stack: {
+        language: "typescript",
+        packageManager: "npm",
+        testCommand: "npm test",
+        lintCommand: "npm run lint",
+        formatCommand: null,
+      },
+    }).find((f) => f.path === "AGENTS.md");
+    assert.ok((withStack?.body.match(/\n/g) ?? []).length + 1 <= 40, "AGENTS.md over 40 lines");
+    assert.match(withStack?.body ?? "", /npm test/);
+    assert.match(withStack?.body ?? "", /npm run lint/);
+    assert.ok(!(withStack?.body ?? "").includes("Read package.json"));
+  });
+
   it("gives every emitted agent a tools allow-list, a model, and a delegating description", () => {
     const claude = generatePack({
       ...BASE,
