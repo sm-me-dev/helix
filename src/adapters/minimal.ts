@@ -91,11 +91,6 @@ export const aiderAdapter = pointerAdapter(
   "Pointer file defers to AGENTS.md.",
 );
 
-export const opencodeAdapter = instructionsOnly(
-  "opencode",
-  "Same AGENTS.md family shape as Codex, but MCP/skill paths not verified.",
-);
-
 export const devinAdapter = instructionsOnly(
   "devin",
   "Repo-root AGENTS.md is picked up; MCP/skill paths not verified.",
