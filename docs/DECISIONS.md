@@ -706,3 +706,26 @@ cache tokens).
   matrix keeps `plugin: unverified` for all but Claude Code.
 - Rejected: shipping AGENTS.md via the plugin (not loaded); npm-only
   distribution (adds a publish step and no benefit over a git marketplace).
+
+## 2026-10-09 — Phase D.1 deterministic large fixture generator
+
+- `evals/fixture-large/generate.mjs` builds a repo from templates and a seeded
+  PRNG (mulberry32), no LLM text. Defaults (seed 1): 16 modules, 356 files
+  (measured by the script, sha256 printed by the CLI), 81 tests that run in
+  about 3 s. Each module has 10 rule files, a service that calls up to two
+  earlier modules (a DAG), a store, validate/format helpers, a doc table of its
+  rule constants, and 3 test files. Expected values in the tests come from a
+  reference model in the generator, so the pristine repo is green by
+  construction.
+- `plantRuleBug` changes one constant in one rule file. Failures then show up
+  in that module's service test and every dependent module's, never in
+  earlier modules, so finding the root cause needs navigation (follow the
+  dependency chain, then diff the rule file against `docs/<module>.md`).
+- Test caught a harness trap: a child process spawned inside `node --test`
+  inherits `NODE_TEST_CONTEXT` and exits 0 without running anything. The test
+  now strips it and asserts the test count, so a vacuous pass cannot hide.
+- Not done yet (next): fixture selection and per-task setup in `evals/run.mjs`,
+  the navigation tasks, and the held-out task set. Nothing here is an eval
+  result; no savings are claimed.
+- Rejected: committing the generated 356 files (churn, and the hash makes
+  drift visible); LLM-written filler (violates the no-fabricated-content rule).
