@@ -64,6 +64,17 @@ describe("platform capability matrix", () => {
     const readme = readFileSync(new URL("../../../README.md", import.meta.url), "utf8");
     const m = readme.match(/<!-- matrix:start -->\n([\s\S]*?)\n<!-- matrix:end -->/);
     assert.ok(m, "README needs matrix:start/end markers");
-    assert.equal(m[1].trim(), platformMatrixMarkdown());
+    // Prettier realigns markdown tables on commit; compare cells, not padding.
+    const norm = (t: string) =>
+      t
+        .trim()
+        .split("\n")
+        .map((row) =>
+          row
+            .split("|")
+            .map((c) => c.trim().replace(/^-+$/, "---"))
+            .join("|"),
+        );
+    assert.deepEqual(norm(m[1]), norm(platformMatrixMarkdown()));
   });
 });
