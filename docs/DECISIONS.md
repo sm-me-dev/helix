@@ -875,8 +875,9 @@ cache tokens).
   model; pinning model IDs would age badly and can be unavailable by plan.
 - Added an OpenCode adapter for `.opencode/agents/*.md`,
   `.opencode/skills/<name>/SKILL.md`, and the native `opencode.json` `mcp`
-  schema. The generated JSON contains only Helix MCP entries; merge it into an
-  existing OpenCode config to preserve unrelated settings.
+  schema. The CLI merges Helix MCP entries into an existing OpenCode JSON file,
+  preserves unrelated settings, and keeps same-name existing MCP definitions.
+  A pack downloaded outside the CLI still contains a fragment that needs merging.
 - Official sources checked 2026-10-09:
   - https://cursor.com/docs/subagents
   - https://cursor.com/help/customization/skills
