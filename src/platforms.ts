@@ -129,12 +129,7 @@ export const PLATFORM_BY_ID = Object.fromEntries(PLATFORMS.map((p) => [p.id, p])
 // gemini is out: Google shut off consumer tiers on 2026-06-18 (see the gemini
 // entry's sources) and Antigravity reads AGENTS.md natively. Explicit
 // `--platform gemini` still emits GEMINI.md.
-export const DEFAULT_PLATFORMS: PlatformId[] = [
-  "claude-code",
-  "cursor",
-  "codex",
-  "copilot",
-];
+export const DEFAULT_PLATFORMS: PlatformId[] = ["claude-code", "cursor", "codex", "copilot"];
 
 const CELL = {
   emitted: "emitted",

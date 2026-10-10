@@ -131,7 +131,11 @@ export const antigravityAdapter: PlatformAdapter = {
   files(config: HarnessConfig) {
     const files: PackFile[] = [];
     for (const cid of config.crew) {
-      files.push({ path: `.agents/agents/${cid}.md`, language: "markdown", body: agentMd(cid, config) });
+      files.push({
+        path: `.agents/agents/${cid}.md`,
+        language: "markdown",
+        body: agentMd(cid, config),
+      });
     }
     for (const sid of config.skills) {
       files.push({
