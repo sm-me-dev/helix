@@ -1,0 +1,18 @@
+id: deep-bug
+title: Every service suite is red, root cause is the earliest module
+prompt: >
+  Every service suite under tests/*/service.test.ts is red, but the rules and
+  store suites are green. The services share no code with each other except
+  through the src/ dependency chain. Bisect the chain down to the single
+  upstream rule file whose constant disagrees with its per-module doc table
+  in docs/, fix it with the smallest diff, and keep every currently passing
+  test green (the pass command runs the whole tests tree, so collateral edits
+  fail). Do not edit the tests or the docs.
+pass: node --experimental-strip-types --test tests/*/*.test.ts tests/integration.test.ts
+timeoutSec: 900
+requireDiff: true
+fixture: large
+setup:
+  seed: 1
+  module: 0
+  rule: 1
