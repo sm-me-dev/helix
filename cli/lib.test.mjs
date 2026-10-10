@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  assertSafePackPath,
   configForStack,
   defaultConfig,
   detectStack,
@@ -273,5 +274,20 @@ describe("mergeOpenCodeConfig", () => {
       () => mergeOpenCodeConfig("{}", '{"mcp":[]}'),
       /generated mcp config must be a JSON object/,
     );
+  });
+});
+
+describe("assertSafePackPath", () => {
+  it("accepts normal relative pack paths", () => {
+    assert.equal(assertSafePackPath("AGENTS.md"), null);
+    assert.equal(assertSafePackPath(".helix/gate.mjs"), null);
+    assert.equal(assertSafePackPath(".claude/skills/x/SKILL.md"), null);
+  });
+
+  it("rejects absolute paths, traversal, and null bytes", () => {
+    assert.ok(assertSafePackPath("/etc/passwd"));
+    assert.ok(assertSafePackPath("../escape.md"));
+    assert.ok(assertSafePackPath("a/../../b.md"));
+    assert.ok(assertSafePackPath(""));
   });
 });

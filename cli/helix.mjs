@@ -21,6 +21,7 @@ import { generatePack } from "../src/lib/harness/generate.ts";
 import { cmdLearn } from "./learn.ts";
 import { DEFAULT_PLATFORMS, PLATFORM_BY_ID } from "../src/lib/harness/platforms.ts";
 import {
+  assertSafePackPath,
   configForStack,
   defaultConfig,
   detectStack,
@@ -221,6 +222,12 @@ async function cmdInit(opts) {
   let wrote = 0;
   let skipped = 0;
   for (const f of pack) {
+    const unsafe = assertSafePackPath(f.path);
+    if (unsafe) {
+      console.warn(`skip ${f.path}: unsafe pack path (${unsafe})`);
+      skipped++;
+      continue;
+    }
     const full = join(dir, f.path);
     const existing = readText(full);
     let body = f.body;

@@ -180,6 +180,20 @@ export function diffLines(oldText: string, newText: string, context = 3): string
   return out.join("\n");
 }
 
+/**
+ * Guard pack file paths before writing: generator paths are static, but the
+ * writer must still fail closed on traversal. Returns a problem string, or
+ * null when the path is safe to join under the target dir.
+ */
+export function assertSafePackPath(p: string): string | null {
+  if (!p || p.length > 256) return "empty or overlong path";
+  if (p.startsWith("/") || /^[A-Za-z]:[\\/]/.test(p)) return "absolute path";
+  const norm = p.replace(/\\/g, "/");
+  if (norm.split("/").includes("..")) return "parent traversal";
+  if (norm.includes("\0")) return "null byte";
+  return null;
+}
+
 export type DoctorFailure = { check: string; detail: string };
 
 /** Validate an unpacked pack directory. Returns failures (empty = healthy). */
@@ -499,7 +513,6 @@ export function detectPlatforms(
     : { platforms: [], source: "none" };
 }
 
-
 /** Merge Helix's OpenCode MCP entries without destroying unrelated user config.
  * Existing same-name servers win because they may contain credentials or custom args. */
 export function mergeOpenCodeConfig(
@@ -521,7 +534,7 @@ export function mergeOpenCodeConfig(
   const merged = {
     ...generated,
     ...existing,
-    "$schema": existing["$schema"] ?? generated["$schema"],
+    $schema: existing["$schema"] ?? generated["$schema"],
     mcp: { ...generatedMcp, ...existingMcp },
   };
   return {

@@ -130,6 +130,11 @@ describe("helix gate", () => {
     const j = JSON.parse(r.out);
     assert.equal(j.ok, true);
     assert.ok(j.steps.some((s: { name: string }) => s.name === "test"));
+    for (const s of j.steps as { name: string; status: string; command: string | null }[]) {
+      assert.ok(["pass", "fail", "skip"].includes(s.status), s.name);
+      if (s.status !== "skip")
+        assert.ok(typeof s.command === "string" && s.command.length > 0, s.name);
+    }
   });
 
   it("uses .helix/gate.json pins over detection", () => {
