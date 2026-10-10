@@ -1,8 +1,20 @@
 // Adaptive workflow orchestration: risk-aware tier selection, explicit states,
 // and handoff contracts. Logical responsibilities (manager/scout/architect/
-// builder/verifier), not necessarily separate model invocations. The main
+// builder/reviewer), not necessarily separate model invocations. The main
 // session is the manager: it classifies, owns acceptance criteria, and
 // controls completion. No daemons, no persistent state.
+//
+// This file is the single source of truth for shared workflow policy: the
+// tier table, the security rule, and the handoff size limit. `selectWorkflow`
+// (executable decision), `simulation.pickTier` (demo), and the Dispatch rules
+// in generated AGENTS.md (`dispatchRules`) all derive from it, so they cannot
+// drift apart. Tests compare the three.
+//
+// Enforcement boundary: this module only *decides and describes*. It does not
+// start a reviewer, and nothing here can prove one ran in a separate context.
+// `independentReview: true` and the generated rules are requirements on the
+// host agent. The only mechanical check Helix runs itself is `helix gate`
+// (secrets, lint, typecheck, tests).
 import type { CrewId } from "./types.ts";
 
 export type WorkflowState =
@@ -18,17 +30,82 @@ export type WorkflowSelection = {
   states: WorkflowState[];
   /** Why this tier was chosen (for reports, not prompts). */
   reason: string;
+  /**
+   * A fresh-window reviewer must verify before completion. A requirement on
+   * the host agent, not proof that a separate reviewer actually ran.
+   */
+  independentReview: boolean;
 };
 
 export type TaskFacts = {
+  /** Files the task will change. Must be a non-negative integer unless `isQuestion`. */
   fileCount: number;
   crossesModules: boolean;
+  /**
+   * Informational only: answering changes no code. Anything that edits files
+   * is NOT a question, however it is phrased; reclassify it before editing.
+   */
   isQuestion: boolean;
-  /** Security-sensitive: auth, secrets, permissions, crypto, sandbox boundaries. */
+  /**
+   * Security-sensitive: auth, permissions, secrets, crypto, sandbox/trust
+   * boundaries. Omitted means "not flagged": the caller owns this judgement,
+   * so pass true when unsure. A truthy value is treated as sensitive.
+   */
   securitySensitive?: boolean;
   /** Requirements have two or more plausible readings. */
   ambiguous?: boolean;
 };
+
+const TIER_ORDER: TaskTier[] = ["trivial", "standard", "complex"];
+
+const FULL_CHAIN: WorkflowState[] = [
+  "classified",
+  "discovered",
+  "planned",
+  "implemented",
+  "verifying",
+  "completed",
+];
+
+/** Canonical tier table. `when` and `roles` also feed the generated rules. */
+export const TIER_POLICY: Record<
+  TaskTier,
+  { when: string; roles: CrewId[]; states: WorkflowState[]; reason: string }
+> = {
+  trivial: {
+    when: "question, or one clear file",
+    roles: [],
+    states: ["classified", "verifying", "completed"],
+    reason: "trivial: main session only, gate before finish",
+  },
+  standard: {
+    when: "known files, one module",
+    roles: ["builder", "reviewer"],
+    states: ["classified", "implemented", "verifying", "completed"],
+    reason: "standard: build plus fresh-window review",
+  },
+  complex: {
+    when: "unknown surface or cross-module",
+    roles: ["scout", "architect", "builder", "reviewer"],
+    states: FULL_CHAIN,
+    reason: "complex: full discover-plan-build-verify chain",
+  },
+};
+
+/**
+ * Invariant: a security-sensitive change never skips independent
+ * verification because its file count or estimated complexity is low.
+ * Informational questions are not changes and stay light.
+ */
+export const SECURITY_POLICY = {
+  scope: "auth, permissions, secrets, crypto, sandbox",
+  minTier: "standard" as TaskTier,
+  roles: ["reviewer"] as CrewId[],
+  states: FULL_CHAIN,
+};
+
+/** Maximum lines in a serialized handoff card (see `serializeHandoff`). */
+export const HANDOFF_MAX_LINES = 12;
 
 const TRANSITIONS: Record<WorkflowState, WorkflowState[]> = {
   classified: ["discovered", "planned", "implemented", "verifying", "completed", "blocked"],
@@ -46,63 +123,102 @@ export function canTransition(from: WorkflowState, to: WorkflowState): boolean {
 }
 
 function baseForTier(tier: TaskTier): WorkflowSelection {
-  switch (tier) {
-    case "trivial":
-      return {
-        tier,
-        roles: [],
-        states: ["classified", "verifying", "completed"],
-        reason: "trivial: main session only, gate before finish",
-      };
-    case "standard":
-      return {
-        tier,
-        roles: ["builder", "reviewer"],
-        states: ["classified", "implemented", "verifying", "completed"],
-        reason: "standard: build plus fresh-window review",
-      };
-    case "complex":
-      return {
-        tier,
-        roles: ["scout", "architect", "builder", "reviewer"],
-        states: ["classified", "discovered", "planned", "implemented", "verifying", "completed"],
-        reason: "complex: full discover-plan-build-verify chain",
-      };
-  }
+  const p = TIER_POLICY[tier];
+  return {
+    tier,
+    roles: [...p.roles],
+    states: [...p.states],
+    reason: p.reason,
+    independentReview: p.roles.includes("reviewer"),
+  };
+}
+
+function blocked(reason: string): WorkflowSelection {
+  return {
+    tier: "trivial",
+    roles: [],
+    states: ["classified", "blocked"],
+    reason,
+    independentReview: false,
+  };
+}
+
+/**
+ * Surface-only tier (no security input). Shared by `selectWorkflow` and the
+ * demo's `pickTier` so the thresholds exist once.
+ */
+export function classifyTier(
+  facts: Pick<TaskFacts, "fileCount" | "crossesModules" | "isQuestion">,
+): TaskTier {
+  if (facts.isQuestion || facts.fileCount <= 1) return "trivial";
+  if (!facts.crossesModules) return "standard";
+  return "complex";
 }
 
 /**
  * Risk-aware workflow selection. Minimum workflow for the task:
- * ambiguous blocks for clarification first; security-sensitive never skips
- * independent verification; otherwise tier by surface (trivial/standard/complex).
+ * - ambiguous or malformed facts block for clarification first (fail closed);
+ * - an informational question stays trivial, even a security-related one;
+ * - a security-sensitive change is raised to at least `SECURITY_POLICY.minTier`
+ *   with the full chain and a required reviewer, whatever its file count;
+ * - otherwise tier by surface (trivial/standard/complex).
+ * Missing `crossesModules` is treated as crossing (the heavier tier).
  */
 export function selectWorkflow(facts: TaskFacts): WorkflowSelection {
+  if (facts == null || typeof facts !== "object") {
+    return blocked("task facts missing: classify before acting");
+  }
   if (facts.ambiguous) {
-    return {
-      tier: "trivial",
-      roles: [],
-      states: ["classified", "blocked"],
-      reason: "ambiguous: ask before acting; no files change until clarified",
-    };
+    return blocked("ambiguous: ask before acting; no files change until clarified");
   }
-  let tier: TaskTier;
-  if (facts.isQuestion || facts.fileCount <= 1) tier = "trivial";
-  else if (!facts.crossesModules) tier = "standard";
-  else tier = "complex";
+  const security = Boolean(facts.securitySensitive);
+  if (facts.isQuestion === true) {
+    const sel = baseForTier("trivial");
+    if (security) {
+      sel.reason +=
+        "; security-related question: answer only, reclassify as a change before editing";
+    }
+    return sel;
+  }
+  const n = facts.fileCount;
+  if (typeof n !== "number" || !Number.isInteger(n) || n < 0) {
+    return blocked("task facts invalid: fileCount must be a non-negative integer");
+  }
+  let tier = classifyTier({
+    fileCount: n,
+    crossesModules: facts.crossesModules !== false,
+    isQuestion: false,
+  });
+  if (security && TIER_ORDER.indexOf(tier) < TIER_ORDER.indexOf(SECURITY_POLICY.minTier)) {
+    tier = SECURITY_POLICY.minTier;
+  }
   const sel = baseForTier(tier);
-  if (facts.securitySensitive && tier !== "trivial") {
-    // Security-sensitive work keeps the reviewer even if the caller trimmed crew.
-    const roles: CrewId[] = sel.roles.includes("reviewer")
-      ? [...sel.roles]
-      : [...sel.roles, "reviewer"];
-    return {
-      ...sel,
-      roles,
-      states: ["classified", "discovered", "planned", "implemented", "verifying", "completed"],
-      reason: `${sel.reason}; security-sensitive: full chain with independent verification`,
-    };
-  }
-  return sel;
+  if (!security) return sel;
+  // Security-sensitive work keeps the reviewer even if tier roles were trimmed.
+  const roles = [...sel.roles, ...SECURITY_POLICY.roles.filter((r) => !sel.roles.includes(r))];
+  return {
+    ...sel,
+    roles,
+    states: [...SECURITY_POLICY.states],
+    reason: `${sel.reason}; security-sensitive: full chain with independent verification`,
+    independentReview: roles.includes("reviewer"),
+  };
+}
+
+/** Dispatch rules for generated AGENTS.md, derived from the policy above. */
+export function dispatchRules(): string[] {
+  const names = (roles: CrewId[], fresh: boolean) =>
+    roles.map((r) => (fresh && r === "reviewer" ? "fresh-window reviewer" : r)).join(", ");
+  const tiers = TIER_ORDER.map((t) => {
+    const p = TIER_POLICY[t];
+    return `- ${t} (${p.when}): ${p.roles.length ? names(p.roles, true) : "main session only"}.`;
+  });
+  const s = SECURITY_POLICY;
+  return [
+    ...tiers,
+    `- Security-sensitive (${s.scope}): even one file is never ${TIER_ORDER[0]}; min ${s.minTier}, ${names(s.roles, false)} must pass. Unsure: assume sensitive. Security questions: answer only.`,
+    `- Handoff: ${HANDOFF_MAX_LINES} lines max, one per cited file; goal, constraints, files, done-means, out of scope.`,
+  ];
 }
 
 export type Handoff = {
@@ -113,17 +229,70 @@ export type Handoff = {
   outOfScope: string;
 };
 
-/** Validate a 12-line handoff card. Returns problems (empty = valid). */
+// CRLF, CR, VT, FF, NEL, LS, PS: every separator a terminal or editor may
+// render as a line break, so none of them hides lines from the count.
+const LINE_BREAKS = /\r\n|[\n\r\v\f\u0085\u2028\u2029]/g;
+
+function clean(v: unknown): string {
+  return typeof v === "string" ? v.replace(LINE_BREAKS, "\n").trim() : "";
+}
+
+/**
+ * Canonical card text: every field is always present, one labelled line per
+ * cited file, continuation lines for multi-line values. Counting, validation
+ * and display all use this one form; an empty value still occupies its line.
+ */
+export function serializeHandoff(h: Handoff): string {
+  const files = Array.isArray(h?.files) ? h.files.map(clean) : [];
+  return [
+    `goal: ${clean(h?.goal)}`,
+    `constraints: ${clean(h?.constraints)}`,
+    ...(files.length ? files : [""]).map((f) => `file: ${f}`),
+    `done: ${clean(h?.doneMeans)}`,
+    `out of scope: ${clean(h?.outOfScope)}`,
+  ].join("\n");
+}
+
+/** Lines in the serialized card: the number `HANDOFF_MAX_LINES` limits. */
+export function handoffLineCount(h: Handoff): number {
+  return serializeHandoff(h).split("\n").length;
+}
+
+/** Validate a handoff card. Returns problems (empty = valid). Never throws. */
 export function validateHandoff(h: Handoff): string[] {
+  if (h == null || typeof h !== "object") return ["handoff must be an object"];
   const problems: string[] = [];
-  if (!h.goal.trim()) problems.push("goal is empty");
-  if (!h.doneMeans.trim()) problems.push("doneMeans is empty");
-  if (h.files.length === 0) problems.push("files is empty: cite at least one path or range");
-  const lines = [h.goal, h.constraints, h.doneMeans, h.outOfScope].join("\n").split("\n").length;
-  if (lines > 12) problems.push(`handoff is ${lines} lines (max 12)`);
-  for (const f of h.files) {
-    if (f.includes("\n") || f.length > 160)
-      problems.push(`file entry looks pasted, not cited: ${f.slice(0, 40)}`);
+  for (const [name, required] of [
+    ["goal", true],
+    ["constraints", false],
+    ["doneMeans", true],
+    ["outOfScope", false],
+  ] as const) {
+    const v = h[name];
+    if (typeof v !== "string") problems.push(`${name} must be a string`);
+    else if (required && !clean(v)) problems.push(`${name} is empty`);
+  }
+  if (!Array.isArray(h.files)) {
+    problems.push("files must be an array of cited paths");
+  } else {
+    if (h.files.length === 0) problems.push("files is empty: cite at least one path or range");
+    for (const f of h.files) {
+      if (typeof f !== "string") {
+        problems.push("file entry must be a string");
+        continue;
+      }
+      const c = clean(f);
+      if (!c) problems.push("file entry is empty");
+      else if (c.includes("\n") || c.length > 160) {
+        problems.push(`file entry looks pasted, not cited: ${c.slice(0, 40).replace(/\n/g, " ")}`);
+      }
+    }
+  }
+  const lines = handoffLineCount(h);
+  if (lines > HANDOFF_MAX_LINES) {
+    problems.push(
+      `handoff is ${lines} lines (max ${HANDOFF_MAX_LINES}): cite fewer files or shorten multi-line fields`,
+    );
   }
   return problems;
 }
