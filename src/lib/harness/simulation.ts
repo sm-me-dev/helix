@@ -4,6 +4,8 @@ import { DEFAULT_CREW } from "./crew.ts";
 import { DEFAULT_MCPS } from "./mcps.ts";
 import { DEFAULT_PLATFORMS } from "./platforms.ts";
 import { DEFAULT_SKILLS } from "./skills.ts";
+import { classifyTier } from "./workflow.ts";
+import type { TaskTier } from "./workflow.ts";
 
 export const SAMPLE_ISSUE = {
   id: "LED-1841",
@@ -114,17 +116,18 @@ export const SIM_DURATION = 17000;
 const NUMBER_WORDS = ["Zero", "One", "Two", "Three", "Four", "Five", "Six"];
 
 /** Tier of a task, picked by the main session before any delegation. */
-export type TaskTier = "trivial" | "standard" | "complex";
+export type { TaskTier } from "./workflow.ts";
 
-/** Pick a tier: one file/clear ask/question, one known module, or unknown/cross-module. */
+/**
+ * Surface-only tier (one file/question, one known module, or cross-module).
+ * Thresholds live in workflow.ts; security escalation is `selectWorkflow`'s job.
+ */
 export function pickTier(args: {
   fileCount: number;
   crossesModules: boolean;
   isQuestion: boolean;
 }): TaskTier {
-  if (args.isQuestion || args.fileCount <= 1) return "trivial";
-  if (!args.crossesModules) return "standard";
-  return "complex";
+  return classifyTier(args);
 }
 
 export type AdaptedSim = {

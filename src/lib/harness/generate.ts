@@ -7,6 +7,7 @@ import { MCP_BY_ID } from "./mcps.ts";
 import { PLATFORM_BY_ID } from "./platforms.ts";
 import { SKILL_BY_ID } from "./skills.ts";
 import type { HarnessConfig, PackFile } from "./types";
+import { dispatchRules } from "./workflow.ts";
 
 export type { PackFile } from "./types";
 
@@ -40,7 +41,7 @@ function agentsMd(config: HarnessConfig): string {
   const graph = REPO_MAP_PROVIDERS[config.graphFirst ? "graphify" : "outline"].instruction;
 
   const fanout = config.defaultSingleAgent
-    ? `Default to one agent when the change is local and files are in context.`
+    ? `Default to one agent when local, files in context, not security-sensitive.`
     : `Dispatch the matching crew role for every non-trivial task.`;
 
   const hooks = config.hooksEnabled
@@ -63,11 +64,8 @@ function agentsMd(config: HarnessConfig): string {
   return `# Helix
 ## Dispatch (you are the orchestrator; no dispatcher subagent)
 
-- trivial (one file, clear ask, or question): main session only.
-- standard (known files, one module): build, then a fresh-window reviewer.
-- complex (unknown surface or cross-module): scout, architect, builder, reviewer.
-- Handoff, 12 lines max: goal, constraints, cited files, done-means, out of scope. Never paste transcripts or tool dumps.
-- Two product readings: ask. A wrong guess costs more than a question.
+${dispatchRules().join("\n")}
+- Two product readings: ask.
 
 ## How to work
 
