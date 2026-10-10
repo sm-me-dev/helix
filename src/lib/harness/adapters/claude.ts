@@ -5,6 +5,7 @@ import {
   agentFile,
   formatHintHook,
   hooksJson,
+  permissionsOnlyJson,
   pointer,
   preferGraphHook,
   skillFile,
@@ -22,8 +23,21 @@ function hookFiles(): { path: string; language: string; body: string }[] {
 
 export const claudeAdapter: PlatformAdapter = {
   id: "claude-code",
-  verifiedAt: "2026-10-07",
+  verifiedAt: "2026-10-10",
   sources: [
+    {
+      title: "Claude Code plugin manifest",
+      url: "https://code.claude.com/docs/en/plugins-reference",
+    },
+    {
+      title: "Claude Code plugin components",
+      url: "https://code.claude.com/docs/en/plugins/components",
+    },
+    {
+      title: "Claude Code plugin marketplaces",
+      url: "https://code.claude.com/docs/en/plugin-marketplaces",
+    },
+    { title: "Claude Code MCP", url: "https://code.claude.com/docs/en/mcp" },
     { title: "Claude Code subagents", url: "https://code.claude.com/docs/en/subagents" },
     { title: "Claude Code skills", url: "https://code.claude.com/docs/en/skills" },
     { title: "Claude Code hooks", url: "https://code.claude.com/docs/en/hooks" },
@@ -37,7 +51,7 @@ export const claudeAdapter: PlatformAdapter = {
     skills: "emitted",
     subagents: "emitted",
     hooks: "emitted",
-    plugin: "unverified",
+    plugin: "emitted",
     "structured-output": "unverified",
     "session-continuation": "unverified",
     sandboxing: "unverified",
@@ -47,9 +61,21 @@ export const claudeAdapter: PlatformAdapter = {
     "Subagents in .claude/agents with tools allow-list and model tier in frontmatter. " +
     "Skills as .claude/skills/*/SKILL.md. Hooks in .claude/settings.json. Project MCP in " +
     ".mcp.json under mcpServers. CLAUDE.md points at AGENTS.md. No conductor file: the " +
-    "main session is the orchestrator.",
+    "main session is the orchestrator. Plugin (`helix plugin`, verified 2026-10-10): agents, " +
+    "skills, hooks and .mcp.json ship in the plugin; `helix init --claude-plugin` keeps only " +
+    "CLAUDE.md, AGENTS.md, the gate and the secret denies, because a plugin cannot carry " +
+    "CLAUDE.md or permissions.",
   files(config: HarnessConfig) {
     const files = [{ path: "CLAUDE.md", language: "markdown", body: pointer("Claude Code") }];
+    if (config.claudePlugin) {
+      // The plugin supplies agents, skills, hooks and MCP. Only what a plugin cannot ship stays.
+      files.push({
+        path: ".claude/settings.json",
+        language: "json",
+        body: permissionsOnlyJson(),
+      });
+      return files;
+    }
     for (const cid of config.crew) {
       files.push({
         path: `.claude/agents/${cid}.md`,

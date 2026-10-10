@@ -22,6 +22,21 @@ prompt. Requires Node 22.6+ (type stripping, no build step).
 When an `opencode.json` already exists, the CLI merges MCP entries into it and
 preserves unrelated settings (existing same-name MCP definitions take precedence).
 
+### Claude Code as a plugin
+
+```sh
+./cli/helix.mjs plugin --out ~/helix-marketplace
+claude plugin marketplace add ~/helix-marketplace && claude plugin install helix@helix-harness
+./cli/helix.mjs init ~/your-repo --platform claude-code --claude-plugin
+```
+
+The plugin carries the agents, skills, hooks and MCP config, so updates are
+versioned in one place. A plugin cannot ship `CLAUDE.md` or `permissions`, so
+`init --claude-plugin` still writes `AGENTS.md`, the gate and the secret denies
+into the repo, and nothing else (no second copy of the hooks, which would run
+twice). `claude plugin details helix` reports its projected token cost;
+`scripts/measure-plugin.mjs` stores that figure.
+
 ## What is verified and what is not
 
 - **Verified against vendor docs (dates per platform matrix)**: Claude hooks,
@@ -51,7 +66,7 @@ primary page was checked, so those paths stay unverified.
 
 | Platform           | verified   | instructions | mcp        | skills     | subagents  | hooks                  | plugin     | structured-output | session-continuation | sandboxing | lsp        |
 | ------------------ | ---------- | ------------ | ---------- | ---------- | ---------- | ---------------------- | ---------- | ----------------- | -------------------- | ---------- | ---------- |
-| Claude Code        | 2026-10-07 | emitted      | emitted    | emitted    | emitted    | emitted                | unverified | unverified        | unverified           | unverified | unverified |
+| Claude Code        | 2026-10-10 | emitted      | emitted    | emitted    | emitted    | emitted                | emitted    | unverified        | unverified           | unverified | unverified |
 | Cursor             | 2026-10-09 | emitted      | emitted    | emitted    | emitted    | unverified             | unverified | unverified        | unverified           | unverified | unverified |
 | Codex              | 2026-10-09 | emitted      | emitted    | emitted    | emitted    | emitted                | unverified | unverified        | unverified           | unverified | unverified |
 | Gemini CLI         | no         | unverified   | unverified | unverified | unverified | unverified             | unverified | unverified        | unverified           | unverified | unverified |
