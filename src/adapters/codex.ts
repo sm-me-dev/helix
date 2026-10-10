@@ -81,6 +81,10 @@ export const codexAdapter: PlatformAdapter = {
     subagents: "emitted",
     hooks: "emitted",
     plugin: "unverified",
+    "structured-output": "unverified",
+    "session-continuation": "unverified",
+    sandboxing: "unverified",
+    lsp: "unverified",
   },
   notes:
     "Skills in .agents/skills. MCP in .codex/config.toml under [mcp_servers.*] (project scope is " +

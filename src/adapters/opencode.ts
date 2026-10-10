@@ -15,7 +15,8 @@ function agentFile(id: HarnessConfig["crew"][number]): string {
       permissions: ["  edit: deny", "  bash: deny"],
     },
     builder: {
-      description: "Implement an accepted plan, write focused tests, and run the repository checks.",
+      description:
+        "Implement an accepted plan, write focused tests, and run the repository checks.",
       permissions: [],
     },
     reviewer: {
@@ -24,15 +25,17 @@ function agentFile(id: HarnessConfig["crew"][number]): string {
     },
   } as const;
   const definition = definitions[id];
-  return [
-    "---",
-    "description: " + definition.description,
-    "mode: subagent",
-    ...(definition.permissions.length ? ["permission:", ...definition.permissions] : []),
-    "---",
-    "",
-    agentBody(id),
-  ].join("\n") + "\n";
+  return (
+    [
+      "---",
+      "description: " + definition.description,
+      "mode: subagent",
+      ...(definition.permissions.length ? ["permission:", ...definition.permissions] : []),
+      "---",
+      "",
+      agentBody(id),
+    ].join("\n") + "\n"
+  );
 }
 
 export const opencodeAdapter: PlatformAdapter = {
@@ -53,6 +56,10 @@ export const opencodeAdapter: PlatformAdapter = {
     subagents: "emitted",
     hooks: "unverified",
     plugin: "unverified",
+    "structured-output": "unverified",
+    "session-continuation": "unverified",
+    sandboxing: "unverified",
+    lsp: "unverified",
   },
   notes:
     "Repo instructions use AGENTS.md; custom subagents live in .opencode/agents/<name>.md, " +

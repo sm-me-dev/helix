@@ -41,6 +41,10 @@ export const cursorAdapter: PlatformAdapter = {
     subagents: "emitted",
     hooks: "unverified",
     plugin: "unverified",
+    "structured-output": "unverified",
+    "session-continuation": "unverified",
+    sandboxing: "unverified",
+    lsp: "unverified",
   },
   notes:
     "Project rules in .cursor/rules/*.mdc; custom agents in .cursor/agents/*.md; " +

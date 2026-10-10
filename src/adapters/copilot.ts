@@ -21,6 +21,10 @@ export const copilotAdapter: PlatformAdapter = {
     subagents: "unverified",
     hooks: "unverified",
     plugin: "unverified",
+    "structured-output": "unverified",
+    "session-continuation": "unverified",
+    sandboxing: "unverified",
+    lsp: "unverified",
   },
   notes:
     ".github/copilot-instructions.md is the instructions file. Workspace MCP lives in " +

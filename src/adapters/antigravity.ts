@@ -115,6 +115,10 @@ export const antigravityAdapter: PlatformAdapter = {
     subagents: "emitted",
     hooks: "supported",
     plugin: "unverified",
+    "structured-output": "unverified",
+    "session-continuation": "unverified",
+    sandboxing: "unverified",
+    lsp: "unverified",
   },
   notes:
     "AGENTS.md is read natively (no GEMINI.md pointer). Skills in .agents/skills, MCP in " +
