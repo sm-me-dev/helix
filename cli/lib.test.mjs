@@ -12,9 +12,11 @@ import {
   mergeOpenCodeConfig,
   measureReport,
   packJson,
+  packPathSegments,
   reconstructConfig,
 } from "./lib.ts";
 import { generatePack } from "../src/lib/harness/generate.ts";
+import { PLATFORM_BY_ID } from "../src/lib/harness/platforms.ts";
 
 describe("detectStack", () => {
   it("detects a TypeScript npm repo with test and lint scripts", () => {
@@ -278,16 +280,65 @@ describe("mergeOpenCodeConfig", () => {
 });
 
 describe("assertSafePackPath", () => {
-  it("accepts normal relative pack paths", () => {
-    assert.equal(assertSafePackPath("AGENTS.md"), null);
-    assert.equal(assertSafePackPath(".helix/gate.mjs"), null);
-    assert.equal(assertSafePackPath(".claude/skills/x/SKILL.md"), null);
+  it("accepts normal and nested relative pack paths", () => {
+    for (const p of [
+      "AGENTS.md",
+      ".helix/gate.mjs",
+      ".claude/skills/x/SKILL.md",
+      ".github/copilot-instructions.md",
+      "a/b/c/d/e.txt",
+      "name..with..dots.md",
+      "dir\\file.md", // backslash is a separator after normalization, so this is nested
+    ]) {
+      assert.equal(assertSafePackPath(p), null, p);
+    }
   });
 
-  it("rejects absolute paths, traversal, and null bytes", () => {
-    assert.ok(assertSafePackPath("/etc/passwd"));
-    assert.ok(assertSafePackPath("../escape.md"));
-    assert.ok(assertSafePackPath("a/../../b.md"));
-    assert.ok(assertSafePackPath(""));
+  it("accepts every path the generator emits for every platform", () => {
+    for (const id of Object.keys(PLATFORM_BY_ID)) {
+      for (const f of generatePack(defaultConfig([id]))) {
+        assert.equal(assertSafePackPath(f.path), null, `${id}: ${f.path}`);
+      }
+    }
+  });
+
+  const rejected = {
+    "POSIX absolute": ["/etc/passwd", "/", "\\etc\\passwd"],
+    "Windows drive-rooted": ["C:\\foo", "C:/foo", "c:\\foo", "Z:\\"],
+    "Windows drive-relative": ["C:foo", "C:", "d:foo\\bar", "C:..\\x"],
+    "UNC and extended": [
+      "\\\\server\\share\\x",
+      "//server/share/x",
+      "\\\\?\\C:\\Windows\\x",
+      "//?/C:/x",
+      "\\\\.\\pipe\\x",
+      "\\\\?\\UNC\\server\\share",
+    ],
+    "parent traversal": [
+      "..",
+      "../x",
+      "..\\x",
+      "a/../../x",
+      "a\\..\\..\\x",
+      "a/..\\x",
+      "a\\../x",
+      "a/b/..",
+    ],
+    "Windows-trimmed dot and space segments": [".. /x", "a/.. ", "...", "a./b", "a /b"],
+    "null byte and control characters": ["a\0b", "\0", "AGENTS.md\0.txt", "a\nb", "a\tb", "a\x7fb"],
+    "malformed or empty": ["", "a//b", "a/", "./a", "a/./b", "a\\\\b", "x".repeat(257)],
+    "colon in a segment": ["a/b:stream", "a:b", "x/C:y"],
+    "non-string input": [undefined, null, 42, {}],
+  };
+  for (const [label, inputs] of Object.entries(rejected)) {
+    it(`rejects ${label}`, () => {
+      for (const p of inputs) {
+        assert.ok(assertSafePackPath(p), `should reject ${JSON.stringify(p)}`);
+      }
+    });
+  }
+
+  it("normalizes separators the same way the validator does", () => {
+    assert.deepEqual(packPathSegments("a\\b/c"), ["a", "b", "c"]);
   });
 });

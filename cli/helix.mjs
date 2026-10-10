@@ -5,7 +5,6 @@ import { execFileSync, spawnSync } from "node:child_process";
 import {
   accessSync,
   constants,
-  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -21,7 +20,6 @@ import { generatePack } from "../src/lib/harness/generate.ts";
 import { cmdLearn } from "./learn.ts";
 import { DEFAULT_PLATFORMS, PLATFORM_BY_ID } from "../src/lib/harness/platforms.ts";
 import {
-  assertSafePackPath,
   configForStack,
   defaultConfig,
   detectStack,
@@ -35,6 +33,13 @@ import {
   packJson,
   reconstructConfig,
 } from "./lib.ts";
+import {
+  UnsafeDestinationError,
+  prepareTargetRoot,
+  preflightPack,
+  readContained,
+  writeContained,
+} from "./safe-write.ts";
 import { formatReport, loadOpenCodeDb, parseClaudeCodeJsonl } from "./report.ts";
 
 const USAGE = `helix — AI coding harness pack manager
@@ -169,6 +174,14 @@ function checkPlatforms(platforms) {
   return true;
 }
 
+/** A destination turned unsafe mid-run (e.g. changed after preflight): stop, exit 1. Anything else is a real bug and rethrows. */
+function abortUnsafe(error, wrote, dir) {
+  if (!(error instanceof UnsafeDestinationError)) throw error;
+  console.error(`helix init: refusing ${error.packPath}: ${error.reason}`);
+  console.error(`helix init: aborted; ${wrote} file(s) had already been written to ${dir}`);
+  process.exitCode = 1;
+}
+
 async function cmdInit(opts) {
   const dir = resolve(opts.dir);
   const files = walkFiles(dir);
@@ -219,17 +232,28 @@ async function cmdInit(opts) {
     process.exitCode = 2;
     return;
   }
+  // Fail closed: a pack with any unsafe destination (bad path, or a symlink that
+  // leaves the target) is rejected whole, before a single byte is written.
+  const root = prepareTargetRoot(dir);
+  const violations = preflightPack(
+    root,
+    pack.map((f) => f.path),
+  );
+  if (violations.length > 0) {
+    for (const v of violations) console.error(`helix init: refusing ${v.packPath}: ${v.reason}`);
+    console.error("helix init: unsafe destination in the target directory; nothing was written.");
+    process.exitCode = 1;
+    return;
+  }
   let wrote = 0;
   let skipped = 0;
   for (const f of pack) {
-    const unsafe = assertSafePackPath(f.path);
-    if (unsafe) {
-      console.warn(`skip ${f.path}: unsafe pack path (${unsafe})`);
-      skipped++;
-      continue;
+    let existing;
+    try {
+      existing = readContained(root, f.path);
+    } catch (error) {
+      return abortUnsafe(error, wrote, dir);
     }
-    const full = join(dir, f.path);
-    const existing = readText(full);
     let body = f.body;
     if (f.path === "opencode.json" && existing !== null) {
       try {
@@ -264,10 +288,11 @@ async function cmdInit(opts) {
         continue;
       }
     }
-    const parts = f.path.split("/");
-    parts.pop();
-    mkdirSync(parts.length > 0 ? join(dir, ...parts) : dir, { recursive: true });
-    writeFileSync(full, body);
+    try {
+      writeContained(root, f.path, body);
+    } catch (error) {
+      return abortUnsafe(error, wrote, dir);
+    }
     console.log(`${existing === null ? "write " : "wrote "} ${f.path}`);
     wrote++;
   }

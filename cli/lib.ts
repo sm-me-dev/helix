@@ -181,17 +181,38 @@ export function diffLines(oldText: string, newText: string, context = 3): string
 }
 
 /**
- * Guard pack file paths before writing: generator paths are static, but the
- * writer must still fail closed on traversal. Returns a problem string, or
- * null when the path is safe to join under the target dir.
+ * Lexical guard for pack file paths: generator paths are static, but the
+ * writer must still fail closed. Separators are normalized (`\` -> `/`) first
+ * so the same rules hold on every OS. Returns a problem string, or null when
+ * the path is a plain relative path safe to join under the target dir.
+ *
+ * Rejected: null/control bytes, POSIX-absolute, UNC (`//srv/share`), extended
+ * (`\\?\C:\`), drive-qualified (`C:\x`, `C:/x`, and drive-relative `C:x`),
+ * `..`, empty and `.` segments, `:` anywhere (drive or NTFS stream syntax),
+ * and segments ending in `.` or space (Windows strips those, so `.. ` is `..`).
+ * This is a syntax check only; symlinks need the filesystem check in
+ * safe-write.ts.
  */
 export function assertSafePackPath(p: string): string | null {
-  if (!p || p.length > 256) return "empty or overlong path";
-  if (p.startsWith("/") || /^[A-Za-z]:[\\/]/.test(p)) return "absolute path";
+  if (typeof p !== "string" || p.length === 0 || p.length > 256) {
+    return "empty or overlong path";
+  }
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x1f\x7f]/.test(p)) return p.includes("\0") ? "null byte" : "control character";
   const norm = p.replace(/\\/g, "/");
-  if (norm.split("/").includes("..")) return "parent traversal";
-  if (norm.includes("\0")) return "null byte";
+  if (norm.startsWith("/")) return "absolute or UNC path";
+  if (/^[A-Za-z]:/.test(norm)) return "Windows drive path";
+  const segments = norm.split("/");
+  if (segments.includes("..")) return "parent traversal";
+  if (segments.some((s) => s === "" || s === ".")) return "empty or '.' path segment";
+  if (segments.some((s) => s.includes(":"))) return "colon in path segment";
+  if (segments.some((s) => /[. ]$/.test(s))) return "segment ends with dot or space";
   return null;
+}
+
+/** Normalized segments of a path that already passed assertSafePackPath. */
+export function packPathSegments(p: string): string[] {
+  return p.replace(/\\/g, "/").split("/");
 }
 
 export type DoctorFailure = { check: string; detail: string };
