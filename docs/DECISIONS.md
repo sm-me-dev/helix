@@ -976,3 +976,33 @@ cache tokens).
   added/removed by intent.
 - Evidence: `npm run lint` 0, `typecheck` 0, `npm test` 193 pass / 0 fail,
   `helix gate` PASS (secrets, lint, typecheck, test) on the changed tree.
+
+## 2026-10-10 — F0: test hermeticity audit
+
+- Reproduced on this machine (Node v24.14.1 via nvm, `NODE_ENV=production` exported
+  by the shell). Run with PATH `<nvm bin>:/usr/bin:/bin` (no yarn/pnpm/bun) and
+  `NODE_ENV` unset: `cli/cli.test.mjs` "no agent config in the repo: universal pack
+  only" FAILED. Cause: the CLI tests used `dirname(process.execPath)` as a
+  "hermetic" PATH, but nvm keeps global npm installs next to node
+  (`~/.nvm/versions/node/v24.14.1/bin/codex`), so `helix init` detected Codex.
+  Same defect in `cli/e2e-workflows.test.mjs` and `codex-antigravity.test.ts`.
+- Fix: `cli/test-env.mjs#nodeOnlyBin()` (temp dir holding only a `node` symlink),
+  guarded by `cli/test-env.test.mjs` (written first; failed on missing module).
+  The TS test inlines the same helper (no .mjs import into typechecked code).
+- Second finding: `src/lib/harness/codex-antigravity.test.ts` (14 tests) was not in
+  the `npm test` file list, so it never ran. `scripts/test-coverage.test.mjs`
+  (written first, failed naming that file) now asserts every `src/**/*.test.ts` is
+  listed; the file was added to `package.json`.
+- `hooks.test.ts` spawned `node` from PATH instead of `process.execPath`
+  (Node-version dependence); now uses `process.execPath`. No failing test written:
+  the effect only shows on hosts with several Node versions on PATH.
+- F0's own `gate.test.ts` diff (`yarn.lock` -> `deps.lock`) verified as described.
+- Not found: tests that read `NODE_ENV`, depend on cwd, or use the network
+  (grep of all test files for `process.env|NODE_ENV|cwd|fetch(|http`). `deps.lock`
+  fix verified only by reasoning plus runs on a PATH without yarn.
+- Residual (not changed): `GATE_PATH` in the e2e test still appends `/usr/bin:/bin:
+/usr/local/bin`, so gate-picking tests depend on those dirs having no yarn/pnpm.
+- Evidence (Node 24.14.1; CI is Node 22, NOT run here): `npm run lint` 0 errors /
+  12 warnings, `typecheck` 0, `npm test` 306 + 207 pass, 0 fail, under (a) PATH
+  without yarn/pnpm/bun + NODE_ENV unset, (b) same PATH + NODE_ENV=production,
+  (c) full PATH + NODE_ENV=production.

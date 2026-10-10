@@ -100,7 +100,9 @@ describe("helix gate", () => {
   it("skips placeholder values and lockfiles", () => {
     const dir = repo({ "package.json": pkg({ test: OK }), "a.js": "x" });
     writeFileSync(join(dir, "a.js"), 'const apiKey = "your-api-key-goes-here-123456";\n');
-    writeFileSync(join(dir, "yarn.lock"), `${FAKE_AWS}\n`);
+    // Not "yarn.lock": that name makes the gate pick yarn, so the test would
+    // fail on any machine without yarn. Any *.lock is skipped by the scanner.
+    writeFileSync(join(dir, "deps.lock"), `${FAKE_AWS}\n`);
     const r = gate(dir);
     assert.equal(r.code, 0, r.out);
   });
