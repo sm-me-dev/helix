@@ -1039,3 +1039,29 @@ cache tokens).
 - Rejected: dropping the table for every platform (breaks copilot/universal readers);
   giving Scout `Bash` to run `.helix/map.mjs` (widens a read-only role; Grep/Glob is enough).
 - Evidence: lint 0 errors/12 warnings, typecheck 0, `npm test` 306 + 212 pass (Node 24.14.1).
+
+## 2026-10-10 — F5: loose ends
+
+- `gemini` in `DEFAULT_PLATFORMS`: facts now verified from a Google primary source (the
+  Gemini CLI maintainers' announcement, https://github.com/google-gemini/gemini-cli/discussions/28017,
+  fetched 2026-10-10): on 2026-06-18 Gemini CLI stopped serving Google AI Pro, AI Ultra and
+  free individual accounts; enterprise Code Assist licenses and API-key auth are unaffected;
+  Antigravity CLI is the successor and keeps reading `gemini.md`. Press coverage
+  (The Register 2026-05-20) agrees. The platform note and a test (`platforms.test.ts`) now
+  cite the primary source. NOT changed: the default list. Dropping `gemini` changes what
+  `helix init --platform all` and the web default emit (no GEMINI.md), so it is the owner's
+  call. Recommendation: remove `gemini` from the defaults; most users can no longer run it,
+  and Antigravity already reads AGENTS.md natively. Did not fetch the Google developers
+  deprecation page (not reachable from this session's verified URL list).
+- Untracked files (read, not modified): `.gemini/settings.json` = a graphify BeforeTool
+  `hook-guard gemini` hook for Gemini CLI; `GEMINI.md` = 9-line graphify usage rules;
+  `.gitattributes` = `graphify-out/graph.json merge=graphify` merge driver;
+  `.husky/post-checkout` and `.husky/post-commit` = graphify hooks that rebuild
+  `graphify-out/` after checkout/commit (they are live: husky's hooksPath points at
+  `.husky/`, and each commit launched "[graphify hook] ... background rebuild"). All five
+  look like output of `graphify ... install` commands. Left untracked and untouched.
+- ESLint: 12 warnings, all `react-refresh/only-export-components` in `src/routes/*.tsx`
+  (page components next to the file route's required non-component `Route` export). Accepted
+  for that glob only, documented in `eslint.config.mjs`; still on elsewhere. `npm run lint`
+  now reports 0 problems. Rejected: splitting every route's components into separate files
+  (churn in scaffolding for a dev-only Fast Refresh nicety).
