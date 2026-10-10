@@ -43,12 +43,23 @@ ${skills ? `Skills to load if present: ${skills}\n\n` : ""}Rules:
 `;
 }
 
-export function agentFile(id: HarnessConfig["crew"][number]): string {
+/** Allow-list for a role. Graphify tools are named only when the graphify MCP is configured;
+ * otherwise a read-only role gets Grep and Glob so it can still search (Read alone cannot).
+ * Tool names verified 2026-10-09/10 against https://code.claude.com/docs/en/sub-agents.md. */
+export function toolsFor(id: HarnessConfig["crew"][number], config: HarnessConfig): string[] {
+  const tools = CREW_BY_ID[id].tools;
+  if (config.mcps.includes("graphify")) return tools;
+  const rest = tools.filter((t) => !t.startsWith("mcp__graphify__"));
+  if (rest.length === tools.length || rest.some((t) => t === "Edit" || t === "Write")) return rest;
+  return [...new Set(["Grep", "Glob", ...rest])];
+}
+
+export function agentFile(id: HarnessConfig["crew"][number], config: HarnessConfig): string {
   const c = CREW_BY_ID[id];
   return `---
 name: ${c.id}
 description: ${c.oneLiner}
-tools: ${c.tools.join(", ")}
+tools: ${toolsFor(id, config).join(", ")}
 model: ${c.model}
 ---
 

@@ -35,4 +35,12 @@ describe("mcp cost per platform", () => {
       if (d.status === "deferred") assert.ok(d.source && d.verifiedAt, `${id} needs source+date`);
     }
   });
+
+  it("does not claim Haiku lacks tool search (disproved 2026-10-10: Haiku 4.5 supports it)", () => {
+    const note = MCP_DEFERRAL["claude-code"]?.note ?? "";
+    assert.doesNotMatch(note, /Haiku models do not support/i);
+    assert.match(note, /Haiku 4\.5/);
+    assert.match(note, /subagent/i, "must say subagent deferral is not documented");
+    assert.equal(MCP_DEFERRAL["claude-code"]?.verifiedAt, "2026-10-10");
+  });
 });

@@ -20,6 +20,18 @@ function frontmatter(text: string): string {
   return m ? m[0] : text;
 }
 
+/** Config whose roles carry their full tool lists (graphify MCP present): the naive/UI view. */
+const ALL_TOOLS_CONFIG: HarnessConfig = {
+  crew: [],
+  skills: [],
+  mcps: ["graphify"],
+  platforms: [],
+  graphFirst: true,
+  progressiveDisclosure: true,
+  defaultSingleAgent: true,
+  hooksEnabled: true,
+};
+
 /** Measured display numbers for one skill: always-on frontmatter vs full body. */
 export function skillTokens(id: HarnessConfig["skills"][number]): { index: number; body: number } {
   const full = skillFile(id);
@@ -27,8 +39,11 @@ export function skillTokens(id: HarnessConfig["skills"][number]): { index: numbe
 }
 
 /** Measured display numbers for one crew role: parent-side description vs full file. */
-export function agentTokens(id: HarnessConfig["crew"][number]): { index: number; body: number } {
-  const full = agentFile(id);
+export function agentTokens(
+  id: HarnessConfig["crew"][number],
+  config: HarnessConfig = ALL_TOOLS_CONFIG,
+): { index: number; body: number } {
+  const full = agentFile(id, config);
   return { index: countTokens(frontmatter(full)), body: countTokens(full) };
 }
 
@@ -92,7 +107,7 @@ export function breakdown(config: HarnessConfig): TokenBreakdown {
     0,
   );
   const crewIndex = emittedCrew(config).reduce(
-    (n, id) => n + countTokens(frontmatter(agentFile(id))),
+    (n, id) => n + countTokens(frontmatter(agentFile(id, config))),
     0,
   );
   const mcpParts = config.mcps.map((id) => ({ id, ...mcpSchemaTokens(id) }));
@@ -103,7 +118,7 @@ export function breakdown(config: HarnessConfig): TokenBreakdown {
   // schemas; skills and crew fully inlined (frontmatter-only is the helix
   // optimization).
   const naiveSkills = SKILLS.reduce((n, s) => n + countTokens(skillFile(s.id)), 0);
-  const naiveCrew = CREW.reduce((n, c) => n + countTokens(agentFile(c.id)), 0);
+  const naiveCrew = CREW.reduce((n, c) => n + countTokens(agentFile(c.id, ALL_TOOLS_CONFIG)), 0);
   const naiveAlwaysOn =
     countTokens(BLOATED_AGENTS_MD) + countTokens(TYPICAL_MCP_SCHEMAS) + naiveSkills + naiveCrew;
 
