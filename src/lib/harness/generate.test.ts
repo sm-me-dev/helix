@@ -323,4 +323,24 @@ describe("lean pack", () => {
       /^tools: Read, Edit, Write, Bash$/m,
     );
   });
+
+  it("tells scout to use the repo map, not Graphify, when the graphify MCP is absent", () => {
+    const off = body(cfg({ platforms: ["claude-code"] }), ".claude/agents/scout.md");
+    assert.doesNotMatch(off, /Query Graphify/);
+    assert.match(off, /\.helix\/map\.mjs/);
+    const on = body(
+      cfg({ platforms: ["claude-code"], mcps: ["graphify"], graphFirst: true }),
+      ".claude/agents/scout.md",
+    );
+    assert.match(on, /Query Graphify/);
+  });
+
+  it("drops the graph-first skill when the graphify MCP is not configured", () => {
+    const off = generatePack(cfg({ platforms: ["claude-code"] })).map((f) => f.path);
+    assert.ok(!off.some((p) => p.includes("graph-first")), "unusable skill must not ship");
+    const on = generatePack(
+      cfg({ platforms: ["claude-code"], mcps: ["graphify"], graphFirst: true }),
+    ).map((f) => f.path);
+    assert.ok(on.some((p) => p.includes("graph-first")));
+  });
 });

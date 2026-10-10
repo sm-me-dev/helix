@@ -24,16 +24,30 @@ ${s.body}
 `;
 }
 
+/** Scout's working instruction when the graphify MCP is absent: the graphify-absent pack
+ * ships `.helix/map.mjs` instead, and the allow-list is Grep/Glob/Read (see toolsFor).
+ * Kept next to the crew table so the two cannot drift silently. */
+const SCOUT_MAP_JOB =
+  "Start from the repo map (`node .helix/map.mjs [subdir]` lists files and top-level symbols), then Grep, Glob and Read only what the map or a search names. Write a brief of at most 40 lines: what exists, what is ambiguous, what would change — plus open questions. Stop for a human if the ask has two product readings: a wrong product guess costs more than a question. Brief sections: what exists (map-cited), what was asked, what is ambiguous (max 3 questions), files you would touch and why.";
+const SCOUT_MAP_INPUT =
+  "Handoff card (goal, constraints, cited files, done-means, out of scope). Repo map.";
+
 /** The role prompt, without any platform frontmatter. Shared by every platform's agent file. */
-export function agentBody(id: HarnessConfig["crew"][number]): string {
+export function agentBody(
+  id: HarnessConfig["crew"][number],
+  config: HarnessConfig,
+): string {
   const c = CREW_BY_ID[id];
+  const graph = config.mcps.includes("graphify");
+  const job = id === "scout" && !graph ? SCOUT_MAP_JOB : c.job;
+  const input = id === "scout" && !graph ? SCOUT_MAP_INPUT : c.input;
   const skills = c.skills.join(", ");
-  return `You are the Helix **${c.name}**. ${c.job}
+  return `You are the Helix **${c.name}**. ${job}
 
 When: ${c.when}
 Skip when: ${c.skipWhen}
 
-Input: ${c.input}
+Input: ${input}
 Output: ${c.output}
 
 ${skills ? `Skills to load if present: ${skills}\n\n` : ""}Rules:
@@ -63,7 +77,7 @@ tools: ${toolsFor(id, config).join(", ")}
 model: ${c.model}
 ---
 
-${agentBody(id)}`;
+ ${agentBody(id, config)}`;
 }
 
 /** Fail-closed secret protection. Lives in repo permissions, never in a plugin: a plugin's

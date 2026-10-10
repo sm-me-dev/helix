@@ -12,10 +12,10 @@ import type { PlatformAdapter } from "./types.ts";
  * pin. Roles without Edit/Write get `sandbox_mode = "read-only"`; everything else inherits
  * from the parent. Verified 2026-10-09 against
  * https://learn.chatgpt.com/docs/agent-configuration/subagents. */
-function codexAgentToml(id: HarnessConfig["crew"][number]): string {
+function codexAgentToml(id: HarnessConfig["crew"][number], config: HarnessConfig): string {
   const c = CREW_BY_ID[id];
   const readOnly = !c.tools.some((t) => t === "Edit" || t === "Write");
-  const body = agentBody(id).trimEnd().replaceAll("'''", "' ' '");
+  const body = agentBody(id, config).trimEnd().replaceAll("'''", "' ' '");
   return [
     `name = ${JSON.stringify(c.id)}`,
     `description = ${JSON.stringify(c.oneLiner)}`,
@@ -100,7 +100,7 @@ export const codexAdapter: PlatformAdapter = {
       files.push({
         path: `.codex/agents/${cid}.toml`,
         language: "toml",
-        body: codexAgentToml(cid),
+        body: codexAgentToml(cid, config),
       });
     }
     for (const sid of config.skills) {
