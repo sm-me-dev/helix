@@ -233,7 +233,7 @@ for (const s of steps) {
 }
 const failed = steps.filter((s) => s.status === "fail");
 if (AS_JSON) {
-  process.stdout.write(JSON.stringify({ ok: failed.length === 0, changed: files ? files.length : null, steps: steps.map((s) => ({ name: s.name, status: s.status, code: s.code, ms: s.ms, tail: s.tail })) }) + "\\n");
+  process.stdout.write(JSON.stringify({ ok: failed.length === 0, changed: files ? files.length : null, steps: steps.map((s) => ({ name: s.name, status: s.status, command: s.skip ? null : label(s), code: s.code, ms: s.ms, tail: s.tail })) }) + "\\n");
 } else {
   const out = ["helix gate: " + (files ? files.length + " changed file(s)" : "all files")];
   for (const s of steps) {
