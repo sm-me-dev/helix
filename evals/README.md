@@ -72,3 +72,17 @@ task passes only on a clean diff plus a clarifying response — either a
 literal question or a stated-needs list ("to proceed I need …", "I need:
 …"). The opencode agent needs a pty (`script -qec`, handled by the runner)
 and a closed stdin, or it hangs with zero output.
+
+## Four-arm mapping (A/B/C/D)
+
+The runner takes `--arms` as a comma list; the canonical comparison is:
+
+- A `none`: unmodified baseline agent, no pack.
+- B `helix`: concise instructions plus the portable gate.
+- C `helix-graph`: B with Graphify/code-intelligence MCP on a large fixture.
+- D `helix-full`: C with adaptive subagent orchestration (full crew).
+
+Example: `node evals/run.mjs --agent opencode --arms none,helix --runs 3`
+compares A vs B. C/D need `--fixture large` and a graph index in the eval
+copy. Keep arms, model, fixture seed, and task set identical across runs;
+report n, per-task pass, tokens (transcript totals, uncached), and raw logs.

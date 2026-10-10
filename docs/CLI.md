@@ -22,6 +22,8 @@ Detect the stack and installed agents, write the harness pack.
 - Unknown `--platform` ids print the known list and exit `2`.
 - Side effects: writes `AGENTS.md`, `.helix/`, and one file group per
   platform at the target root. Never touches top-level `README.md`.
+- Pack paths are validated before writing (relative only, no `..`, no
+  absolute paths); unsafe entries are skipped with a warning.
 
 ```sh
 node cli/helix.mjs init ~/your-repo --platform claude-code,codex
@@ -65,6 +67,11 @@ never executed.
   `example` / `process.env` are ignored). Outside a git repo the step skips.
 - Runners without a verified related-test mode (anything but Jest/Vitest)
   run the full configured test command.
+- `--json` steps carry `name`, `status` (`pass`/`fail`/`skip`), `command`
+  (null when skipped), `code`, `ms`, and `tail`. The gate is deterministic;
+  enforcement depends on wiring (Stop hook, git hook, CI) — untriggered, it
+  is advisory. It runs repo-configured lint/test commands: only run it in
+  repos you trust.
 
 ## `helix report [dir] [--claude <path>] [--opencode <db>] [--limit n] [--json]`
 

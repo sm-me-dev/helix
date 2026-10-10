@@ -928,3 +928,24 @@ cache tokens).
   console errors) plus a 390px overflow pass on `/`, `/export`, `/stack`.
 - Alternatives rejected: leaving it linked only from `/run` (advertised
   routes must all be navigable).
+
+## 2026-10-10 — Canonical capability model, workflow engine, gate + writer hardening
+
+- Capabilities grow 6 → 10 (`structured-output`, `session-continuation`,
+  `sandboxing`, `lsp`). All four start `unverified` on every adapter: no
+  vendor page was re-checked this turn, so nothing is emitted or claimed for
+  them. README matrix regenerated from `platformMatrixMarkdown` (`npm test`
+  fails on drift). Next step is per-platform verification with `source` +
+  `verifiedAt` before any of the four promotes past `unverified`.
+- New `src/lib/harness/workflow.ts`: `selectWorkflow` (trivial/standard/
+  complex + ambiguous→blocked + securitySensitive forces reviewer),
+  `canTransition` over classified/discovered/planned/implemented/verifying/
+  completed/blocked with legitimate skips, and `validateHandoff` (12-line
+  cited card). The main session is the manager; roles are logical, not
+  mandatory model calls. Tests: `workflow.test.ts` (10 tests).
+- Gate `--json` steps now include `command` (null when skipped) alongside
+  `status`/`code`/`ms`/`tail`; docs state the enforcement boundary (hook/CI
+  wiring) and the trust boundary (gate runs repo-configured commands).
+- CLI writer validates every pack path (`assertSafePackPath`: relative only,
+  no `..`, no absolute) and skips unsafe entries; covered in `cli/lib.test.mjs`.
+- No new dependencies. `npm run lint`, `typecheck`, `npm test` (168 pass) green.

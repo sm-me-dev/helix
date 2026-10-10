@@ -30,6 +30,16 @@ vendor docs      gate.mjs · hooks · map
   Each emits **only** at paths its platform reads; a `seen` set dedupes shared
   paths (e.g. `GEMINI.md`). Every platform fact carries `source` (vendor URL)
   - `verifiedAt`; unverified capabilities emit nothing and claim nothing.
+    The canonical matrix covers instructions, MCP, skills, subagents, hooks,
+    plugin, structured-output, session-continuation, sandboxing, and LSP. The
+    last four are tracked as `unverified` until checked against vendor docs —
+    they shape the README matrix but emit no files today.
+- **Workflows** (`src/lib/harness/workflow.ts`): risk-aware selection over
+  `trivial` / `standard` / `complex` plus `ambiguous` (blocks for a question)
+  and `securitySensitive` (forces independent verification). States
+  `classified → discovered → planned → implemented → verifying → completed`
+  with legitimate skips and a `blocked` escape; handoffs are validated
+  12-line cards (goal, constraints, cited files, done-means, out of scope).
 - **CLI** (`cli/`): `helix.mjs` (argv, filesystem, prompts) over pure helpers
   in `cli/lib.ts` (detection, doctor, measure, merge, export). Always runs the
   bundled gate source, never a repo-supplied script. Covered by `cli/*.test.mjs`
