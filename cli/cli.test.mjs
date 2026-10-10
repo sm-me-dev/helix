@@ -14,6 +14,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { SYMLINK_SKIP, linkDir, linkFile } from "./symlink-helper.mjs";
 
 const BIN = fileURLToPath(new URL("./helix.mjs", import.meta.url));
 
@@ -179,5 +180,67 @@ describe("helix cli", () => {
         existsSync(join(all, ".claude/settings.json")) && existsSync(join(all, ".cursor/mcp.json")),
       );
     });
+  });
+});
+
+// Containment: a pre-existing symlink in the target must never redirect a read
+// or write outside it. Fail closed = exit 1, a diagnostic, and nothing written.
+describe("helix init containment", { skip: SYMLINK_SKIP }, () => {
+  /** An "outside" dir holding a file the pack must never touch. */
+  function outsideWith(name, content) {
+    const outside = mkdtempSync(join(tmpdir(), "helix-outside-"));
+    writeFileSync(join(outside, name), content);
+    return outside;
+  }
+  const listing = (d) => readdirSync(d).sort();
+
+  it("refuses a symlinked pack directory pointing outside; writes nothing anywhere", () => {
+    const dir = scratch();
+    const outside = outsideWith("keep.txt", "KEEP");
+    linkDir(outside, join(dir, ".claude"));
+    const r = helix(dir, ["init", "--platform", "claude-code", "--force"]);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stderr, /refusing \.claude\/.*outside the target/);
+    assert.match(r.stderr, /nothing was written/);
+    assert.doesNotMatch(r.stdout, /done:/);
+    assert.deepEqual(listing(outside), ["keep.txt"], "no file created outside");
+    assert.equal(readFileSync(join(outside, "keep.txt"), "utf8"), "KEEP");
+    assert.ok(!existsSync(join(dir, "AGENTS.md")), "safe files are not written either");
+  });
+
+  it("refuses a destination symlinked to an outside file, even with --force", () => {
+    const dir = scratch();
+    const outside = outsideWith("target.md", "OUTSIDE ORIGINAL");
+    linkFile(join(outside, "target.md"), join(dir, "AGENTS.md"));
+    const r = helix(dir, ["init", "--force"]);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stderr, /refusing AGENTS\.md/);
+    assert.equal(readFileSync(join(outside, "target.md"), "utf8"), "OUTSIDE ORIGINAL");
+    assert.ok(!existsSync(join(dir, ".helix")), "nothing else was written");
+  });
+
+  it("refuses an opencode.json symlinked outside: no read-merge, no overwrite", () => {
+    const dir = scratch();
+    const original = JSON.stringify({ theme: "outside-secret", mcp: {} });
+    const outside = outsideWith("opencode.json", original);
+    linkFile(join(outside, "opencode.json"), join(dir, "opencode.json"));
+    const r = helix(dir, ["init", "--platform", "opencode", "--force"]);
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    assert.match(r.stderr, /refusing opencode\.json/);
+    assert.equal(readFileSync(join(outside, "opencode.json"), "utf8"), original);
+    assert.doesNotMatch(r.stdout + r.stderr, /outside-secret/, "outside content is never echoed");
+  });
+
+  it("allows a symlink that stays inside the target and keeps the link", () => {
+    const dir = scratch();
+    writeFileSync(join(dir, "CLAUDE.md"), "# mine\n");
+    linkFile(join(dir, "CLAUDE.md"), join(dir, "AGENTS.md"));
+    const r = helix(dir, ["init", "--force"]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.notEqual(readFileSync(join(dir, "CLAUDE.md"), "utf8"), "# mine\n");
+    assert.equal(
+      readFileSync(join(dir, "AGENTS.md"), "utf8"),
+      readFileSync(join(dir, "CLAUDE.md"), "utf8"),
+    );
   });
 });
