@@ -38,6 +38,10 @@ export const claudeAdapter: PlatformAdapter = {
     subagents: "emitted",
     hooks: "emitted",
     plugin: "unverified",
+    "structured-output": "unverified",
+    "session-continuation": "unverified",
+    sandboxing: "unverified",
+    lsp: "unverified",
   },
   notes:
     "Subagents in .claude/agents with tools allow-list and model tier in frontmatter. " +

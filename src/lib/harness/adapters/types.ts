@@ -16,6 +16,10 @@ export const CAPABILITIES = [
   "subagents",
   "hooks",
   "plugin",
+  "structured-output",
+  "session-continuation",
+  "sandboxing",
+  "lsp",
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 export type CapabilityMatrix = Record<Capability, CapabilityStatus>;

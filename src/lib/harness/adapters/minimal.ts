@@ -29,6 +29,10 @@ function pointerAdapter(
       subagents: "unverified",
       hooks: "unverified",
       plugin: "unverified",
+      "structured-output": "unverified",
+      "session-continuation": "unverified",
+      sandboxing: "unverified",
+      lsp: "unverified",
     },
     notes: `${extraNotes} ${UNVERIFIED_NOTE}`,
     files(_config: HarnessConfig): PackFile[] {
@@ -51,6 +55,10 @@ function instructionsOnly(id: PlatformId, extraNotes: string): PlatformAdapter {
       subagents: "unverified",
       hooks: "unverified",
       plugin: "unverified",
+      "structured-output": "unverified",
+      "session-continuation": "unverified",
+      sandboxing: "unverified",
+      lsp: "unverified",
     },
     notes: `${extraNotes} Root AGENTS.md is the instructions file. ${UNVERIFIED_NOTE}`,
     files(_config: HarnessConfig): PackFile[] {
