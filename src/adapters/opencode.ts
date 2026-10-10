@@ -4,7 +4,7 @@ import type { HarnessConfig, PackFile } from "../types";
 import { agentBody, skillFile } from "./parts.ts";
 import type { PlatformAdapter } from "./types.ts";
 
-function agentFile(id: HarnessConfig["crew"][number]): string {
+function agentFile(id: HarnessConfig["crew"][number], config: HarnessConfig): string {
   const definitions = {
     scout: {
       description: "Use when the change surface is unknown; return cited context, not a design.",
@@ -33,7 +33,7 @@ function agentFile(id: HarnessConfig["crew"][number]): string {
       ...(definition.permissions.length ? ["permission:", ...definition.permissions] : []),
       "---",
       "",
-      agentBody(id),
+      agentBody(id, config),
     ].join("\n") + "\n"
   );
 }
@@ -73,7 +73,7 @@ export const opencodeAdapter: PlatformAdapter = {
       files.push({
         path: ".opencode/agents/" + cid + ".md",
         language: "markdown",
-        body: agentFile(cid),
+        body: agentFile(cid, config),
       });
     }
     for (const sid of config.skills) {

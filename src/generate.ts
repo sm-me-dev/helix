@@ -161,21 +161,27 @@ Fan-out costs ~15× tokens when the work is coupled. Helix fans out when the Sco
 
 export function generatePack(config: HarnessConfig): PackFile[] {
   requireKnownIds(config);
+  // A skill that names tools the pack does not configure actively misleads, so
+  // graph-first ships only with the graphify MCP. Normalized here (not in each
+  // adapter) so init, export, plugin and evals all agree.
+  const cfg = config.mcps.includes("graphify")
+    ? config
+    : { ...config, skills: config.skills.filter((s) => s !== "graph-first") };
   const files: PackFile[] = [
-    { path: ".helix/README.md", language: "markdown", body: readme(config) },
-    { path: "AGENTS.md", language: "markdown", body: agentsMd(config) },
+    { path: ".helix/README.md", language: "markdown", body: readme(cfg) },
+    { path: "AGENTS.md", language: "markdown", body: agentsMd(cfg) },
   ];
 
   // The gate is platform-neutral: every agent, git hook and CI job runs the
   // same file. gate.json pins the detected commands so the gate never re-detects.
   files.push({ path: ".helix/gate.mjs", language: "javascript", body: GATE_SOURCE });
-  if (!config.graphFirst) {
+  if (!cfg.graphFirst) {
     files.push({ path: ".helix/map.mjs", language: "javascript", body: MAP_SOURCE });
   }
-  if (config.stack) {
-    const pins: Record<string, string> = { packageManager: config.stack.packageManager };
-    if (config.stack.testCommand) pins.test = config.stack.testCommand;
-    if (config.stack.lintCommand) pins.lint = config.stack.lintCommand;
+  if (cfg.stack) {
+    const pins: Record<string, string> = { packageManager: cfg.stack.packageManager };
+    if (cfg.stack.testCommand) pins.test = cfg.stack.testCommand;
+    if (cfg.stack.lintCommand) pins.lint = cfg.stack.lintCommand;
     files.push({
       path: ".helix/gate.json",
       language: "json",
@@ -186,8 +192,8 @@ export function generatePack(config: HarnessConfig): PackFile[] {
   const seen = new Set<string>(files.map((f) => f.path));
   // Each adapter emits only at the location its platform reads; the seen-set
   // keeps shared paths (e.g. GEMINI.md for gemini + antigravity) to one copy.
-  for (const pid of config.platforms) {
-    for (const f of ADAPTER_BY_ID[pid].files(config)) {
+  for (const pid of cfg.platforms) {
+    for (const f of ADAPTER_BY_ID[pid].files(cfg)) {
       if (seen.has(f.path)) continue;
       seen.add(f.path);
       files.push(f);

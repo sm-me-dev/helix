@@ -1,4 +1,6 @@
-// Antigravity adapter. Vendor facts verified 2026-10-09:
+// Antigravity adapter. Vendor facts verified 2026-10-09, re-verified 2026-10-10
+// (same pages, substance unchanged; rules budget 24KB/file + 20k tokens aggregate
+// and the hooks input/output contract newly noted):
 //  Skills: https://antigravity.google/docs/skills (.agents/skills/<skill>/SKILL.md,
 //    name/description frontmatter, progressive disclosure).
 //  MCP: https://antigravity.google/docs/mcp (workspace .agents/mcp_config.json,
@@ -77,7 +79,7 @@ function modelFor(id: HarnessConfig["crew"][number]): string {
   return "inherit";
 }
 
-function agentMd(id: HarnessConfig["crew"][number]): string {
+function agentMd(id: HarnessConfig["crew"][number], config: HarnessConfig): string {
   const c = CREW_BY_ID[id];
   const tools = toolsFor(id);
   const lines = [
@@ -91,14 +93,14 @@ function agentMd(id: HarnessConfig["crew"][number]): string {
     ...tools.map((t) => `  - ${t}`),
     "---",
     "",
-    agentBody(id),
+    agentBody(id, config),
   ];
   return lines.join("\n");
 }
 
 export const antigravityAdapter: PlatformAdapter = {
   id: "antigravity",
-  verifiedAt: "2026-10-09",
+  verifiedAt: "2026-10-10",
   sources: [
     { title: "Antigravity skills", url: "https://antigravity.google/docs/skills" },
     { title: "Antigravity MCP", url: "https://antigravity.google/docs/mcp" },
@@ -129,7 +131,7 @@ export const antigravityAdapter: PlatformAdapter = {
   files(config: HarnessConfig) {
     const files: PackFile[] = [];
     for (const cid of config.crew) {
-      files.push({ path: `.agents/agents/${cid}.md`, language: "markdown", body: agentMd(cid) });
+      files.push({ path: `.agents/agents/${cid}.md`, language: "markdown", body: agentMd(cid, config) });
     }
     for (const sid of config.skills) {
       files.push({

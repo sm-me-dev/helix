@@ -4,7 +4,7 @@ import type { HarnessConfig } from "../types";
 import { agentBody, cursorRule, skillFile } from "./parts.ts";
 import type { PlatformAdapter } from "./types.ts";
 
-function cursorAgent(id: HarnessConfig["crew"][number]): string {
+function cursorAgent(id: HarnessConfig["crew"][number], config: HarnessConfig): string {
   const descriptions: Record<HarnessConfig["crew"][number], string> = {
     scout: "Scout the codebase and return a graph-cited context brief; do not design or implement.",
     architect: "Plan non-trivial changes and explain tradeoffs; do not edit files.",
@@ -19,13 +19,13 @@ function cursorAgent(id: HarnessConfig["crew"][number]): string {
     "readonly: " + (id !== "builder"),
     "---",
     "",
-    agentBody(id),
+    agentBody(id, config),
   ].join("\n");
 }
 
 export const cursorAdapter: PlatformAdapter = {
   id: "cursor",
-  verifiedAt: "2026-10-09",
+  verifiedAt: "2026-10-10",
   sources: [
     { title: "Cursor MCP docs", url: "https://cursor.com/docs/mcp" },
     { title: "Cursor rules docs", url: "https://cursor.com/docs/rules" },
@@ -60,7 +60,7 @@ export const cursorAdapter: PlatformAdapter = {
       files.push({
         path: ".cursor/agents/" + cid + ".md",
         language: "markdown",
-        body: cursorAgent(cid),
+        body: cursorAgent(cid, config),
       });
     }
     for (const sid of config.skills) {
