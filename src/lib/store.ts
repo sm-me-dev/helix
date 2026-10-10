@@ -1,9 +1,10 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { CREW_BY_ID, DEFAULT_CREW } from "./harness/crew.ts";
-import { DEFAULT_MCPS, MCP_BY_ID } from "./harness/mcps.ts";
-import { DEFAULT_PLATFORMS, PLATFORM_BY_ID } from "./harness/platforms.ts";
-import { DEFAULT_SKILLS, SKILL_BY_ID } from "./harness/skills.ts";
+import { CREW_BY_ID } from "./harness/crew.ts";
+import { DEFAULT_HARNESS_CONFIG } from "./harness/defaults.ts";
+import { MCP_BY_ID } from "./harness/mcps.ts";
+import { PLATFORM_BY_ID } from "./harness/platforms.ts";
+import { SKILL_BY_ID } from "./harness/skills.ts";
 import type { CrewId, HarnessConfig, McpId, PlatformId, SkillId } from "./harness/types";
 
 type HarnessStore = HarnessConfig & {
@@ -18,19 +19,7 @@ type HarnessStore = HarnessConfig & {
   reset: () => void;
 };
 
-const DEFAULTS: HarnessConfig = {
-  crew: DEFAULT_CREW,
-  skills: DEFAULT_SKILLS,
-  mcps: DEFAULT_MCPS,
-  platforms: DEFAULT_PLATFORMS,
-  graphFirst: true,
-  progressiveDisclosure: true,
-  defaultSingleAgent: true,
-  hooksEnabled: true,
-};
-
-/** Defaults for tests and for scaling scripted figures to the live config. */
-export const DEFAULT_HARNESS_CONFIG: HarnessConfig = { ...DEFAULTS };
+const DEFAULTS: HarnessConfig = { ...DEFAULT_HARNESS_CONFIG };
 
 function toggleIn<T>(list: T[], id: T): T[] {
   return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
