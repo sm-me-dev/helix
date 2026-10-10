@@ -54,7 +54,13 @@ export const PLATFORMS: Platform[] = [
     "cursor",
     "Cursor",
     "cursor",
-    ["AGENTS.md", ".cursor/rules/helix.mdc", ".cursor/agents/*.md", ".cursor/skills/*/SKILL.md", ".cursor/mcp.json"],
+    [
+      "AGENTS.md",
+      ".cursor/rules/helix.mdc",
+      ".cursor/agents/*.md",
+      ".cursor/skills/*/SKILL.md",
+      ".cursor/mcp.json",
+    ],
     "Rules plus project MCP. Agent reads AGENTS.md natively.",
   ),
   entry(
@@ -76,7 +82,7 @@ export const PLATFORMS: Platform[] = [
     "Gemini CLI",
     "gemini",
     ["AGENTS.md", "GEMINI.md"],
-    "Pointer only. Press reports (9to5google, 2026-06-17) say Gemini CLI was shut down for consumer tiers on 2026-06-18 in favor of Antigravity CLI; not checked against a Google primary page.",
+    "Pointer only. Google's maintainers state Gemini CLI stopped serving AI Pro, AI Ultra and free individual accounts on 2026-06-18 (enterprise licenses and API-key auth unaffected); Antigravity CLI replaces it and keeps reading gemini.md. Source https://github.com/google-gemini/gemini-cli/discussions/28017, verified 2026-10-10.",
   ),
   entry(
     "copilot",
@@ -94,7 +100,13 @@ export const PLATFORMS: Platform[] = [
   ),
   entry("cline", "Cline", "rules-file", ["AGENTS.md", ".clinerules"], "Pointer only."),
   entry("aider", "Aider", "aider", ["AGENTS.md", "CONVENTIONS.md"], "Pointer only."),
-  entry("opencode", "OpenCode", "agents-md", ["AGENTS.md", ".opencode/agents/*.md", ".opencode/skills/*/SKILL.md", "opencode.json"], "Native project agents, skills and MCP config."),
+  entry(
+    "opencode",
+    "OpenCode",
+    "agents-md",
+    ["AGENTS.md", ".opencode/agents/*.md", ".opencode/skills/*/SKILL.md", "opencode.json"],
+    "Native project agents, skills and MCP config.",
+  ),
   entry(
     "antigravity",
     "Google Antigravity",

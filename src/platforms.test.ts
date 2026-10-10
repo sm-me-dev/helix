@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { ADAPTER_BY_ID } from "./adapters/index.ts";
 import { CAPABILITIES } from "./adapters/types.ts";
 import { generatePack } from "./generate.ts";
-import { PLATFORMS, platformMatrixMarkdown } from "./platforms.ts";
+import { PLATFORM_BY_ID, PLATFORMS, platformMatrixMarkdown } from "./platforms.ts";
 import type { HarnessConfig, PlatformId } from "./types";
 
 const cfg = (platform: PlatformId): HarnessConfig => ({
@@ -104,7 +104,7 @@ describe("platform capability matrix", () => {
     const mcpFile = opencode.find((file) => file.path === "opencode.json");
     assert.ok(mcpFile);
     const parsed = JSON.parse(mcpFile.body) as {
-      "$schema": string;
+      $schema: string;
       mcp: Record<string, { type: string; command?: string[]; url?: string; enabled?: boolean }>;
     };
     assert.equal(parsed["$schema"], "https://opencode.ai/config.json");
@@ -117,4 +117,10 @@ describe("platform capability matrix", () => {
     assert.equal(parsed.mcp.context7.enabled, true);
   });
 
+  it("gemini note cites Google's own announcement, not only press (verified 2026-10-10)", () => {
+    const note = PLATFORM_BY_ID.gemini.notes;
+    assert.match(note, /github\.com\/google-gemini\/gemini-cli\/discussions\/28017/);
+    assert.match(note, /2026-06-18/);
+    assert.doesNotMatch(note, /not checked against a Google primary page/);
+  });
 });
