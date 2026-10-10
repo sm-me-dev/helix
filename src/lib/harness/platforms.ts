@@ -82,7 +82,7 @@ export const PLATFORMS: Platform[] = [
     "Gemini CLI",
     "gemini",
     ["AGENTS.md", "GEMINI.md"],
-    "Pointer only. Google's maintainers state Gemini CLI stopped serving AI Pro, AI Ultra and free individual accounts on 2026-06-18 (enterprise licenses and API-key auth unaffected); Antigravity CLI replaces it and keeps reading gemini.md. Source https://github.com/google-gemini/gemini-cli/discussions/28017, verified 2026-10-10.",
+    "Pointer only. Google's maintainers state Gemini CLI stopped serving AI Pro, AI Ultra and free individual accounts on 2026-06-18 (enterprise licenses and API-key auth unaffected); Antigravity CLI replaces it and keeps reading gemini.md. Sources https://github.com/google-gemini/gemini-cli/discussions/28017 and https://developers.google.com/gemini-code-assist/docs/deprecations/code-assist-individuals, both verified 2026-10-10.",
   ),
   entry(
     "copilot",
@@ -126,11 +126,13 @@ export const PLATFORM_BY_ID = Object.fromEntries(PLATFORMS.map((p) => [p.id, p])
   Platform
 >;
 
+// gemini is out: Google shut off consumer tiers on 2026-06-18 (see the gemini
+// entry's sources) and Antigravity reads AGENTS.md natively. Explicit
+// `--platform gemini` still emits GEMINI.md.
 export const DEFAULT_PLATFORMS: PlatformId[] = [
   "claude-code",
   "cursor",
   "codex",
-  "gemini",
   "copilot",
 ];
 

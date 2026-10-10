@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { ADAPTER_BY_ID } from "./adapters/index.ts";
 import { CAPABILITIES } from "./adapters/types.ts";
 import { generatePack } from "./generate.ts";
-import { PLATFORM_BY_ID, PLATFORMS, platformMatrixMarkdown } from "./platforms.ts";
+import { DEFAULT_PLATFORMS, PLATFORM_BY_ID, PLATFORMS, platformMatrixMarkdown } from "./platforms.ts";
 import type { HarnessConfig, PlatformId } from "./types";
 
 const cfg = (platform: PlatformId): HarnessConfig => ({
@@ -122,5 +122,14 @@ describe("platform capability matrix", () => {
     assert.match(note, /github\.com\/google-gemini\/gemini-cli\/discussions\/28017/);
     assert.match(note, /2026-06-18/);
     assert.doesNotMatch(note, /not checked against a Google primary page/);
+  });
+
+  it("keeps gemini out of the default platforms (consumer shutdown 2026-06-18)", () => {
+    assert.ok(
+      !DEFAULT_PLATFORMS.includes("gemini"),
+      "Gemini CLI stopped serving consumer tiers; Antigravity reads AGENTS.md natively",
+    );
+    // Explicit selection still works: the adapter, detection and files are untouched.
+    assert.ok(PLATFORM_BY_ID.gemini);
   });
 });
