@@ -12,7 +12,8 @@ import {
   existsSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, dirname } from "node:path";
+import { join } from "node:path";
+import { nodeOnlyBin } from "./test-env.mjs";
 import { fileURLToPath } from "node:url";
 import { SYMLINK_SKIP, linkDir, linkFile } from "./symlink-helper.mjs";
 
@@ -31,7 +32,7 @@ function helix(dir, args, extraEnv = {}) {
   // input: "" closes stdin immediately, like CI, a pipe or an agent shell.
   // Hermetic PATH (node only): platform detection must not depend on which
   // agent CLIs happen to be installed on the machine running the tests.
-  const env = { ...process.env, PATH: dirname(process.execPath), ...extraEnv };
+  const env = { ...process.env, PATH: nodeOnlyBin(), ...extraEnv };
   return spawnSync(process.execPath, [BIN, ...args], {
     cwd: dir,
     input: "",
@@ -162,7 +163,7 @@ describe("helix cli", () => {
       const dir = scratch();
       const bin = mkdtempSync(join(tmpdir(), "helix-bin-"));
       writeFileSync(join(bin, "claude"), "#!/bin/sh\n", { mode: 0o755 });
-      const r = helix(dir, ["init"], { PATH: `${dirname(process.execPath)}:${bin}` });
+      const r = helix(dir, ["init"], { PATH: `${nodeOnlyBin()}:${bin}` });
       assert.equal(r.status, 0, r.stderr);
       assert.ok(existsSync(join(dir, ".claude/settings.json")));
       assert.ok(!existsSync(join(dir, ".cursor")));

@@ -12,7 +12,8 @@ import {
   existsSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, dirname } from "node:path";
+import { join } from "node:path";
+import { nodeOnlyBin } from "./test-env.mjs";
 import { fileURLToPath } from "node:url";
 
 const BIN = fileURLToPath(new URL("./helix.mjs", import.meta.url));
@@ -24,7 +25,7 @@ function scratch(pkg = { name: "s", scripts: { test: "node --test" } }) {
 }
 
 function helix(dir, args, extraEnv = {}) {
-  const env = { ...process.env, PATH: dirname(process.execPath), ...extraEnv };
+  const env = { ...process.env, PATH: nodeOnlyBin(), ...extraEnv };
   return spawnSync(process.execPath, [BIN, ...args], {
     cwd: dir,
     input: "",
@@ -48,7 +49,7 @@ function gitInit(dir) {
 
 // Gate shells out to npm/sh/git, so gate tests need a working system PATH.
 // Agent-CLI isolation does not matter here: every gate test pins --platform.
-const GATE_PATH = `${dirname(process.execPath)}:/usr/bin:/bin:/usr/local/bin`;
+const GATE_PATH = `${nodeOnlyBin()}:/usr/bin:/bin:/usr/local/bin`;
 
 describe("helix core workflows", () => {
   it("scenario 1: init writes a valid pack (AGENTS.md + gate + map)", () => {
@@ -122,7 +123,7 @@ describe("helix core workflows", () => {
     const bin = mkdtempSync(join(tmpdir(), "helix-bin-"));
     writeFileSync(join(bin, "graphify"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
     const r = helix(dir, ["init", "--platform", "claude-code"], {
-      PATH: `${dirname(process.execPath)}:${bin}`,
+      PATH: `${nodeOnlyBin()}:${bin}`,
     });
     assert.equal(r.status, 0, r.stderr);
     const exported = Object.fromEntries(files.map((f) => [f.path, f.body]));
