@@ -66,6 +66,24 @@ model: ${c.model}
 ${agentBody(id)}`;
 }
 
+/** Fail-closed secret protection. Lives in repo permissions, never in a plugin: a plugin's
+ * settings.json honors only `agent` and `subagentStatusLine` (verified 2026-10-10,
+ * https://code.claude.com/docs/en/plugins/components#default-settings). */
+const SECRET_DENY = [
+  "Read(.env)",
+  "Read(.env.*)",
+  "Read(**/secrets/**)",
+  "Edit(.env)",
+  "Edit(.env.*)",
+  "Edit(**/secrets/**)",
+];
+
+/** Repo-side settings for plugin mode: the denies, and no hooks (the plugin owns them; plugin
+ * and settings hooks both run, in parallel, and are not deduplicated against each other). */
+export function permissionsOnlyJson(): string {
+  return JSON.stringify({ permissions: { deny: SECRET_DENY }, hooks: {} }, null, 2) + "\n";
+}
+
 export function hooksJson(config: HarnessConfig): string {
   if (!config.hooksEnabled) {
     return JSON.stringify({ hooks: {} }, null, 2) + "\n";
@@ -82,14 +100,7 @@ export function hooksJson(config: HarnessConfig): string {
       // (python/node opening files, `grep -r .` from the dir) — documented in
       // the pack README, OS sandbox is the only enforcement there.
       // Verified 2026-10-09 against https://code.claude.com/docs/en/permissions.
-      deny: [
-        "Read(.env)",
-        "Read(.env.*)",
-        "Read(**/secrets/**)",
-        "Edit(.env)",
-        "Edit(.env.*)",
-        "Edit(**/secrets/**)",
-      ],
+      deny: SECRET_DENY,
     },
     hooks: {
       PostToolUse: [

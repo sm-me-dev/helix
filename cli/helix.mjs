@@ -17,6 +17,7 @@ import { delimiter, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { GATE_SOURCE } from "../src/lib/harness/gate.ts";
 import { generatePack } from "../src/lib/harness/generate.ts";
+import { pluginPack } from "../src/lib/harness/plugin.ts";
 import { cmdLearn } from "./learn.ts";
 import { DEFAULT_PLATFORMS, PLATFORM_BY_ID } from "../src/lib/harness/platforms.ts";
 import {
@@ -44,7 +45,12 @@ import { formatReport, loadOpenCodeDb, parseClaudeCodeJsonl } from "./report.ts"
 
 const USAGE = `helix — AI coding harness pack manager
 
-  helix init [dir] [--platform a,b|all] [--force]  detect stack and agents, write the pack
+  helix init [dir] [--platform a,b|all] [--force] [--claude-plugin]
+                                                detect stack and agents, write the pack
+                                                (--claude-plugin: Claude Code gets only what a
+                                                plugin cannot ship; install \`helix plugin\` output)
+  helix plugin --out <dir>                      write a Claude Code plugin marketplace (one plugin:
+                                                agents, skills, hooks, MCP) to <dir>
   helix doctor [dir]                            check the installed harness
   helix measure [dir]                           print the real token breakdown
   helix gate [dir] [--all] [--dry] [--json]     secrets, lint, typecheck, affected tests
@@ -63,6 +69,8 @@ function parseArgs(argv) {
     dir: ".",
     platforms: null,
     force: false,
+    out: null,
+    claudePlugin: false,
     help: false,
     platform: null,
     evalArgs: [],
@@ -79,6 +87,9 @@ function parseArgs(argv) {
     else if (cmd === "report") opts.reportArgs.push(a);
     else if (cmd === "learn") opts.learnArgs.push(a);
     else if (a === "--force") opts.force = true;
+    else if (a === "--claude-plugin") opts.claudePlugin = true;
+    else if (a === "--out" && cmd === "plugin") opts.out = rest[++i] ?? null;
+    else if (a.startsWith("--out=") && cmd === "plugin") opts.out = a.slice("--out=".length);
     else if (a === "--platform" && cmd === "export") opts.platform = rest[++i];
     else if (a.startsWith("--platform=")) opts.platforms = a.slice("--platform=".length).split(",");
     else if (a === "--platform") opts.platforms = (rest[++i] ?? "").split(",");
@@ -221,6 +232,14 @@ async function cmdInit(opts) {
     },
   };
   if (!checkPlatforms(config.platforms)) return;
+  if (opts.claudePlugin) {
+    config.claudePlugin = true;
+    if (!config.platforms.includes("claude-code")) {
+      console.log(
+        "note: --claude-plugin only changes the claude-code files; claude-code is not among the selected platforms",
+      );
+    }
+  }
   console.log(
     `mcps: ${config.mcps.join(", ") || "(none)"} · graph-first: ${config.graphFirst ? "on" : "off"} (${stack.fileCount} files${stack.uiPresent ? ", UI detected" : ", no UI"})`,
   );
@@ -261,8 +280,7 @@ async function cmdInit(opts) {
         body = merged.content;
         if (merged.preservedMcpServers.length > 0) {
           console.warn(
-            "preserved existing OpenCode MCP definitions: " +
-              merged.preservedMcpServers.join(", "),
+            "preserved existing OpenCode MCP definitions: " + merged.preservedMcpServers.join(", "),
           );
         }
       } catch (error) {
@@ -297,6 +315,42 @@ async function cmdInit(opts) {
     wrote++;
   }
   console.log(`done: ${wrote} written, ${skipped} skipped in ${dir}`);
+}
+
+/** `helix plugin --out <dir>`: a Claude Code plugin marketplace from the same sources as init. */
+function cmdPlugin(opts) {
+  if (!opts.out) {
+    console.error("helix plugin: --out <dir> is required (where to write the marketplace)");
+    process.exitCode = 2;
+    return;
+  }
+  const pack = pluginPack(defaultConfig(["claude-code"]));
+  const root = prepareTargetRoot(opts.out);
+  const violations = preflightPack(
+    root,
+    pack.map((f) => f.path),
+  );
+  if (violations.length > 0) {
+    for (const v of violations) console.error(`helix plugin: refusing ${v.packPath}: ${v.reason}`);
+    console.error("helix plugin: unsafe destination; nothing was written.");
+    process.exitCode = 1;
+    return;
+  }
+  let wrote = 0;
+  for (const f of pack) {
+    try {
+      writeContained(root, f.path, f.body);
+    } catch (error) {
+      return abortUnsafe(error, wrote, opts.out);
+    }
+    console.log(`write  ${f.path}`);
+    wrote++;
+  }
+  console.log(`done: ${wrote} files in ${root}`);
+  console.log(
+    `install: claude plugin marketplace add ${root} && claude plugin install helix@helix-harness`,
+  );
+  console.log("then, in each repo: helix init --claude-plugin  (AGENTS.md, gate, secret denies)");
 }
 
 function cmdDoctor(opts) {
@@ -453,11 +507,16 @@ async function cmdReport(opts) {
     .slice(0, o.limit)
     .map((x) => x.f);
   for (const f of jsonl) {
-    const id = f.split("/").pop().replace(/\.jsonl$/, "");
+    const id = f
+      .split("/")
+      .pop()
+      .replace(/\.jsonl$/, "");
     sessions.push(parseClaudeCodeJsonl(readFileSync(f, "utf8"), id));
   }
 
-  const dbPath = o.opencode ? resolve(o.opencode) : join(homedir(), ".local", "share", "opencode", "opencode.db");
+  const dbPath = o.opencode
+    ? resolve(o.opencode)
+    : join(homedir(), ".local", "share", "opencode", "opencode.db");
   let haveDb = true;
   try {
     accessSync(dbPath, constants.R_OK);
@@ -494,6 +553,7 @@ async function main() {
   const { cmd, opts } = parseArgs(process.argv.slice(2));
   if (opts.help || cmd === "--help" || cmd === "-h" || cmd === "help") process.stdout.write(USAGE);
   else if (cmd === "init") await cmdInit(opts);
+  else if (cmd === "plugin") cmdPlugin(opts);
   else if (cmd === "doctor") cmdDoctor(opts);
   else if (cmd === "measure") cmdMeasure(opts);
   else if (cmd === "gate") cmdGate(opts);

@@ -43,6 +43,10 @@ export type HarnessConfig = {
    * output). The ledger stays opt-in until a replay eval shows tokens per
    * passing task falling without lowering pass rate. */
   learnOptIn?: boolean;
+  /** Claude Code only: the Helix plugin (`helix plugin`) supplies agents, skills, hooks
+   * and MCP config, so the repo pack writes only what a plugin cannot ship: CLAUDE.md,
+   * AGENTS.md, the gate, and the secret-deny permissions. Nothing is registered twice. */
+  claudePlugin?: boolean;
   /** Detected repo facts from `helix init` (cli/lib detectStack). Optional so
    * hand-built configs keep working; when present AGENTS.md cites exact
    * commands instead of telling the agent to go read package.json. */

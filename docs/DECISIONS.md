@@ -1228,3 +1228,67 @@ Owner approved a dry run only, plus installing `git-filter-repo` (a dev tool, in
 - Unverified: the site consuming the harness, the Grok workspace building from a preserved branch.
 - Not done, needs a separate explicit approval: any change to this repo for the split (prerequisite commits,
   `pre-split` tag, `grok-workspace` branch) and any force push.
+
+## 2026-10-10 — F2 Claude Code plugin packaging (`helix plugin`, `helix init --claude-plugin`)
+
+Sources re-fetched 2026-10-10 (primary vendor docs, verifiedAt 2026-10-10, recorded in the
+`claude-code` adapter): code.claude.com/docs/en/plugins-reference, /plugins/components,
+/plugin-marketplaces, /hooks, /mcp, /skills.
+
+Shipped, failing tests first (`src/lib/harness/plugin.test.ts`, 21 cases; `cli/plugin.test.mjs`, 6 cases
+including the vendor's own validator):
+
+- `helix plugin --out <dir>` writes a marketplace (`.claude-plugin/marketplace.json`, name `helix-harness`)
+  holding one plugin (`plugins/helix`: `.claude-plugin/plugin.json`, `skills/`, `agents/`, `hooks/hooks.json`
+  plus hook scripts, `.mcp.json`) from the same crew, skills, MCP and hook sources as `helix init`.
+- `helix init --claude-plugin` (config flag `claudePlugin`): the repo gets only CLAUDE.md, AGENTS.md, the gate
+  and `.claude/settings.json` with the secret denies and no hooks. No agents, skills, `.mcp.json` or hooks, so
+  nothing is registered twice.
+- `claude plugin validate` (Claude Code 2.1.233) passes with no warnings on both the marketplace and the
+  plugin; the test runs it in a throwaway HOME. Capability matrix: claude-code `plugin` is now `emitted`;
+  other platforms keep `plugin: unverified`.
+
+Answers to the two open questions:
+
+1. Namespaced agent names: documented. Plugin agents are `<plugin>:<name>` (`helix:scout`), invoked as
+   `@agent-helix:scout`. The generated AGENTS.md uses logical role ids, so its text is not broken. Whether the
+   Agent tool resolves a bare `scout` to `helix:scout` is NOT documented and was NOT tested (needs a model
+   run, which I did not do without approval). Unverified. Delegation also keys on each agent's description.
+2. Hook order versus `.claude/settings.json`: documented as no order. "All matching hooks run in parallel",
+   a handler duplicated across settings files runs once, but "a plugin's or skill's copy of the same handler
+   stays separate". So plugin hooks plus repo hooks would run twice, concurrently. That is why plugin mode
+   writes no hooks into the repo. Parallel execution was read from the docs, not observed.
+
+Findings that changed the design:
+
+- A plugin cannot carry the secret denies: plugin `settings.json` honors only `agent` and `subagentStatusLine`.
+  `permissions.deny` stays in the repo. Rejected: moving the denies into a plugin hook (advice, not
+  fail-closed).
+- Plugin MCP tools are named `mcp__plugin_<plugin>_<server>__<tool>` (characters outside `A-Za-z0-9_-` become
+  `_`). Agent allow-lists and hook matchers written for `mcp__graphify__...` would never match. Plugin agents
+  rewrite the names (`scopeMcpTool`, tested).
+- Plugin agent frontmatter: `permissionMode`, `hooks`, `mcpServers`, `initialPrompt` are ignored. Our agents
+  use only `name`, `description`, `tools`, `model`; a test guards it.
+- A plugin-root CLAUDE.md is not loaded (confirmed again; validate warns), so none is shipped.
+
+Measurement (script `scripts/measure-plugin.mjs`, stored in `fixtures/measurements/plugin-details.json`,
+2026-10-10, Claude Code 2.1.233): `claude plugin details helix` projects about 186 tokens always-on for the
+whole plugin (2 skills, 4 agents), about 30 per agent and 30 to 40 per skill, plus on-invoke cost per
+component. These are Claude Code's own estimates ("may differ from actual usage"), deterministic, no model
+call, so there is no variance to report. Not measured: the same content as repo-local files, and real session
+tokens with the plugin installed.
+
+Rejected: shipping AGENTS.md or CLAUDE.md in the plugin (not loaded); a `bin/helix` executable (would need
+the CLI bundled, deferred); npm distribution (a git marketplace is enough); a `--version` flag (the plugin
+version `0.1.0` is a constant; bumping it is what pushes updates to users).
+
+Leads for later items (found while reading docs, not acted on):
+
+- F4: https://code.claude.com/docs/en/mcp (fetched 2026-10-10) says tool search needs models that support
+  `tool_reference`, "Claude Sonnet 4.5, Claude Haiku 4.5, Claude Opus 4.5, and later". That contradicts the
+  earlier claim that Haiku lacks MCP tool search. To be re-checked against the agent-sdk tool-search page.
+- Existing quirk, not yet reproduced: `hooksJson` returns `{ "hooks": {} }` with no `permissions.deny` when
+  `hooksEnabled` is false, so turning hooks off may also drop the fail-closed secret denies. Needs a failing
+  test before any change.
+- Unrelated to F2: `claude plugin eval` and `claude plugin details` exist; the former could run plugin evals
+  with a no-plugin baseline arm (free of Helix's own eval harness), worth a look in F6.
