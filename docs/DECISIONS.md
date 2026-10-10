@@ -1065,3 +1065,166 @@ cache tokens).
   for that glob only, documented in `eslint.config.mjs`; still on elsewhere. `npm run lint`
   now reports 0 problems. Rejected: splitting every route's components into separate files
   (churn in scaffolding for a dev-only Fast Refresh nicety).
+
+## 2026-10-10 — F0 follow-up: git-config hermeticity of the gate tests
+
+- New class of non-hermetic test, not covered by the earlier F0 audit (which looked at
+  PATH, `NODE_ENV`, cwd and network). Reproduced with a hostile ambient environment:
+  throwaway `HOME` whose `.gitconfig` sets `commit.gpgsign=true` with `gpg.program=/bin/false`,
+  `init.defaultBranch=trunk`, `core.hooksPath` pointing at rejecting `pre-commit`/`commit-msg`
+  hooks, and `core.excludesFile` ignoring `*.lock` and `.env`; PATH without yarn/pnpm/bun/
+  claude/opencode; `NODE_ENV=production`. `src/lib/harness/gate.test.ts` failed 2 of 13:
+  "exits 0 and says so when nothing changed" (the base commit is silently rejected, so the
+  repo has no HEAD and the gate reports "1 changed file(s)") and "flags a changed .env but
+  not .env.example" (a globally ignored `.env` is invisible to the gate).
+- Disproved: the same hostile environment did not break `hooks.test.ts`, `repomap.test.ts`,
+  `codex-antigravity.test.ts` (already sets its own HOME/author env and `commit.gpgsign=false`),
+  any `cli/*.test.mjs`, or `evals/*.test.mjs`. `cli/e2e-workflows.test.mjs#gitInit` only runs
+  `git init` and config, so it is exposed in principle but did not fail.
+- Test first: `src/lib/harness/hermetic.test.ts` runs `gate.test.ts`, `codex-antigravity.test.ts`
+  and `cli/e2e-workflows.test.mjs` as child test runs under that environment. Red before the
+  fix (gate.test.ts failed), green after. Listed in the `npm test` script; the coverage guard
+  `scripts/test-coverage.test.mjs` still passes.
+- Fix: `gate.test.ts` now runs both fixture setup git calls and the gate process with
+  `HOME`/`XDG_CONFIG_HOME` pointing at a temp dir, `GIT_CONFIG_GLOBAL` at a file in it and
+  `GIT_CONFIG_NOSYSTEM=1`.
+- Open product question, NOT changed: when a developer globally ignores `.env`, the gate does
+  not flag it. That is defensible (ignored files are not committed) but unverified as the
+  intended behavior; owner to decide whether the gate should scan ignored env files.
+- Residual, out of scope (template tests, not harness): `src/lib/app-data/app-data.test.ts`
+  and `src/lib/auth/gate-identity.test.ts` set `GROK_*` env vars and `delete` them afterwards
+  instead of restoring prior values.
+- Cost: `hermetic.test.ts` adds about 24s to `npm test` (the e2e file alone is about 14s).
+- Evidence (Node v24.14.1; CI Node 22 NOT run here): `npm run lint` 0 problems, `typecheck` 0,
+  `npm test` 306 + 217 pass, 0 fail, with NODE_ENV unset on a PATH without yarn/pnpm/bun and
+  with NODE_ENV=production.
+
+## 2026-10-10 — F1: repo always-on token budget (measurement + proposal only)
+
+- Measured with `scripts/measure-repo-always-on.mjs` (o200k_base via gpt-tokenizer; an
+  approximation, not the serving model count), output stored in
+  `fixtures/measurements/repo-always-on.before.json`: root `AGENTS.md` 351 lines / 4,904 tokens;
+  `AGENTS.project.md` 42 lines / 417 tokens; untracked `GEMINI.md` 9 lines / 172 tokens.
+  Tracked noise: `.grok/` 88 files / 196,083 tokens; `src/lib/auth` + `src/lib/app-data` +
+  `src/components/ui` 35 files / 32,479 tokens. Root `AGENTS.md` references
+  `AGENTS.project.md`; no agent auto-loads the latter.
+- Vendor mechanisms (fetched 2026-10-10): Claude Code reads `AGENTS.md` only when no `CLAUDE.md`
+  exists in the working dir or above (https://code.claude.com/docs/en/memory); Codex prefers
+  `AGENTS.override.md` over `AGENTS.md` per directory
+  (https://developers.openai.com/codex/guides/agents-md); OpenCode lets `AGENTS.md` win over
+  `CLAUDE.md` and documents no skip (https://opencode.ai/docs/rules). Cursor, Copilot,
+  Antigravity, Grok: NOT verified.
+- Disproved: a committed `CLAUDE.md` is not a cross-agent fix (OpenCode ignores it when
+  `AGENTS.md` exists). A subdirectory working dir does not escape the root file (ancestor
+  files are loaded by Claude Code; Codex walks from the repo root down).
+- Dependency scan (throwaway grep script, an estimate): 30 dependencies unreferenced in source or
+  config, including 18 `@radix-ui/*`. Not acted on: needs `npm run build` and owner approval.
+- Rejected: editing or replacing the root `AGENTS.md` (rule 7); deleting `.grok/` (platform-owned);
+  executing the split before approval (F1 rule).
+- Deliverable: `docs/F1-MIGRATION-PLAN.md`. After-numbers are projections from the measured size of
+  existing files, not measurements; they become measurements once a step is executed and
+  `scripts/measure-repo-always-on.mjs --label after` is run.
+
+## 2026-10-10 — F1 step A executed; instruction-loading mechanisms verified per agent
+
+Owner approved Step A and Step B (via `git subtree split`) and asked for Cursor, Copilot,
+Antigravity, Grok, Codex, OpenCode and other common agents to be verified. Node v24.14.1.
+
+- Step A (executed): root `CLAUDE.md` (`@AGENTS.project.md`, 1 line) and `AGENTS.override.md`
+  (byte-identical copy of `AGENTS.project.md`, because Codex does not follow imports). Root
+  `AGENTS.md` untouched. Failing test first: `scripts/repo-instructions.test.mjs` (4 tests, failed
+  on missing files, then passed). Drift between the two copies is caught by that test.
+- Real-agent confirmation: Claude Code 2.1.233 `claude -p "/context"` Memory Files lists
+  `CLAUDE.md` and `AGENTS.project.md`, no `AGENTS.md`. Codex 0.142.5 `codex debug prompt-input`
+  contains "Helix contributor rules" once and none of the root `AGENTS.md` text. The requested
+  `codex exec --json "List every AGENTS.md ..."` could not run: the configured model
+  (`gpt-6-luna`) is rejected for this ChatGPT account (HTTP 400); `debug prompt-input` was used
+  instead, which renders the model-visible input without a model call.
+- Before/after (script `scripts/measure-repo-always-on.mjs`, 2026-10-10, o200k_base approximation;
+  files `repo-always-on.before-peragent.json` and `repo-always-on.after.json`; the "before" state was
+  reproduced by moving the two new files aside):
+  Claude Code 4,904 to 423; Codex 4,904 to 417; OpenCode 4,904 (unchanged); Cursor, Copilot,
+  Antigravity, Grok 4,904 (unchanged, or +6 where CLAUDE.md is also read, see below).
+  `/context` printed 0 tokens per memory file in print mode, so the numbers are ours, not Claude Code's.
+- Verified from vendor docs (fetched 2026-10-10):
+  - Cursor (https://cursor.com/docs/rules, https://cursor.com/docs/rules page dated by fetch):
+    root and nested `AGENTS.md` supported, nested files combine with parents. No documented
+    override or skip. CLAUDE.md not mentioned. Step A does not help.
+  - GitHub Copilot (https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-repository-instructions):
+    reads `AGENTS.md` (nearest wins) or, alternatively, a single root `CLAUDE.md` or `GEMINI.md`.
+    Precedence when both exist is not documented. Effect of Step A: UNVERIFIED.
+  - OpenCode (https://opencode.ai/docs/rules, page last updated Oct 8 2026): `AGENTS.md` beats
+    `CLAUDE.md`; `OPENCODE_DISABLE_CLAUDE_CODE*` only disables Claude files. No skip. The page
+    advertises an OpenCode v2 with separate docs (https://opencode.ai/v2/docs), not checked.
+  - Codex (https://learn.chatgpt.com/docs/agent-configuration/agents-md, the page the previous
+    developers.openai.com URL resolves to): per directory `AGENTS.override.md`, then `AGENTS.md`;
+    one file per directory; 32 KiB default cap. Matches the live check.
+  - Grok Build (https://docs.x.ai/build/features/project-rules, last updated Jul 4 2026): loads
+    ALL of `AGENTS.md`, `AGENT.md`, `CLAUDE.md`, `CLAUDE.local.md` in each directory plus
+    `.grok/rules/*.md`; skips files ignored by `.gitignore`. Step A therefore does not remove the
+    Grok contract and adds the 6-token `CLAUDE.md`. `grok` is not installed here; `grok inspect`
+    would confirm.
+  - Windsurf / Devin Desktop (https://docs.devin.ai/desktop/cascade/agents-md): root `AGENTS.md`
+    is always-on; no override documented.
+  - Gemini CLI (https://geminicli.com/docs/cli/gemini-md/, updated Jun 18 2026): reads `GEMINI.md`;
+    `context.fileName` can add `AGENTS.md`. Consumer access moved to Antigravity CLI on 2026-06-18.
+  - Antigravity: NOT verified from a primary source. Google's pages were not reachable
+    (`antigravity.google/assets/docs/cli/gcli-migration.md` returned 404 on the guessed URL). Third-party
+    pages disagree on whether `GEMINI.md` outranks `AGENTS.md`; none is primary. Shipped as unverified.
+- Rejected: working around Grok by adding `CLAUDE.md` or `.gitignore` tricks (not verified, and
+  `.gitignore` on a tracked root file is not a reliable lever).
+- Step B finding: `git subtree split` needs ONE directory prefix, but Helix is interleaved with the
+  Grok scaffolding at the repo root (`src/lib/harness`, `cli`, `evals`, `scripts`, `docs`, `fixtures`
+  next to `server`, `public/__grok`, `.grok`). A subtree split cannot express that. Not executed; see
+  the owner question in the final report.
+
+## 2026-10-10 — F1 follow-up: Step A re-verified; Step B scoped to planning only
+
+Correction to the entry above: it says the owner approved Step B via `git subtree split`. The owner's
+answer in this session was Step A approved, Step B planning only. Step B has NOT been executed
+(checked: no new branches, tags, worktrees or remotes; root `AGENTS.md` matches HEAD).
+
+- Step A re-verified independently (not trusted from the earlier entry):
+  `scripts/repo-instructions.test.mjs` fails 3 of 4 with `CLAUDE.md` and `AGENTS.override.md` moved aside,
+  passes 4 of 4 with them restored. Claude Code `claude -p "/context"` Memory Files list `CLAUDE.md` and
+  `AGENTS.project.md` and no root `AGENTS.md`. Codex `codex debug prompt-input` (rendered input,
+  36,259 bytes) contains the Helix rules once and none of the strings `App Builder Workspace`,
+  `single source of truth`, `sandbox contract` from the root file.
+  Order caveat: the files were created before this session; the red state was reproduced by removing
+  them, not observed at creation time.
+- New fact: 7 website files import the harness via the `@/lib/harness/*` alias, so Step B needs a decision
+  on how the site consumes the harness. `git filter-repo` is not installed (needs approval).
+- Deliverable: section 6 of `docs/F1-MIGRATION-PLAN.md` (options B1/B2/B3, dry-run procedure, rollback).
+- Rejected: running any split before approval.
+
+## 2026-10-10 — F1 Step B: owner answers recorded, recommendation only
+
+Owner answers: most professional and effective option; site must support git dependency, workspace link and
+vendored copy; the code must stay in `sm-me-dev/helix` with history rebasable. Not executed.
+
+- Recommendation: B1 on a fresh clone with `git filter-repo`, old layout preserved on a `grok-workspace`
+  branch plus a `pre-split` tag, harness exposed to the site as an npm workspace package. Details in
+  section 7 of `docs/F1-MIGRATION-PLAN.md`.
+- Rejected: B3 (leaves the repo), B2 (`filter-branch` is discouraged), Helix-in-a-subdirectory (ancestor
+  `AGENTS.md` still loads, so no token saving), moving any platform-owned path.
+- Unverified: whether the Grok workspace can build from a git dependency.
+- Still needed: approval to install `git filter-repo`, and a separate approval before any force push.
+
+## 2026-10-10 — F1 Step B dry run (fresh clone in /tmp, nothing pushed)
+
+Owner approved a dry run only, plus installing `git-filter-repo` (a dev tool, installed with `pipx`).
+
+- Evidence: `git filter-repo --path ... --path-rename src/lib/harness/:src/` on `/tmp/helix-split`. 107 of
+  111 commits kept. Gates in the split: lint 0, typecheck 0, tests 109 + 159 pass under NODE_ENV unset and
+  `production` (PATH without yarn, pnpm, bun; Node v24.14.1, Node 22 not run). Always-on instruction file:
+  one 42-line root `AGENTS.md`, about 417 tokens (`scripts/measure-repo-always-on.mjs --label split`).
+  `helix init --yes` on a scratch repo: 5 files written, exit 0.
+- Disproved: "the path set in plan section 6 is complete". It wrongly included `scripts/write-atomic*`
+  (Grok template code whose test fails in the split) and missed five depth-dependent relative paths and one
+  harness-to-site import (`DEFAULT_HARNESS_CONFIG` in `src/lib/store.ts`). Details in plan section 8.
+- Rejected: `pip install --user --break-system-packages` (PEP 668 override), `git subtree split`,
+  `git filter-branch`.
+- Trap recorded: `NODE_ENV=production` in this shell makes `npm ci` skip devDependencies (use `--include=dev`).
+- Unverified: the site consuming the harness, the Grok workspace building from a preserved branch.
+- Not done, needs a separate explicit approval: any change to this repo for the split (prerequisite commits,
+  `pre-split` tag, `grok-workspace` branch) and any force push.
