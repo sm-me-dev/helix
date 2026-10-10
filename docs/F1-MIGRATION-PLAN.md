@@ -1,6 +1,7 @@
 # F1 migration plan: stop the repo breaking its own token budget
 
-Status: PROPOSAL. Nothing here is executed. Written 2026-10-10.
+Status: EXECUTED 2026-10-10 (option B1, fresh-clone `git filter-repo`; see section 9).
+The sections below are the original proposal, kept as the record of what was planned.
 Measured with `scripts/measure-repo-always-on.mjs` (o200k_base via gpt-tokenizer, an
 approximation of frontier tokenizers). Raw output: `fixtures/measurements/repo-always-on.before.json`.
 
@@ -247,3 +248,32 @@ What the dry run found that the first plan got wrong or missed (fix BEFORE any r
 Not tested: the website consuming the harness (workspace link, git dependency or vendored copy), the
 Grok workspace building from the preserved branch, any push. Nothing was pushed; the throwaway clone and
 `/tmp/scratch-helix` remain only in /tmp.
+
+## 9. Execution (2026-10-10, option B1)
+
+Owner approved the full split and authorized commit + push. Executed:
+
+1. Session work committed and pushed on `fix/audit-evidence-gated`; tag `pre-split`
+   and branch `grok-workspace` created at that tip and pushed (old layout preserved).
+2. Fresh clone (`git clone --no-local`), `git filter-repo` with the section 6 path set
+   minus `scripts/write-atomic*` (Grok template code, fails here), plus
+   `scripts/repo-hygiene.test.mjs` (helix guard), `--path-rename src/lib/harness/:src/`
+   and `--path-rename AGENTS.project.md:AGENTS.md`. 118 commits kept.
+3. Split-side fixes: `../src` imports in cli/evals/scripts; single-level `../`
+   depth paths in src; harness-only package.json (runtime dep: gpt-tokenizer only),
+   tsconfig (src + cli, no DOM/jsx), eslint (no React), CI without `build`;
+   `repo-instructions.test.mjs` rewritten for the standalone layout (root AGENTS.md
+   is the Helix rules; Step-A files must be absent); measure script statuses updated;
+   ARCHITECTURE.md + CONTRIBUTING.md paths updated. Lockfile re-resolved
+   (`npm install --package-lock-only --ignore-scripts` — the `prepare` husky hook
+   fails in a fresh clone; 127 packages, no react/vite).
+4. Gates in the split, both NODE_ENV legs on a yarn/pnpm/bun-free PATH (Node
+   v24.14.1; Node 22 not run): lint 0, typecheck 0, tests 119 + 1 skip / 0 fail
+   (.mjs, 120) and 183 / 0 fail (TS). `measure-repo-always-on.mjs --label split`:
+   one file, root AGENTS.md 42 lines / 417 tokens for every agent.
+   `helix init --yes` on a scratch repo: exit 0.
+5. Pushed as the new `main` (force push; remote was stripped by filter-repo and
+   re-added deliberately for this one push).
+
+Not verified: the website consuming the harness (workspace link, git dependency or
+vendored copy) and the Grok workspace building from its preserved branch.

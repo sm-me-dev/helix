@@ -21,12 +21,12 @@ vendor docs      gate.mjs · hooks · map
 
 ## Boundaries
 
-- **Harness core** (`src/lib/harness/`): pure pack generation (`generate.ts`),
+- **Harness core** (`src/`): pure pack generation (`generate.ts`),
   catalogs (`crew/skills/mcps/platforms/practices`), token math (`tokens.ts`,
   measured — never constants), verification gate source (`gate.ts`), repo map
   (`repomap.ts`), measurement (`measure.ts`), evaluation grading (`evals/`).
   No I/O, no framework imports.
-- **Platform adapters** (`src/lib/harness/adapters/`): one module per agent.
+- **Platform adapters** (`src/adapters/`): one module per agent.
   Each emits **only** at paths its platform reads; a `seen` set dedupes shared
   paths (e.g. `GEMINI.md`). Every platform fact carries `source` (vendor URL)
   - `verifiedAt`; unverified capabilities emit nothing and claim nothing.
@@ -34,7 +34,7 @@ vendor docs      gate.mjs · hooks · map
     plugin, structured-output, session-continuation, sandboxing, and LSP. The
     last four are tracked as `unverified` until checked against vendor docs —
     they shape the README matrix but emit no files today.
-- **Workflows** (`src/lib/harness/workflow.ts`): risk-aware selection over
+- **Workflows** (`src/workflow.ts`): risk-aware selection over
   `trivial` / `standard` / `complex` plus `ambiguous` (blocks for a question)
   and `securitySensitive` (forces independent verification). States
   `classified → discovered → planned → implemented → verifying → completed`

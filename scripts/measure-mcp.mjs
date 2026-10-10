@@ -15,7 +15,7 @@ import { spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { encode } from "gpt-tokenizer";
 
-const OUT = new URL("../src/lib/harness/mcp-measurements.json", import.meta.url);
+const OUT = new URL("../src/mcp-measurements.json", import.meta.url);
 const STALE_DAYS = 60;
 const TIMEOUT_MS = 90000;
 

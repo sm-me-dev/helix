@@ -15,8 +15,8 @@ import {
   packPathSegments,
   reconstructConfig,
 } from "./lib.ts";
-import { generatePack } from "../src/lib/harness/generate.ts";
-import { PLATFORM_BY_ID } from "../src/lib/harness/platforms.ts";
+import { generatePack } from "../src/generate.ts";
+import { PLATFORM_BY_ID } from "../src/platforms.ts";
 
 describe("detectStack", () => {
   it("detects a TypeScript npm repo with test and lint scripts", () => {

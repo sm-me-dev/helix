@@ -1,5 +1,5 @@
 {
-  "$comment": "MCP tools/list token measurements. Written by scripts/measure-mcp.mjs; read by src/lib/harness/mcps.ts. Entries with tokens:null have never been measured — the catalog estimate is used and flagged. Measurements go stale after 60 days.",
+  "$comment": "MCP tools/list token measurements. Written by scripts/measure-mcp.mjs; read by src/mcps.ts. Entries with tokens:null have never been measured — the catalog estimate is used and flagged. Measurements go stale after 60 days.",
   "servers": {
     "graphify": {
       "tokens": 1336,

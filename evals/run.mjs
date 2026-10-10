@@ -12,7 +12,7 @@ import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/pr
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { generatePack } from "../src/lib/harness/generate.ts";
+import { generatePack } from "../src/generate.ts";
 import { loadOpenCodeDb, parseClaudeCodeJsonl, sumSessions } from "../cli/report.ts";
 import { parseYaml } from "./yaml.mjs";
 

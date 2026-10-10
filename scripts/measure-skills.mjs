@@ -7,12 +7,12 @@
 // frontmatter (always-on index) and body (loaded on demand), (b) each agent
 // file, (c) AGENTS.md. Static size only: it says nothing about total tokens
 // per task (see Phase 1 token measurement). Output is JSON with method + date.
-import { agentFile, skillFile } from "../src/lib/harness/adapters/parts.ts";
-import { CREW } from "../src/lib/harness/crew.ts";
-import { agentsMd } from "../src/lib/harness/generate.ts";
-import { countTokens, TOKENIZER_METHOD } from "../src/lib/harness/measure.ts";
-import { SKILLS } from "../src/lib/harness/skills.ts";
-import { DEFAULT_PLATFORMS } from "../src/lib/harness/platforms.ts";
+import { agentFile, skillFile } from "../src/adapters/parts.ts";
+import { CREW } from "../src/crew.ts";
+import { agentsMd } from "../src/generate.ts";
+import { countTokens, TOKENIZER_METHOD } from "../src/measure.ts";
+import { SKILLS } from "../src/skills.ts";
+import { DEFAULT_PLATFORMS } from "../src/platforms.ts";
 
 const fm = (t) => (t.match(/^---\n[\s\S]*?\n---/) ?? [t])[0];
 const label = process.argv[process.argv.indexOf("--label") + 1] ?? "run";

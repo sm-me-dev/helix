@@ -10,16 +10,13 @@ import measurements from "./mcp-measurements.json" with { type: "json" };
 const here = dirname(fileURLToPath(import.meta.url));
 const captureNames = (server: string): Set<string> => {
   const cap = JSON.parse(
-    readFileSync(
-      join(here, "..", "..", "..", "fixtures", "captures", `${server}.tools.json`),
-      "utf8",
-    ),
+    readFileSync(join(here, "..", "fixtures", "captures", `${server}.tools.json`), "utf8"),
   );
   return new Set(cap.tools.map((t: { name: string }) => t.name));
 };
 
 const CAPTURES: Record<string, Set<string>> = {};
-for (const f of readdirSync(join(here, "..", "..", "..", "fixtures", "captures"))) {
+for (const f of readdirSync(join(here, "..", "fixtures", "captures"))) {
   const m = f.match(/^(.+)\.tools\.json$/);
   if (m) CAPTURES[m[1]] = captureNames(m[1]);
 }

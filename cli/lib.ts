@@ -1,17 +1,17 @@
 // Pure, testable core of the helix CLI. The argv wrapper lives in helix.mjs;
 // everything here is importable and unit-tested without touching process.
-import { DEFAULT_CREW } from "../src/lib/harness/crew.ts";
-import { generatePack } from "../src/lib/harness/generate.ts";
-import { DEFAULT_MCPS, MCPS } from "../src/lib/harness/mcps.ts";
-import { selectRepoMap } from "../src/lib/harness/repomap.ts";
-import { DEFAULT_PLATFORMS } from "../src/lib/harness/platforms.ts";
-import { DEFAULT_SKILLS, SKILLS } from "../src/lib/harness/skills.ts";
-import { breakdown, formatTokens } from "../src/lib/harness/tokens.ts";
-import { ADAPTER_BY_ID } from "../src/lib/harness/adapters/index.ts";
-import { countTokens } from "../src/lib/harness/measure.ts";
-import { mcpCostByPlatform } from "../src/lib/harness/mcp-cost.ts";
-import { mcpSchemaTokens } from "../src/lib/harness/mcps.ts";
-import type { HarnessConfig, McpId, PlatformId, SkillId } from "../src/lib/harness/types.ts";
+import { DEFAULT_CREW } from "../src/crew.ts";
+import { generatePack } from "../src/generate.ts";
+import { DEFAULT_MCPS, MCPS } from "../src/mcps.ts";
+import { selectRepoMap } from "../src/repomap.ts";
+import { DEFAULT_PLATFORMS } from "../src/platforms.ts";
+import { DEFAULT_SKILLS, SKILLS } from "../src/skills.ts";
+import { breakdown, formatTokens } from "../src/tokens.ts";
+import { ADAPTER_BY_ID } from "../src/adapters/index.ts";
+import { countTokens } from "../src/measure.ts";
+import { mcpCostByPlatform } from "../src/mcp-cost.ts";
+import { mcpSchemaTokens } from "../src/mcps.ts";
+import type { HarnessConfig, McpId, PlatformId, SkillId } from "../src/types.ts";
 
 export function defaultConfig(platforms: PlatformId[]): HarnessConfig {
   return {

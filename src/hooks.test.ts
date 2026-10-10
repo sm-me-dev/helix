@@ -77,7 +77,7 @@ describe("prefer-graph hook (PreToolUse, stdin JSON)", () => {
   it("passes a Read with an explicit line range untouched", async () => {
     const r = await runHook(
       "prefer-graph",
-      hookInput("Read", { file_path: "src/lib/harness/generate.ts", offset: 1, limit: 40 }),
+      hookInput("Read", { file_path: "src/generate.ts", offset: 1, limit: 40 }),
       tmpdir(),
     );
     assert.equal(r.code, 0);

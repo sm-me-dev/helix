@@ -5,8 +5,8 @@
 // fixtures/baseline/. The only catalog numbers left are MCP schema weights
 // (flagged in `estimates`) and MCP schemas without a fresh tools/list
 // measurement (flagged per server — run scripts/measure-mcp.mjs).
-import { BLOATED_AGENTS_MD } from "../../../fixtures/baseline/bloated-agents-md.ts";
-import { TYPICAL_MCP_SCHEMAS } from "../../../fixtures/baseline/fifteen-mcp-schemas.ts";
+import { BLOATED_AGENTS_MD } from "../fixtures/baseline/bloated-agents-md.ts";
+import { TYPICAL_MCP_SCHEMAS } from "../fixtures/baseline/fifteen-mcp-schemas.ts";
 import { agentFile, skillFile } from "./adapters/parts.ts";
 import { CREW } from "./crew.ts";
 import { agentsMd, generatePack } from "./generate.ts";

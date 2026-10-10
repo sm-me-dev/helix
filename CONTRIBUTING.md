@@ -17,22 +17,21 @@ npm ci
 
 ```sh
 npm run lint && npm run typecheck && npm test
-npm run check:auth   # needs the dev server on :8080; exit 2 = could not observe
-npm run build
 ```
 
 Conventions: small commits, [Conventional Commits](https://www.conventionalcommits.org/)
 (`feat:`, `fix:`, `test:`, `docs:`, `chore:`). Do not commit secrets, build
-output, or `.env` (see `.env.example`). Never touch `AGENTS.md` (root),
-`public/__grok/`, `server/`, or `scripts/grok-pwa-*` — platform chrome.
+output, or `.env`. There are no platform-owned paths in this repo (the Grok
+workspace lives on the `grok-workspace` branch) — but keep `docs/DECISIONS.md`
+append-only.
 
 ## How to make a change
 
 1. Branch from `main`, keep the diff focused (~100 lines ideal).
-2. Follow `AGENTS.project.md`: the product is `src/lib/harness/`; use
+2. Follow `AGENTS.md`: the product is `src/`; use
    `graphify query/path/explain` before broad reads where available.
 3. Add or update tests first for behavior changes (`cli/*.test.mjs` for CLI
-   workflows, `src/lib/harness/*.test.ts` for generation logic).
+   workflows, `src/*.test.ts` for generation logic).
 4. Update `docs/DECISIONS.md` (append-only: date, evidence, rejected
    alternatives) for architectural choices.
 5. Run the gates above; inspect `git diff --check`, `git status --short`.

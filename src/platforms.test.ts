@@ -66,7 +66,7 @@ describe("platform capability matrix", () => {
   });
 
   it("keeps README's platform matrix identical to the catalog", () => {
-    const readme = readFileSync(new URL("../../../README.md", import.meta.url), "utf8");
+    const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
     const m = readme.match(/<!-- matrix:start -->\n([\s\S]*?)\n<!-- matrix:end -->/);
     assert.ok(m, "README needs matrix:start/end markers");
     // Prettier realigns markdown tables on commit; compare cells, not padding.

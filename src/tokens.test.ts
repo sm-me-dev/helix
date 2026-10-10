@@ -1,10 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { BLOATED_AGENTS_MD } from "../../../fixtures/baseline/bloated-agents-md.ts";
+import { BLOATED_AGENTS_MD } from "../fixtures/baseline/bloated-agents-md.ts";
 import {
   TYPICAL_MCP_SCHEMAS,
   TYPICAL_MCP_TOOL_COUNT,
-} from "../../../fixtures/baseline/fifteen-mcp-schemas.ts";
+} from "../fixtures/baseline/fifteen-mcp-schemas.ts";
 import { agentsMd } from "./generate.ts";
 import { countTokens } from "./measure.ts";
 import { breakdown, formatTokens, savingsRatio } from "./tokens.ts";

@@ -3,7 +3,7 @@
 // explicitly deferred ("save nothing" is the default outcome).
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { countTokens } from "../src/lib/harness/measure.ts";
+import { countTokens } from "../src/measure.ts";
 import {
   COMPILED_FILE,
   COMPILE_TOKEN_CAP,
@@ -20,7 +20,7 @@ import {
   validateEntry,
   type LearnEntryType,
   type LearnLedger,
-} from "../src/lib/harness/learn.ts";
+} from "../src/learn.ts";
 
 function dirOf(args: string[]): string {
   const d = args.find((a) => !a.startsWith("-"));

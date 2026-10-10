@@ -3,7 +3,7 @@
 // Test files that build throwaway git repos must not depend on the developer's global
 // git config (commit signing, hooks, a global excludes file, default branch name) or on
 // NODE_ENV. This file runs them under a deliberately hostile ambient environment and
-// requires them to pass. It was added after src/lib/harness/gate.test.ts failed under it.
+// requires them to pass. It was added after src/gate.test.ts failed under it.
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
+const ROOT = fileURLToPath(new URL("../", import.meta.url));
 
 /** Ambient environment that breaks any test relying on the machine's git setup. */
 function hostileEnv(): Record<string, string> {
@@ -57,8 +57,8 @@ function hostileEnv(): Record<string, string> {
 }
 
 const FILES: Array<{ file: string; args: string[] }> = [
-  { file: "src/lib/harness/gate.test.ts", args: ["--experimental-strip-types"] },
-  { file: "src/lib/harness/codex-antigravity.test.ts", args: ["--experimental-strip-types"] },
+  { file: "src/gate.test.ts", args: ["--experimental-strip-types"] },
+  { file: "src/codex-antigravity.test.ts", args: ["--experimental-strip-types"] },
   { file: "cli/e2e-workflows.test.mjs", args: [] },
 ];
 

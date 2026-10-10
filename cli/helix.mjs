@@ -15,11 +15,11 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
-import { GATE_SOURCE } from "../src/lib/harness/gate.ts";
-import { generatePack } from "../src/lib/harness/generate.ts";
-import { pluginPack } from "../src/lib/harness/plugin.ts";
+import { GATE_SOURCE } from "../src/gate.ts";
+import { generatePack } from "../src/generate.ts";
+import { pluginPack } from "../src/plugin.ts";
 import { cmdLearn } from "./learn.ts";
-import { DEFAULT_PLATFORMS, PLATFORM_BY_ID } from "../src/lib/harness/platforms.ts";
+import { DEFAULT_PLATFORMS, PLATFORM_BY_ID } from "../src/platforms.ts";
 import {
   configForStack,
   defaultConfig,
