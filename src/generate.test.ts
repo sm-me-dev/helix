@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { generatePack, packAsText } from "./generate.ts";
-import { DEFAULT_HARNESS_CONFIG } from "../store.ts";
+import { DEFAULT_HARNESS_CONFIG } from "./defaults.ts";
 import type { HarnessConfig } from "./types.ts";
 
 const BASE: HarnessConfig = {

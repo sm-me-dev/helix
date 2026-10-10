@@ -5,7 +5,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { generatePack } from "./generate.ts";
 import { pluginPack, scopeMcpTool, PLUGIN_NAME, MARKETPLACE_NAME } from "./plugin.ts";
-import { DEFAULT_HARNESS_CONFIG } from "../store.ts";
+import { DEFAULT_HARNESS_CONFIG } from "./defaults.ts";
 import type { HarnessConfig } from "./types.ts";
 
 const CFG: HarnessConfig = {
