@@ -5,11 +5,15 @@ import type { PlatformAdapter } from "./types.ts";
 
 export const copilotAdapter: PlatformAdapter = {
   id: "copilot",
-  verifiedAt: "2026-10-07",
+  verifiedAt: "2026-10-10",
   sources: [
     {
       title: "VS Code MCP configuration reference",
       url: "https://code.visualstudio.com/docs/agents/reference/mcp-configuration",
+    },
+    {
+      title: "GitHub Copilot repository custom instructions",
+      url: "https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/add-custom-instructions/add-repository-instructions",
     },
   ],
   supportsSubagents: false,

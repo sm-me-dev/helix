@@ -1292,3 +1292,190 @@ Leads for later items (found while reading docs, not acted on):
   test before any change.
 - Unrelated to F2: `claude plugin eval` and `claude plugin details` exist; the former could run plugin evals
   with a no-plugin baseline arm (free of Helix's own eval harness), worth a look in F6.
+
+## 2026-10-10 — F1 Step A re-verified; platforms re-verified (Cursor, Copilot, Antigravity, Grok)
+
+Owner decisions this session (via question tool): keep Step A; Step B "execute full split"
+selected but ON HOLD (see below); verify all four platforms; paid eval runs "approved" but ON
+HOLD pending model + budget + cell count (see F6 entry).
+
+- Step A re-verified today (Node v24.14.1 on stripped PATH, files committed, not re-created):
+  `scripts/repo-instructions.test.mjs` 4/4 pass; `scripts/measure-repo-always-on.mjs --label
+verify` reproduces root AGENTS.md 351 lines / 4,904 tokens, CLAUDE.md 6, AGENTS.override.md 417,
+  AGENTS.project.md 417; Claude Code `claude -p "/context"` Memory Files list project CLAUDE.md
+  - AGENTS.project.md and no root AGENTS.md; Codex `codex debug prompt-input` (36,014 bytes)
+    contains "Helix contributor rules" once and zero of the root-file probes. Root AGENTS.md
+    byte-identical (untouched). GEMINI.md is now tracked (10 lines / 172 tokens; was untracked 9/172).
+- Cursor re-verified (https://cursor.com/docs/rules, fetched today): root + nested AGENTS.md
+  supported and combined (specific wins); no override/skip documented; CLAUDE.md not mentioned.
+  Step A does not help Cursor. Adapter verifiedAt bumped 2026-10-09 -> 2026-10-10, no behavior change.
+- Copilot re-verified (https://docs.github.com/.../add-repository-instructions, fetched today):
+  one or more AGENTS.md anywhere (nearest wins), or alternatively a single root CLAUDE.md or
+  GEMINI.md; precedence when both exist is undocumented, so Step A's effect stays UNVERIFIED.
+  Adapter verifiedAt bumped 2026-10-07 -> 2026-10-10 and the GitHub docs page added to sources.
+- Antigravity now VERIFIED from primary Google docs (fetched today; previously unreachable):
+  rules (https://antigravity.google/docs/rules — AGENTS.md/GEMINI.md per directory, walk-up to
+  root, cumulative always_on, no frontmatter; 24KB per-file + 20k-token aggregate budget),
+  MCP (https://antigravity.google/docs/mcp — workspace .agents/mcp_config.json, mcpServers key,
+  serverUrl for remote), subagents (https://antigravity.google/docs/subagents — .agents/agents,
+  name/description/tools/mainAgent/subagent/model inherit|flash|pro),
+  skills (https://antigravity.google/docs/skills — .agents/skills, progressive disclosure),
+  hooks (https://antigravity.google/docs/hooks — .agents/hooks.json, Pre/PostToolUse,
+  Pre/PostInvocation, Stop returning {decision: continue}; no loop guard documented, and the
+  hook input/output contract differs from Claude's, so Helix still emits no hooks file).
+  Adapter verifiedAt bumped to 2026-10-10. F1 consequence: Antigravity reads root AGENTS.md
+  (the Grok contract) and neither Step A file, so only Step B helps it. `agy` CLI is installed
+  on this machine (/home/sm-me/.local/bin/agy) — live `agy` behavior checks are possible next.
+- Grok re-verified (https://docs.x.ai/build/features/project-rules, fetched today): loads ALL of
+  AGENTS.md/AGENT.md/CLAUDE.md/CLAUDE.local.md per directory plus .grok/rules/*.md (and
+  .claude/.cursor rules for compat), full files, no size cap, gitignored files skipped.
+  Step A adds 6 tokens, removes nothing. `grok inspect` would confirm; grok CLI not installed.
+  Grok has no Helix adapter (stays unverified in-product); this is an F1 measurement fact.
+- README matrix regenerated (drift test caught the three date bumps, as designed); the Gemini
+  paragraph corrected (it claimed no Google primary page was checked — now false, see F5 entry).
+- Rejected: promoting Grok to an adapter on docs alone without an emission design; emitting
+  Antigravity hooks by porting Claude-protocol scripts (contract differs: decision
+  allow/deny/ask vs permissionDecision).
+- HOLD — Step B full split: the radio-button "execute" conflicts with the non-negotiable
+  no-commit/no-push rule, and this branch is 4 commits ahead of origin/fix/audit-evidence-gated
+  with no pre-split tag or grok-workspace branch, so a force-push now would strand work.
+  Required before any execution: an explicit typed force-push approval plus a decision on the 4
+  unpushed commits. Nothing pushed; working tree changes in this session are uncommitted.
+
+## 2026-10-10 — F4 re-verified (lean pack stands; one residual noted)
+
+- `helix measure` re-run today on a scratch repo (`helix init --platform claude-code,codex`,
+  Node v24.14.1): always-on 1.0k (agents.md 341, skills 74, mcp 420 estimate, crew 172), lean
+  score 100 (4/4). Matches the committed after-numbers (1.01k); the before-numbers (472 -> 341
+  tokens, 38 -> 29 lines) stand as recorded with script + date, not re-measured (would need the
+  parent commit's code). AGENTS.md guard (<= 40 lines, < 500 tokens) PASS.
+- Scout allow-list re-checked in code (`adapters/parts.ts#toolsFor`: graphify tools named only
+  when the graphify MCP is configured, else Grep/Glob/Read) and in the generated pack
+  (scout.md in the graphify-absent scratch repo: `tools: Grep, Glob, Read`, zero graphify refs).
+- Tool-search doc re-fetched today (https://code.claude.com/docs/en/agent-sdk/tool-search.md):
+  "Model support: Claude Sonnet 4.5, Claude Haiku 4.5, Claude Opus 4.5, and later" — the
+  disproof of "Haiku lacks MCP tool search" stands; Scout keeps `haiku`.
+- Residual (not changed, needs a failing test before any fix): the Scout role _body_ still says
+  "Query Graphify for the subgraph" unconditionally while its allow-list is Grep/Glob/Read in
+  graphify-absent packs. F4 fixed the allow-list, not the prose.
+- Rejected: re-measuring the before-state by checking out the parent commit (read-only history
+  work with no decision value; the recorded numbers already carry script + date).
+
+## 2026-10-10 — F5 re-verified (developers page found; gemini default still the owner's call)
+
+- Discussion 28017 re-fetched today: maintainer post (Jun 18 2026) confirms consumer-tier
+  shutdown, enterprise/API-key unaffected, Antigravity CLI as successor keeping gemini.md.
+  Matches the committed entry verbatim.
+- NEW primary source closing the earlier gap: Google developers deprecation page
+  https://developers.google.com/gemini-code-assist/docs/deprecations/code-assist-individuals
+  (fetched today, page last updated 2026-10-09 UTC): IDE extensions + Gemini CLI stopped serving
+  individuals/Pro/Ultra on 2026-06-18; Standard/Enterprise on a separate schedule; migration to
+  Antigravity. The gemini platform note now cites both sources (platforms.test.ts "cites Google's
+  own announcement" still green).
+- NOT changed: DEFAULT_PLATFORMS still contains `gemini` (verified above: `claude-code, cursor,
+codex, gemini, copilot`). Recommendation stands: remove `gemini` from the defaults; most users
+  can no longer run it and Antigravity reads AGENTS.md natively. Owner decision required.
+- `npm run lint` 0 problems (Node v24.14.1, stripped PATH).
+
+## 2026-10-10 — F2 status (already shipped; confirmed green, no changes)
+
+- `helix plugin` + `helix init --claude-plugin` (commit 5668181) re-checked without modification:
+  `src/lib/harness/plugin.test.ts` + `src/lib/harness/platforms.test.ts` 27/27 pass;
+  `cli/plugin.test.mjs` 6/6 pass (includes the vendor's own `claude plugin validate`, Claude Code
+  2.1.233). DEFAULT_PLATFORMS unchanged. The two open questions stay as recorded (namespaced
+  resolution untested without a model run; hook parallelism read from docs, not observed).
+
+## 2026-10-10 — F3 LSP verdict (repo-level emission disproved; verified routes recorded)
+
+- Verified today from primary docs (https://code.claude.com/docs/en/plugins/code-intelligence,
+  via the docs index): Claude Code LSP arrives as **plugin-bundled `.lsp.json`**
+  ("Write a plugin with an `.lsp.json` file ... then load the plugin with `--plugin-dir` or
+  publish it to a marketplace"); per-language official plugins come from Anthropic's marketplace
+  (TypeScript: `typescript-lsp` plugin + `typescript-language-server` binary). No project-level
+  `.lsp.json` in a repo is read. No LSP binaries are installed on this machine, so server start
+  was not observed.
+- Consequence: Helix must NOT emit a repo-level `.lsp.json` (nothing reads it) — that half of F3
+  is disproved as designed. Verified shippable routes: (a) an `.lsp.json` stanza inside
+  `helix plugin` output, but only for languages without an official plugin (every Helix-relevant
+  language has one, so: recommend, don't bundle); (b) a per-stack recommendation of the official
+  plugin (this repo is TypeScript: `typescript-lsp@claude-plugins-official`); (c) Serena MCP
+  stays the cross-platform LSP path (already emitted, pinned @v1.7.0).
+- NOT done: catalog widening past 2 own skills / 8 MCPs and the discovery step recommending
+  published skills/MCPs/plugins by detected stack. Blocked on evidence, not effort: every new
+  entry needs a pinned version, a same-day primary source, and a measured schema size from
+  scripts/measure-mcp.mjs or an explicit "estimate" label — none were collected today, and none
+  are invented here.
+- Rejected: emitting `.lsp.json` at repo root "for completeness" (unread files are noise, and
+  the 2026-10-09 cosmetic-LSP-removal decision already settled this pattern).
+
+## 2026-10-10 — F6 harder task + pilot (design validated, full matrix still to run)
+
+- New tuning task `evals/tasks-large/deep-bug.yml` (test-first: `large-tasks.test.mjs` taught to
+  expect 4 files — red before the YAML existed; the quoted-glob pass command failed first because
+  the validation test passes globs literally without a shell, fixed to explicit paths):
+  seed 1, module 0 (ledger, 15 transitive dependents — the maximum, computed with buildModel, not
+  guessed), rule 1. Planted state: 81 tests, 63 pass / 18 fail (deterministic count, 2026-10-10)
+  vs trace-bug's 3 red suites. Pass command runs the whole tests tree + integration (tighter:
+  collateral edits fail). Pristine-green + planted-red enforced by the navigation-property test.
+  Held-out setups untouched (seed1/m6/r5, seed7/m5/r3).
+- Pilot (opencode free tier, deep-bug, none arm, n=1, pre-approved):
+  `evals/results/2026-10-10T16-05-05-opencode.{json,md}` — 1/1 pass, wall 77s, transcript total
+  261,646, uncached 28,128. One run proves the task runs end to end, not that it discriminates:
+  the none arm solved it faster than trace-bug's pilot, so deep-bug alone may not break the
+  ceiling either. No helix-arm comparison exists yet for this task.
+- Full F6 matrix (NOT run): arms none / helix-without-subagents / helix-with-subagents × tasks
+  (trace-bug, call-chain, cross-module, deep-bug + double-bug if built) × n>=5, free-tier opencode
+  first. Two prerequisites are missing and need owner approval + design: (1) the runner only
+  accepts arms none,helix — a third arm needs a pack variant without agent files plus transcript
+  confirmation that subagents actually spawned (subagentTokens > 0; all 30 prior runs were 0, so
+  on this runner the with-subagents arm may be vacuous — Claude Code runs would exercise it, but
+  no ANTHROPIC_API_KEY exists here); (2) paid runs: "approved" with no model, dollar cap, or cell
+  count — none specified, so nothing paid was started. A double-bug task (two plants) needs
+  generator + runner support for two setups (failing test first).
+- Decision rule (unchanged): if helix does not at least tie pass rate while cutting tokens,
+  change the design and re-run; if it still does not win, say so plainly in README and here.
+- Incidental: my probe ran `generate.mjs --out /tmp/fx` but the script takes a positional outDir,
+  writing 356 files into a stray `--out/` dir in the repo root. Removed. Rejected: adding flag
+  parsing to the throwaway-shaped generator CLI (out of scope).
+- Evidence this session (Node v24.14.1, stripped PATH without yarn/pnpm/bun; CI Node 22 not run):
+  `npm run lint` 0 problems, `typecheck` 0, `npm test` 315 pass + 1 pre-existing skip / 0 fail
+  (.mjs, 316) and 238 pass / 0 fail (TS) — identical with NODE_ENV unset and NODE_ENV=production.
+
+## 2026-10-10 — Scout prose + graph-first skill follow graphify configuration
+
+Owner asked to fix the residual: the Scout role body said "Query Graphify" unconditionally while
+its allow-list is Grep/Glob/Read in graphify-absent packs.
+
+- Failing tests first (`generate.test.ts`, both red before the fix): scout body must name
+  `.helix/map.mjs` and never "Query Graphify" when the graphify MCP is absent (and keep the
+  Graphify wording when present); the graph-first skill must not ship without the graphify MCP.
+- Fix: `agentBody(id, config)` swaps Scout's job + input to map wording when
+  `!config.mcps.includes("graphify")` (same predicate as `toolsFor`); the required config
+  parameter threads through all five agent surfaces plus the shared `agentFile` (so `helix
+plugin` gets it too — the compiler rejected the four missed call sites, which were then
+  fixed). `generatePack` normalizes skills once at the choke point so init, export, plugin and
+  evals agree; adapters receive the normalized config.
+- Verified end to end: graphify-absent packs on all five surfaces carry map prose, zero
+  "Query Graphify"/"Graphify index"; graphify-on pack unchanged. The eval helix arm (mcps: [])
+  no longer ships the unusable skill — prior eval arms did, which is a caveat on their token
+  numbers, not a reason to re-run them.
+- Residual: role _descriptions_ (one-liners, five sources) still say "graph-cited" in
+  graphify-absent packs. Left alone: delegation copy is a separate behavior change, and the
+  approved fix was the body. Rejected: per-adapter prose branches (one shared helper or drift).
+- Evidence: typecheck 0, lean-pack + platform + plugin + token suites green; full gates below.
+
+## 2026-10-10 — gemini removed from DEFAULT_PLATFORMS (owner decision executed)
+
+Owner confirmed: Gemini CLI's consumer tiers are gone (migrated to Antigravity), so remove it
+from the defaults. Failing test first (`platforms.test.ts`: gemini must not be in
+DEFAULT_PLATFORMS; red before, green after).
+
+- `DEFAULT_PLATFORMS` is now claude-code, cursor, codex, copilot. This flows to the web store
+  default, `helix init` with no `--platform`, `--platform all`, the simulation default and
+  `scripts/measure-skills.mjs` with no further edits. Explicit `--platform gemini`, GEMINI.md
+  detection (`cli/lib.ts`) and the GEMINI.md pointer file are untouched — requesting it still
+  works, it just isn't emitted by default.
+- Full gates green after the change (both NODE_ENV legs, stripped PATH, Node v24.14.1):
+  lint 0, typecheck 0, 315 + 1 skip / 0 fail (.mjs) and 241 / 0 fail (TS).
+- Rejected: deleting the gemini adapter outright (explicit selection must keep working for
+  enterprise/API-key users, who are unaffected by the shutdown).

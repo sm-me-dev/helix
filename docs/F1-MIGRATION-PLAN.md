@@ -29,6 +29,15 @@ approximation of frontier tokenizers). Raw output: `fixtures/measurements/repo-a
 | OpenCode                           | First match wins: `AGENTS.md` beats `CLAUDE.md`. A `CLAUDE.md` does NOT help; the `instructions` config only adds files. No documented way to skip the root file                                                                                                                                                                                                                           | https://opencode.ai/docs/rules                       |
 | Cursor, Copilot, Antigravity, Grok | NOT verified in this pass                                                                                                                                                                                                                                                                                                                                                                  | n/a                                                  |
 
+Correction 2026-10-10 (all four verified from primary docs the same day; see DECISIONS.md):
+Cursor (cursor.com/docs/rules) loads root + nested AGENTS.md combined, no override — Step A does
+not help. Copilot (GitHub docs) reads nearest AGENTS.md, or a root CLAUDE.md/GEMINI.md as an
+alternative with undocumented precedence — Step A effect unverified. Antigravity
+(antigravity.google/docs/rules) loads AGENTS.md/GEMINI.md per directory walk-up, cumulative —
+only Step B helps. Grok (docs.x.ai/build/features/project-rules) loads ALL instruction files per
+directory with no size cap — only Step B helps. Conclusion unchanged: Step B is the only
+verified-sound fix for every agent.
+
 Disproved: "a committed `CLAUDE.md` fixes it for every agent". It does not for OpenCode.
 Also not an escape: working from a subdirectory. Claude Code loads ancestor files and Codex
 walks from the repo root down, so a nested `AGENTS.md` adds to the root file, it does not
