@@ -30,7 +30,7 @@ function usage() {
   return `helix eval — run none-vs-helix task comparisons
 
   --agent <id>        ${AGENTS.join("|")} (default: codex)
-  --arms <list>       comma list of none,helix (default: none,helix)
+  --arms <list>       comma list of none,helix,helix-nosub (default: none,helix)
   --runs <n>          repetitions per cell (default: 1)
   --tasks <list>      comma task ids, default all for the fixture
   --fixture <id>      ${FIXTURES.join("|")} (default: small; large = 356-file navigation fixture)
@@ -87,7 +87,7 @@ function parseArgs(argv) {
   if (!AGENTS.includes(o.agent)) throw new Error(`unknown agent: ${o.agent}`);
   if (!FIXTURES.includes(o.fixture)) throw new Error(`unknown fixture: ${o.fixture}`);
   for (const arm of o.arms) {
-    if (!["none", "helix"].includes(arm)) throw new Error(`unknown arm: ${arm}`);
+    if (!["none", "helix", "helix-nosub"].includes(arm)) throw new Error(`unknown arm: ${arm}`);
   }
   return o;
 }
@@ -134,6 +134,15 @@ async function freshCopy(task = null) {
   }
   await sh("git init -q && git add -A && git -c user.email=eval@helix -c user.name=helix commit -qm baseline", dir, 60);
   return dir;
+}
+
+/** Files an eval helix arm writes. helix-nosub drops model-subagent definitions
+ * (agent files) but keeps AGENTS.md, skills, hooks, MCP fragments and the gate,
+ * so the with/without-subagents comparison measures only the subagents. */
+export function packFilesForArm(agent, arm = "helix") {
+  const files = helixFilesFor(agent);
+  if (arm === "helix-nosub") return files.filter((f) => !/(^|\/)agents\//.test(f.path));
+  return files;
 }
 
 function helixFilesFor(agent) {
@@ -358,10 +367,10 @@ export async function transcriptTokens(agent, workdir, opts = {}) {
 async function runCell(agent, arm, task, run, timeoutSec, opts = {}) {
   const workdir = await freshCopy(task);
   try {
-    if (arm === "helix") {
+    if (arm === "helix" || arm === "helix-nosub") {
       const { mkdir, writeFile } = await import("node:fs/promises");
       const { dirname } = await import("node:path");
-      for (const f of helixFilesFor(agent)) {
+      for (const f of packFilesForArm(agent, arm)) {
         const full = join(workdir, f.path);
         await mkdir(dirname(full), { recursive: true });
         await writeFile(full, f.body);
