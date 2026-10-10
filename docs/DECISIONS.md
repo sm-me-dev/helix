@@ -1479,3 +1479,45 @@ DEFAULT_PLATFORMS; red before, green after).
   lint 0, typecheck 0, 315 + 1 skip / 0 fail (.mjs) and 241 / 0 fail (TS).
 - Rejected: deleting the gemini adapter outright (explicit selection must keep working for
   enterprise/API-key users, who are unaffected by the shutdown).
+
+## 2026-10-10 — F1 Step B executed (B1 filter-repo; origin/main is now the standalone repo)
+
+Owner authorized commit + push including the split. Executed, all verified before pushing:
+
+- Session work committed on `fix/audit-evidence-gated` and pushed; tag `pre-split` and branch
+  `grok-workspace` at 282bfac pushed (old layout + full history preserved there).
+- Fresh clone, `git filter-repo` (section 6 path set minus `scripts/write-atomic*`, plus
+  `scripts/repo-hygiene.test.mjs`; `--path-rename src/lib/harness/:src/`,
+  `AGENTS.project.md:AGENTS.md`; remote stripped by the tool): 122 parsed, 118 kept.
+- Split-side fixes: `../src` imports; single-level `../` depth paths (the dry run's `../../`
+  guess was wrong — `src/` sits one level under root, caught by typecheck, not by reasoning);
+  harness-only package.json (runtime: gpt-tokenizer only; 127 locked packages, no react/vite),
+  tsconfig (src + cli), eslint (no React), CI without `build`; `repo-instructions.test.mjs`
+  rewritten (root AGENTS.md is the Helix rules; Step-A files must be absent); measure-script
+  statuses; ARCHITECTURE/CONTRIBUTING paths; `.gitignore` added (was missing from the path set —
+  caught by `git status` showing node_modules/); section 9 appended to the plan copy.
+- Traps hit: `npm install` runs the `prepare` husky hook, which fails in a fresh clone
+  (fixed with `--ignore-scripts`); this shell's `NODE_ENV=production` needs
+  `npm ci --include=dev`; `generate.mjs` takes a positional outDir (earlier stray `--out/`
+  lesson re-applied: no flags passed).
+- Gates in the clone, both NODE_ENV legs, stripped PATH (Node v24.14.1): lint 0, typecheck 0,
+  119 + 1 pre-existing skip / 0 fail (.mjs, 120) and 183 / 0 fail (TS). Measure `--label
+split`: one file, AGENTS.md 42 lines / 417 tokens for every agent. `helix init --yes` on a
+  scratch repo: exit 0. Split-side fixes committed in the clone (dcbbad4).
+- Force-pushed as the new origin/main (`25851ee..dcbbad4`); remote was re-added deliberately
+  for this one push. Verified afterwards by fetching origin/main: new tree live, no
+  server/public/routes dirs. The old `fix/audit-evidence-gated` remote branch was left alone.
+- Rejected: `git subtree split` (cannot express the interleaved layout); `filter-branch`
+  (discouraged); pushing without the grok-workspace preservation branch.
+- Not verified: site consuming the harness by any of the three routes; Grok workspace building
+  from its branch.
+
+## 2026-10-10 — F6 full matrix launched (free-tier opencode, background)
+
+- 60 cells: 4 tuning tasks (trace-bug, call-chain, cross-module, deep-bug) × 3 arms
+  (none, helix, helix-nosub) × 5 runs, `--fixture large`, 900s cap per run, no paid spend.
+  Held-out set excluded (default). Results land in `evals/results/` when done.
+- Caveat: the matrix launched from pre-split code whose helix arm still ships the graph-first
+  skill with Graphify prose (the skill-filter fix landed after launch; the runner had already
+  imported its modules). Token numbers carry that overhead equally in helix arms; the comparison
+  stays valid but the absolute helix cost is pessimistic vs the fixed pack.
