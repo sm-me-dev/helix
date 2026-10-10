@@ -17,9 +17,9 @@ const readDir = async (sub) => {
 };
 
 describe("large fixture tasks", () => {
-  it("has three tuning tasks with navigation setups", async () => {
+  it("has four tuning tasks with navigation setups", async () => {
     const { files, tasks } = await readDir("tasks-large");
-    assert.deepEqual(files, ["call-chain.yml", "cross-module.yml", "trace-bug.yml"]);
+    assert.deepEqual(files, ["call-chain.yml", "cross-module.yml", "deep-bug.yml", "trace-bug.yml"]);
     for (const t of tasks) {
       assert.ok(t.id && t.title && t.prompt && t.pass, `${t.file} needs id/title/prompt/pass`);
       assert.equal(t.fixture, "large", `${t.file} must target the large fixture`);
@@ -29,7 +29,7 @@ describe("large fixture tasks", () => {
       for (const k of ["seed", "module", "rule"]) {
         assert.equal(typeof t.setup?.[k], "number", `${t.file} setup.${k} must be numeric`);
       }
-      assert.match(t.pass, /service\.test\.ts/);
+      assert.match(t.pass, /test\.ts/);
     }
   });
 
