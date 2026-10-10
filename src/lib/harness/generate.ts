@@ -6,7 +6,7 @@ import { MAP_SOURCE, REPO_MAP_PROVIDERS } from "./repomap.ts";
 import { MCP_BY_ID } from "./mcps.ts";
 import { PLATFORM_BY_ID } from "./platforms.ts";
 import { SKILL_BY_ID } from "./skills.ts";
-import type { HarnessConfig, PackFile } from "./types";
+import type { HarnessConfig, PackFile, PlatformId } from "./types";
 import { dispatchRules } from "./workflow.ts";
 
 export type { PackFile } from "./types";
@@ -28,6 +28,14 @@ function requireKnownIds(config: HarnessConfig): void {
   }
 }
 
+const AGENT_FILE_PLATFORMS = new Set<PlatformId>([
+  "claude-code",
+  "codex",
+  "opencode",
+  "cursor",
+  "antigravity",
+]);
+
 function agentsMd(config: HarnessConfig): string {
   const crewRows = config.crew
     .map((id) => {
@@ -35,6 +43,19 @@ function agentsMd(config: HarnessConfig): string {
       return `| ${c.name} | ${c.when} | ${c.output.split(".")[0]}. |`;
     })
     .join("\n");
+
+  // Platforms that write agent files load each role's description themselves, so the
+  // table would only repeat it. Keep it where some selected platform has no agent files.
+  const crewSection =
+    config.platforms.length > 0 && config.platforms.every((p) => AGENT_FILE_PLATFORMS.has(p))
+      ? ""
+      : `## Crew
+
+| Role | When | Output |
+| --- | --- | --- |
+${crewRows}
+
+`;
 
   const mcpList = config.mcps.map((id) => MCP_BY_ID[id].name).join(", ");
 
@@ -51,14 +72,21 @@ function agentsMd(config: HarnessConfig): string {
   // Detected facts beat generic advice: exact commands, no re-detection.
   const repoFacts = config.stack
     ? `Repo facts, detected by \`helix init\` — do not re-detect, never invent flags:
-- stack: ${config.stack.language} · ${config.stack.packageManager}; test: \`${config.stack.testCommand ?? "none detected"}\`; lint: \`${config.stack.lintCommand ?? "none detected"}\`; format: \`${config.stack.formatCommand ?? "none detected"}\`.`
+- stack: ${config.stack.language} · ${config.stack.packageManager}${[
+        ["test", config.stack.testCommand],
+        ["lint", config.stack.lintCommand],
+        ["format", config.stack.formatCommand],
+      ]
+        .filter(([, cmd]) => cmd)
+        .map(([name, cmd]) => `; ${name}: \`${cmd}\``)
+        .join("")}.`
     : `Read package.json / Makefile / justfile for real scripts. Never invent flags.`;
 
   // Disclosure off means the old way: everything inlined in the always-on file.
   const inlined = config.progressiveDisclosure
     ? ""
     : `\n## Reference (inlined: disclosure off)\n\n${config.skills.map((id) => skillFile(id)).join("\n")}\n${config.crew
-        .map((id) => agentFile(id))
+        .map((id) => agentFile(id, config))
         .join("\n")}`;
 
   return `# Helix
@@ -79,13 +107,7 @@ ${dispatchRules().join("\n")}
 ${repoFacts}
 ${config.graphFirst ? `- Graph: query_graph ".." / get_neighbors NAME / shortest_path A B\n` : ""}- MCPs: ${mcpList || "(none)"}
 
-## Crew
-
-| Role | When | Output |
-| --- | --- | --- |
-${crewRows}
-
-## Budget
+${crewSection}## Budget
 
 - Subagent bodies load on run; no file over ~400 lines, cite ranges.
 - ${hooks}

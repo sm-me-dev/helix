@@ -1006,3 +1006,36 @@ cache tokens).
   12 warnings, `typecheck` 0, `npm test` 306 + 207 pass, 0 fail, under (a) PATH
   without yarn/pnpm/bun + NODE_ENV unset, (b) same PATH + NODE_ENV=production,
   (c) full PATH + NODE_ENV=production.
+
+## 2026-10-10 — F4: lean generated pack
+
+- Measured with `helix measure` (o200k_base via gpt-tokenizer, 2026-10-10) on a scratch
+  repo (`helix init --platform claude-code,codex`, package.json with only `test`):
+  AGENTS.md 472 -> 341 tokens (38 -> 29 lines); crew frontmatter 216 -> 172;
+  always-on 1.18k -> 1.01k (agents.md + skills 74 + mcp 420 estimate + crew). Counts are
+  deterministic (single run, no variance). MCP figure is the catalog estimate, unchanged.
+- Crew table removed from AGENTS.md when every selected platform writes agent files
+  (claude-code, codex, opencode, cursor, antigravity): they load each description
+  themselves (Claude Code: https://code.claude.com/docs/en/sub-agents.md, "Claude uses each
+  subagent's description to decide when to delegate"). Kept for the universal pack and for
+  platforms without agent files (copilot): the roles exist nowhere else there.
+- `none detected` placeholders dropped; only detected commands are printed.
+- Reproduced: with graphify absent the Claude Scout still listed four `mcp__graphify__*`
+  tools plus `Read`, so it had no search tool at all. Architect and Reviewer listed
+  `get_pr_impact`. Fix: `toolsFor()` names Graphify tools only when the graphify MCP is
+  configured; otherwise read-only roles get `Grep, Glob, Read`. Builder unchanged. Tool
+  names verified in sub-agents.md on 2026-10-10 (`tools` is an allowlist, `Grep`/`Glob`/`Read`
+  valid). Codex/Antigravity/OpenCode/Cursor files are untouched (they do not list these).
+- DISPROVED: "Haiku does not support MCP tool search" (shipped in `MCP_DEFERRAL` note).
+  https://code.claude.com/docs/en/agent-sdk/tool-search.md (fetched 2026-10-10) lists Claude
+  Sonnet 4.5, Haiku 4.5, Opus 4.5 and later as supported; upfront loading applies to earlier
+  models, non-first-party ANTHROPIC_BASE_URL and Azure-hosted Foundry. The note is corrected
+  and a test pins it. The doc is silent on whether subagents defer MCP tools, so the pack
+  counts subagent MCP schema as loaded (unverified, not shipped as fact).
+- Scout model: keep `haiku`. The reason to change it (Haiku cannot defer) is gone, and with
+  at most four Graphify tools the doc says loading upfront is typically faster below ~10
+  tools. No eval evidence either way; revisit only if F6 shows Scout cost matters.
+- AGENTS.md guard unchanged and passing: <= 40 lines, < 500 tokens.
+- Rejected: dropping the table for every platform (breaks copilot/universal readers);
+  giving Scout `Bash` to run `.helix/map.mjs` (widens a read-only role; Grep/Glob is enough).
+- Evidence: lint 0 errors/12 warnings, typecheck 0, `npm test` 306 + 212 pass (Node 24.14.1).

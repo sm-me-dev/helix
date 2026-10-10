@@ -24,13 +24,14 @@ const UNVERIFIED: Deferral = {
 export const MCP_DEFERRAL: Partial<Record<PlatformId, Deferral>> = {
   "claude-code": {
     status: "deferred",
-    verifiedAt: "2026-10-09",
+    verifiedAt: "2026-10-10",
     source: "https://code.claude.com/docs/en/agent-sdk/tool-search.md",
     note:
       "tool search: definitions withheld from context by default (ENABLE_TOOL_SEARCH unset = on; " +
       "auto = only above 10% of the window; false = always loaded); one extra search round-trip " +
-      "the first time a tool is discovered; Haiku models do not support it, so there the full " +
-      "schema is loaded",
+      "the first time a tool is discovered. Supported on Sonnet 4.5, Haiku 4.5, Opus 4.5 and later; " +
+      "loaded upfront on earlier models, a non-first-party ANTHROPIC_BASE_URL, or Azure-hosted Foundry. " +
+      "Whether a subagent defers its MCP tools is not documented there: count its schema as loaded",
   },
 };
 

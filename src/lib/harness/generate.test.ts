@@ -251,3 +251,76 @@ describe("skills earn their index entry", () => {
     }
   });
 });
+
+// F4 (2026-10-10): lean generated pack.
+describe("lean pack", () => {
+  const FULL = ["scout", "architect", "builder", "reviewer"] as const;
+  const cfg = (over: Partial<HarnessConfig>): HarnessConfig => ({
+    ...BASE,
+    crew: [...FULL],
+    mcps: ["context7"],
+    graphFirst: false,
+    ...over,
+  });
+  const body = (c: HarnessConfig, path: string) =>
+    generatePack(c).find((f) => f.path === path)?.body ?? "";
+
+  it("drops the crew table when every selected platform loads agent descriptions itself", () => {
+    for (const p of ["claude-code", "codex", "opencode", "cursor", "antigravity"] as const) {
+      assert.doesNotMatch(body(cfg({ platforms: [p] }), "AGENTS.md"), /## Crew/, p);
+    }
+    // Role names stay discoverable through the Dispatch rules.
+    assert.match(body(cfg({ platforms: ["claude-code"] }), "AGENTS.md"), /scout/);
+  });
+
+  it("keeps the crew table where some platform has no agent files", () => {
+    assert.match(body(cfg({ platforms: [] }), "AGENTS.md"), /## Crew/);
+    assert.match(body(cfg({ platforms: ["claude-code", "copilot"] }), "AGENTS.md"), /## Crew/);
+  });
+
+  it("never prints empty 'none detected' placeholders", () => {
+    const a = body(
+      cfg({
+        platforms: ["claude-code"],
+        stack: {
+          language: "javascript",
+          packageManager: "npm",
+          testCommand: "npm test",
+          lintCommand: null,
+          formatCommand: null,
+        },
+      }),
+      "AGENTS.md",
+    );
+    assert.doesNotMatch(a, /none detected/);
+    assert.match(a, /npm test/);
+  });
+
+  it("names Graphify tools in agent allow-lists only when the graphify MCP is configured", () => {
+    const off = body(cfg({ platforms: ["claude-code"] }), ".claude/agents/scout.md");
+    assert.doesNotMatch(off, /mcp__graphify__/);
+    assert.match(
+      off,
+      /^tools: .*\bGrep\b.*\bGlob\b/m,
+      "scout needs a search tool without Graphify",
+    );
+    const on = body(
+      cfg({ platforms: ["claude-code"], mcps: ["graphify"], graphFirst: true }),
+      ".claude/agents/scout.md",
+    );
+    assert.match(on, /mcp__graphify__query_graph/);
+    for (const id of ["architect", "reviewer"]) {
+      assert.doesNotMatch(
+        body(cfg({ platforms: ["claude-code"] }), `.claude/agents/${id}.md`),
+        /mcp__graphify__/,
+      );
+    }
+  });
+
+  it("keeps builder's tools unchanged", () => {
+    assert.match(
+      body(cfg({ platforms: ["claude-code"] }), ".claude/agents/builder.md"),
+      /^tools: Read, Edit, Write, Bash$/m,
+    );
+  });
+});

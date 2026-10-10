@@ -51,7 +51,11 @@ export const claudeAdapter: PlatformAdapter = {
   files(config: HarnessConfig) {
     const files = [{ path: "CLAUDE.md", language: "markdown", body: pointer("Claude Code") }];
     for (const cid of config.crew) {
-      files.push({ path: `.claude/agents/${cid}.md`, language: "markdown", body: agentFile(cid) });
+      files.push({
+        path: `.claude/agents/${cid}.md`,
+        language: "markdown",
+        body: agentFile(cid, config),
+      });
     }
     for (const sid of config.skills) {
       files.push({
