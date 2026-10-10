@@ -18,9 +18,22 @@ function gateFile(): string {
 }
 const GATE = gateFile();
 
+// Hermetic git: ignore the developer's global/system git config (commit signing, hooks,
+// global excludes, default branch). Both fixture setup and the gate itself shell out to git.
+// See hermetic.test.ts, which runs this file under a hostile global config.
+const GIT_HOME = mkdtempSync(join(tmpdir(), "helix-gate-home-"));
+const HERMETIC_ENV: NodeJS.ProcessEnv = {
+  ...process.env,
+  HOME: GIT_HOME,
+  XDG_CONFIG_HOME: GIT_HOME,
+  GIT_CONFIG_GLOBAL: join(GIT_HOME, "gitconfig"),
+  GIT_CONFIG_NOSYSTEM: "1",
+};
+
 function repo(files: Record<string, string>): string {
   const dir = mkdtempSync(join(tmpdir(), "helix-gate-repo-"));
-  const sh = (...a: string[]) => spawnSync("git", a, { cwd: dir, encoding: "utf8" });
+  const sh = (...a: string[]) =>
+    spawnSync("git", a, { cwd: dir, encoding: "utf8", env: HERMETIC_ENV });
   sh("init", "-q");
   sh("config", "user.email", "t@example.com");
   sh("config", "user.name", "t");
@@ -34,7 +47,11 @@ function repo(files: Record<string, string>): string {
 }
 
 function gate(dir: string, ...args: string[]) {
-  const r = spawnSync(process.execPath, [GATE, ...args], { cwd: dir, encoding: "utf8" });
+  const r = spawnSync(process.execPath, [GATE, ...args], {
+    cwd: dir,
+    encoding: "utf8",
+    env: HERMETIC_ENV,
+  });
   return { code: r.status, out: String(r.stdout), err: String(r.stderr) };
 }
 
