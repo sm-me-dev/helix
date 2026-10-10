@@ -4,7 +4,12 @@ import { readFileSync } from "node:fs";
 import { ADAPTER_BY_ID } from "./adapters/index.ts";
 import { CAPABILITIES } from "./adapters/types.ts";
 import { generatePack } from "./generate.ts";
-import { DEFAULT_PLATFORMS, PLATFORM_BY_ID, PLATFORMS, platformMatrixMarkdown } from "./platforms.ts";
+import {
+  DEFAULT_PLATFORMS,
+  PLATFORM_BY_ID,
+  PLATFORMS,
+  platformMatrixMarkdown,
+} from "./platforms.ts";
 import type { HarnessConfig, PlatformId } from "./types";
 
 const cfg = (platform: PlatformId): HarnessConfig => ({
