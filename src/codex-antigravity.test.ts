@@ -5,13 +5,21 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { generatePack } from "./generate.ts";
 import { antigravityMcpJson, MCPS } from "./mcps.ts";
 import { ANTIGRAVITY_TOOLS } from "./adapters/antigravity.ts";
 import type { HarnessConfig, PlatformId } from "./types";
+
+// Hermetic PATH entry: only `node`. dirname(process.execPath) also exposes global
+// npm installs (codex, ...) that live beside node under nvm/volta/fnm.
+const nodeOnlyBin = (): string => {
+  const bin = mkdtempSync(join(tmpdir(), "helix-nodebin-"));
+  symlinkSync(process.execPath, join(bin, "node"));
+  return bin;
+};
 
 const cfg = (platforms: PlatformId[], hooksEnabled = true): HarnessConfig => ({
   crew: ["scout", "architect", "builder", "reviewer"],
@@ -75,7 +83,7 @@ describe("codex stop hook behavior", () => {
   const script = pack(["codex"]).get(".helix/hooks/codex-stop.mjs") ?? "";
   const env = (home: string) => {
     const e: Record<string, string> = {
-      PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
+      PATH: `${nodeOnlyBin()}:/usr/bin:/bin`,
       HOME: home,
       GIT_AUTHOR_NAME: "t",
       GIT_AUTHOR_EMAIL: "t@t",

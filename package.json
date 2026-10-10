@@ -22,7 +22,7 @@
     "preview:stop": "node scripts/preview.mjs stop",
     "typecheck": "tsc --noEmit",
     "check:auth": "node scripts/check-auth-invariant.mjs",
-    "test": "node --test 'scripts/**/*.test.mjs' 'cli/**/*.test.mjs' 'evals/**/*.test.mjs' && node --experimental-strip-types --test src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/sign-in-gate.test.ts src/lib/harness/tokens.test.ts src/lib/harness/generate.test.ts src/lib/harness/simulation.test.ts src/lib/harness/hooks.test.ts src/lib/harness/gate.test.ts src/lib/harness/repomap.test.ts src/lib/harness/platforms.test.ts src/lib/harness/workflow.test.ts src/lib/harness/mcp-cost.test.ts src/lib/harness/cache-layout.test.ts src/lib/harness/measure.test.ts src/lib/harness/tool-surface.test.ts src/lib/harness/learn.test.ts src/lib/store-migration.test.ts",
+    "test": "node --test 'scripts/**/*.test.mjs' 'cli/**/*.test.mjs' 'evals/**/*.test.mjs' && node --experimental-strip-types --test src/lib/app-data/app-data.test.ts src/lib/app-data/readiness-schedule.test.ts src/lib/auth/gate-identity.test.ts src/lib/auth/sign-in-gate.test.ts src/lib/harness/tokens.test.ts src/lib/harness/generate.test.ts src/lib/harness/simulation.test.ts src/lib/harness/hooks.test.ts src/lib/harness/codex-antigravity.test.ts src/lib/harness/gate.test.ts src/lib/harness/repomap.test.ts src/lib/harness/platforms.test.ts src/lib/harness/workflow.test.ts src/lib/harness/mcp-cost.test.ts src/lib/harness/cache-layout.test.ts src/lib/harness/measure.test.ts src/lib/harness/tool-surface.test.ts src/lib/harness/learn.test.ts src/lib/store-migration.test.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "prepare": "husky"
