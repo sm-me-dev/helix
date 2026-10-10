@@ -2,7 +2,9 @@
 
 Head-to-head task runs: each task runs in a clean copy of `evals/fixture`
 with and without the Helix pack (`--arms none,helix`), graded by the task's
-`pass` command plus canary/ask/diff checks. Only committed JSON reports under
+`pass` command plus canary/ask/diff checks. A third arm, `helix-nosub`, ships
+the pack without model-subagent definitions, so the with/without-subagents
+comparison measures only the subagents. Only committed JSON reports under
 `evals/results/` may appear in headline numbers — never the /run simulation.
 
 ## Cost warning
