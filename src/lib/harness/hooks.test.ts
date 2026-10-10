@@ -17,9 +17,14 @@ function runHook(
     const file = join(dir, `${name}.mjs`);
     await writeFile(file, HOOK_SOURCES[name]);
     return new Promise((resolve, reject) => {
-      const child = execFile("node", [file], { cwd, timeout: 30000 }, (err, stdout, stderr) => {
-        resolve({ code: (err as { code?: number } | null)?.code ?? 0, stdout, stderr });
-      });
+      const child = execFile(
+        process.execPath,
+        [file],
+        { cwd, timeout: 30000 },
+        (err, stdout, stderr) => {
+          resolve({ code: (err as { code?: number } | null)?.code ?? 0, stdout, stderr });
+        },
+      );
       child.stdin?.write(stdinJson);
       child.stdin?.end();
       child.on("error", reject);
