@@ -949,3 +949,30 @@ cache tokens).
 - CLI writer validates every pack path (`assertSafePackPath`: relative only,
   no `..`, no absolute) and skips unsafe entries; covered in `cli/lib.test.mjs`.
 - No new dependencies. `npm run lint`, `typecheck`, `npm test` (168 pass) green.
+
+## 2026-10-10 — Workflow policy single source of truth + lockfile sync
+
+- `src/lib/harness/workflow.ts` is now the single source of truth for
+  workflow policy: `TIER_POLICY` (tier table), `SECURITY_POLICY`
+  (security-sensitive scope, min tier `standard`, reviewer + full chain),
+  `HANDOFF_MAX_LINES` (12). `selectWorkflow` (executable decision),
+  `simulation.pickTier` (demo, via shared `classifyTier`), and the Dispatch
+  rules in generated AGENTS.md (via `dispatchRules`) all derive from it;
+  tests assert the three agree so they cannot drift.
+- Security invariant enforced at runtime: a security-sensitive change is
+  raised to at least `standard` with reviewer + full chain whatever its file
+  count; malformed facts and ambiguous asks block fail-closed; only a literal
+  `isQuestion: true` is informational (a security question answers only and
+  must reclassify before editing). `independentReview` is a requirement on
+  the host agent, stated as such — prompt text cannot prove a separate
+  reviewer ran; only `helix gate` is mechanical evidence.
+- Handoff counting fixed against its blind spot: the limit applies to the
+  serialized card (`serializeHandoff` is the single counting source,
+  newline-normalized incl. CRLF/CR/Unicode separators), not to the input
+  fields — short fields plus many files no longer pass.
+- `package-lock.json`: synced `eslint-plugin-react-hooks` 7.1.1 → 5.2.0 to
+  match the declared `^5.2.0` range in `package.json` (the committed lock had
+  drifted outside the range; `npm ls` confirms 5.2.0). No dependency
+  added/removed by intent.
+- Evidence: `npm run lint` 0, `typecheck` 0, `npm test` 193 pass / 0 fail,
+  `helix gate` PASS (secrets, lint, typecheck, test) on the changed tree.
