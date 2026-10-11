@@ -5,8 +5,8 @@ first context (Graphify when present, a built-in outline otherwise), skills that
 load on demand, and one portable gate command. Full support exists only where the
 vendor docs were checked: see the platform matrix below. Everywhere else the pack
 is AGENTS.md plus at most a pointer file.
-The product is the generated file pack; this repo's website is the
-configurator that builds it.
+The product is the generated file pack; this repo holds the generator, the CLI
+and the evals that test whether the pack helps.
 
 ## 60-second install
 
@@ -47,11 +47,22 @@ twice). `claude plugin details helix` reports its projected token cost;
 - **Measured, not invented**: token counts use o200k_base BPE (an
   approximation, labeled everywhere); MCP schemas come from live `tools/list`
   captures (`scripts/measure-mcp.mjs`) or are flagged as estimates; practice
-  statistics carry confidence badges on `/playbook`.
+  statistics carry a confidence label and sources in `src/practices.ts`.
 - **Not verified**: see the matrix. Unverified cells emit nothing and claim
   nothing; "all agents" is not a claim this project makes.
-- **Illustrative, not measured**: the `/run` timeline and the sample graph.
-  Real head-to-head numbers live on `/evals` once a report is committed.
+- **Illustrative, not measured**: `src/simulation.ts` is a scripted demo of the
+  tier routing, not a measurement. Real head-to-head numbers are the committed
+  reports in `evals/results/`.
+
+## Evidence so far (read this before trusting any saving)
+
+Nothing yet shows a significant win. Paired runs on a generated 356-file fixture
+(opencode free tier, n=5 per cell, 2026-10-09, script `evals/run.mjs`, results in
+`evals/results/2026-10-09T11-24-31-opencode.md`): pass rate tied at 30/30, uncached
+tokens -8.1% for the Helix arm overall but inside the noise in every cell, total
+tokens +2.0%. Model subagents never spawned in either arm, so the role split is
+untested there. Full method, caveats and the open follow-up are in
+`docs/DECISIONS.md`.
 
 ## Platform matrix
 
@@ -61,14 +72,14 @@ means vendor docs were checked on the date shown and Helix writes real files;
 yet; "unverified" means neither. Gemini CLI note: Google's own pages confirm it
 stopped serving consumer tiers on 2026-06-18 in favor of Antigravity CLI
 (discussion 28017 + developers deprecation page, both checked 2026-10-10);
-`gemini` stays in the default platform list pending an owner decision, and its
-pack paths stay unverified.
+`gemini` is no longer in the default platform list (explicit `--platform gemini`
+still works) and its pack paths stay unverified.
 
 <!-- matrix:start -->
 
 | Platform           | verified   | instructions | mcp        | skills     | subagents  | hooks                  | plugin     | structured-output | session-continuation | sandboxing | lsp        |
 | ------------------ | ---------- | ------------ | ---------- | ---------- | ---------- | ---------------------- | ---------- | ----------------- | -------------------- | ---------- | ---------- |
-| Claude Code        | 2026-10-10 | emitted      | emitted    | emitted    | emitted    | emitted                | emitted    | unverified        | unverified           | unverified | unverified |
+| Claude Code        | 2026-10-11 | emitted      | emitted    | emitted    | emitted    | emitted                | emitted    | unverified        | unverified           | unverified | unverified |
 | Cursor             | 2026-10-10 | emitted      | emitted    | emitted    | emitted    | unverified             | unverified | unverified        | unverified           | unverified | unverified |
 | Codex              | 2026-10-09 | emitted      | emitted    | emitted    | emitted    | emitted                | unverified | unverified        | unverified           | unverified | unverified |
 | Gemini CLI         | no         | unverified   | unverified | unverified | unverified | unverified             | unverified | unverified        | unverified           | unverified | unverified |
@@ -121,12 +132,6 @@ reference: `docs/CLI.md`; architecture: `docs/ARCHITECTURE.md`.
 
 Gates for every commit: `npm run lint && npm run typecheck && npm test`
 (Node 22 to match CI). Contributing: `CONTRIBUTING.md`.
-
-## Routes (configurator)
-
-`/` pitch · `/crew` roles · `/stack` skill/MCP toggles · `/playbook`
-doctrine flags · `/run` **illustrative** timeline · `/evals` committed
-reports only · `/export` live pack preview, copy, download.
 
 ## License
 
