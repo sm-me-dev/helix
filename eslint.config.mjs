@@ -6,7 +6,16 @@ import tseslint from "typescript-eslint";
 /** Flat ESLint config for the Helix harness repo (CLI + pack generator + evals; no site, no React). */
 export default tseslint.config(
   {
-    ignores: ["node_modules/**"],
+    // Generated or machine-local trees: linting them buries real findings (a stray
+    // .vercel/output once produced 4,467 errors).
+    ignores: [
+      "node_modules/**",
+      ".vercel/**",
+      ".tanstack/**",
+      ".serena/**",
+      "graphify-out/**",
+      "evals/results/**",
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
