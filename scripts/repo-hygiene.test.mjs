@@ -1,6 +1,15 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -34,5 +43,45 @@ describe("repo hygiene (Phase 0 #9)", () => {
         );
       }
     }
+  });
+
+  // The old hook ended in `|| echo "... skipped"`, so a real lint-staged failure also
+  // printed the message and exited 0: the pre-commit gate could never block a commit.
+  describe("pre-commit hook", () => {
+    const hook = join(root, ".husky", "pre-commit");
+    const runHook = (binBody) => {
+      const dir = mkdtempSync(join(tmpdir(), "helix-precommit-"));
+      if (binBody !== null) {
+        const bin = join(dir, "node_modules", ".bin");
+        mkdirSync(bin, { recursive: true });
+        writeFileSync(join(bin, "lint-staged"), binBody);
+        chmodSync(join(bin, "lint-staged"), 0o755);
+      }
+      return spawnSync("sh", [hook], { cwd: dir, encoding: "utf8" });
+    };
+
+    it("blocks the commit when lint-staged fails", () => {
+      const r = runHook("#!/bin/sh\necho lint errors >&2\nexit 1\n");
+      assert.notEqual(r.status, 0, "a failing lint-staged must fail the hook");
+    });
+
+    it("passes when lint-staged passes", () => {
+      assert.equal(runHook("#!/bin/sh\nexit 0\n").status, 0);
+    });
+
+    it("skips with a notice only when lint-staged is not installed", () => {
+      const r = runHook(null);
+      assert.equal(r.status, 0);
+      assert.match(r.stdout, /not installed/);
+    });
+  });
+
+  it("CI runs ShellCheck only if the scanned directory has shell scripts", () => {
+    const ci = readFileSync(join(root, ".github", "workflows", "ci.yml"), "utf8");
+    if (!/action-shellcheck/.test(ci)) return;
+    const m = ci.match(/scandir:\s*(\S+)/);
+    const dir = join(root, m ? m[1] : ".");
+    const hasShell = readdirSync(dir).some((f) => /\.(sh|bash)$/.test(f));
+    assert.ok(hasShell, `ci.yml runs ShellCheck on ${dir} but it contains no shell scripts`);
   });
 });

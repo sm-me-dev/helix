@@ -4,6 +4,7 @@ import type { HarnessConfig } from "../types";
 import {
   agentFile,
   formatHintHook,
+  gateOnlyHook,
   hooksJson,
   permissionsOnlyJson,
   pointer,
@@ -23,7 +24,7 @@ function hookFiles(): { path: string; language: string; body: string }[] {
 
 export const claudeAdapter: PlatformAdapter = {
   id: "claude-code",
-  verifiedAt: "2026-10-10",
+  verifiedAt: "2026-10-11",
   sources: [
     {
       title: "Claude Code plugin manifest",
@@ -42,6 +43,7 @@ export const claudeAdapter: PlatformAdapter = {
     { title: "Claude Code skills", url: "https://code.claude.com/docs/en/skills" },
     { title: "Claude Code hooks", url: "https://code.claude.com/docs/en/hooks" },
     { title: "Claude Code MCP quickstart", url: "https://code.claude.com/docs/en/mcp-quickstart" },
+    { title: "Claude Code permissions", url: "https://code.claude.com/docs/en/permissions" },
   ],
   supportsSubagents: true,
   supportsSkills: true,
@@ -64,7 +66,9 @@ export const claudeAdapter: PlatformAdapter = {
     "main session is the orchestrator. Plugin (`helix plugin`, verified 2026-10-10): agents, " +
     "skills, hooks and .mcp.json ship in the plugin; `helix init --claude-plugin` keeps only " +
     "CLAUDE.md, AGENTS.md, the gate and the secret denies, because a plugin cannot carry " +
-    "CLAUDE.md or permissions.",
+    "CLAUDE.md or permissions. Agent frontmatter (verified 2026-10-11): maxTurns caps every " +
+    "role; the reviewer carries Bash only behind a gate-only PreToolUse hook; omitClaudeMd " +
+    "ships only with leanSubagents (off by default, needs v2.1.271+).",
   files(config: HarnessConfig) {
     const files = [{ path: "CLAUDE.md", language: "markdown", body: pointer("Claude Code") }];
     if (config.claudePlugin) {
@@ -92,7 +96,17 @@ export const claudeAdapter: PlatformAdapter = {
     }
     files.push({ path: ".claude/settings.json", language: "json", body: hooksJson(config) });
     files.push({ path: ".mcp.json", language: "json", body: portableMcpJson(config.mcps) });
-    if (config.hooksEnabled) files.push(...hookFiles());
+    if (config.hooksEnabled) {
+      files.push(...hookFiles());
+      // The reviewer's Bash is limited to the gate by this hook; ship it with the reviewer.
+      if (config.crew.includes("reviewer")) {
+        files.push({
+          path: ".helix/hooks/gate-only.mjs",
+          language: "javascript",
+          body: gateOnlyHook(),
+        });
+      }
+    }
     return files;
   },
 };

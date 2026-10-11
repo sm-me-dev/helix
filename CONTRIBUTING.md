@@ -3,8 +3,7 @@
 ## Prerequisites
 
 - **Node 22** (matches CI; 24+ also works): `node --version`
-- Git. Optional: `uv tool install graphifyy` (repo-map backend),
-  Playwright Chromium (`npx playwright install chromium`) for browser tests.
+- Git. Optional: `uv tool install graphifyy` (repo-map backend).
 
 ## Setup
 
@@ -39,7 +38,7 @@ append-only.
 ## Adding or updating a verified platform adapter
 
 1. Check the vendor's current docs (Context7 + web fetch).
-2. Add the adapter under `src/lib/harness/adapters/` emitting only at paths
+2. Add the adapter under `src/adapters/` emitting only at paths
    the platform reads; add the catalog entry with `source` (URL) and
    `verifiedAt` (today's date).
 3. Add a golden-file test that fails if the fact is wrong (emitted paths,

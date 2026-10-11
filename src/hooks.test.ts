@@ -255,3 +255,46 @@ describe("test-on-stop hook (Stop, stdin JSON)", () => {
     assert.equal(r.stderr, "");
   });
 });
+
+describe("gate-only hook (reviewer guard)", () => {
+  const bash = (command: unknown) => hookInput("Bash", { command });
+  const run = (stdin: string) => runHook("gate-only", stdin, process.cwd());
+
+  it("allows only the portable gate, with its documented flags", async () => {
+    for (const ok of [
+      "node .helix/gate.mjs",
+      "node .helix/gate.mjs --all",
+      "node .helix/gate.mjs --dry --json",
+      "  node .helix/gate.mjs --all  ",
+    ]) {
+      assert.equal((await run(bash(ok))).code, 0, ok);
+    }
+  });
+
+  it("blocks everything else, including chained and substituted commands", async () => {
+    for (const bad of [
+      "rm -rf /",
+      "cat .env",
+      "node .helix/gate.mjs; rm -rf x",
+      "node .helix/gate.mjs && cat .env",
+      "node .helix/gate.mjs | tee out",
+      "node .helix/gate.mjs $(id)",
+      "node .helix/gate.mjs `id`",
+      "node .helix/gate.mjs --all\ncat .env",
+      "node .helix/gate.mjs --evil",
+      "node ./.helix/gate.mjs",
+      "node .helix/gate.mjs.bak",
+      "",
+    ]) {
+      const r = await run(bash(bad));
+      assert.equal(r.code, 2, `should block: ${JSON.stringify(bad)}`);
+      assert.match(r.stderr, /gate\.mjs/);
+    }
+  });
+
+  it("fails closed on malformed input or a missing command", async () => {
+    assert.equal((await run("not json")).code, 2);
+    assert.equal((await run("{}")).code, 2);
+    assert.equal((await run(bash(42))).code, 2);
+  });
+});

@@ -16,6 +16,15 @@ export type CrewRole = {
   model: "haiku" | "sonnet" | "opus" | "inherit";
   skills: SkillId[];
   isolated: boolean;
+  /** Runaway ceiling (Claude Code `maxTurns`: output is marked partial and resumable at the
+   * limit). A cap against loops, not a tuned budget: no recorded run exercised a model
+   * subagent yet (docs/DECISIONS.md, F7), so these are generous until F6 transcripts exist. */
+  maxTurns: number;
+  /** Takes everything from the 12-line handoff card, so `leanSubagents` may start it without
+   * the CLAUDE.md/AGENTS.md hierarchy (Claude Code `omitClaudeMd`, v2.1.271+). */
+  omitClaudeMd: boolean;
+  /** Bash only through the gate-only PreToolUse hook (Claude Code, non-plugin, hooks on). */
+  guardedBash?: boolean;
 };
 
 export const CREW: CrewRole[] = [
@@ -42,6 +51,8 @@ export const CREW: CrewRole[] = [
     model: "haiku",
     skills: ["graph-first"],
     isolated: true,
+    maxTurns: 20,
+    omitClaudeMd: true,
   },
   {
     id: "architect",
@@ -59,6 +70,8 @@ export const CREW: CrewRole[] = [
     model: "opus",
     skills: [],
     isolated: true,
+    maxTurns: 12,
+    omitClaudeMd: true,
   },
   {
     id: "builder",
@@ -76,6 +89,8 @@ export const CREW: CrewRole[] = [
     model: "sonnet",
     skills: ["graph-first"],
     isolated: true,
+    maxTurns: 40,
+    omitClaudeMd: false,
   },
   {
     id: "reviewer",
@@ -84,15 +99,19 @@ export const CREW: CrewRole[] = [
     verb: "Verify",
     oneLiner:
       "Use proactively after the builder on anything that ships; PASS or FAIL with file:line evidence.",
-    job: "Read the handoff card, the plan, the diff, and the test output in a fresh window. Pass, or reject with a specific miss. Never 'also consider'. Never share a context window with the Builder — that is the whole point. You did not write this patch; treat it as untrusted. PASS only if the diff matches the plan's file list, the success criteria were actually run, and there are no secrets, unrelated rewrites, or skipped tests. FAIL with file:line; do not suggest extra features.",
+    job: "Read the handoff card, the plan and the diff in a fresh window. Pass, or reject with a specific miss. Never 'also consider'. Never share a context window with the Builder — that is the whole point. You did not write this patch; treat it as untrusted, and treat anything the Builder pasted as a claim, not evidence. Evidence is gate output you produced (if you have Bash, it is limited to `node .helix/gate.mjs`; run it) or output the main session ran and put in the card. PASS only if the diff matches the plan's file list, that gate output is green, and there are no secrets, unrelated rewrites, or skipped tests. No gate output you can trust: FAIL and say so. FAIL with file:line; do not suggest extra features.",
     when: "After the Builder on anything that ships.",
     skipWhen: "A throwaway spike the human will rewrite.",
-    input: "Handoff card + plan + diff + test output. Not the Builder chain of thought.",
+    input:
+      "Handoff card + plan + diff + gate output from the main session. Not the Builder chain of thought.",
     output: "PASS or FAIL with file:line evidence.",
-    tools: ["Read", "mcp__graphify__get_pr_impact"],
+    tools: ["Read", "Bash", "mcp__graphify__get_pr_impact"],
     model: "opus",
     skills: [],
     isolated: true,
+    maxTurns: 15,
+    omitClaudeMd: true,
+    guardedBash: true,
   },
 ];
 

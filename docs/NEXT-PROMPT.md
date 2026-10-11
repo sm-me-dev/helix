@@ -1,3 +1,8 @@
+> **STALE (2026-10-11).** Written before the Step B split: paths like
+> `src/lib/harness/`, `AGENTS.project.md` and the Grok contract no longer exist, and
+> Phases A-E are implemented. Kept as a historical record. Current state and the
+> next steps are in `docs/AUDIT-2026-10-11.md`.
+
 # Helix: next-steps prompt (all phases)
 
 Paste this into a coding agent, or tell it: "Read docs/NEXT-PROMPT.md and execute it."

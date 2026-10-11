@@ -263,4 +263,16 @@ describe("claude-code plugin mode for helix init (claudePlugin: true)", () => {
     assert.ok(p.includes(".mcp.json"));
     assert.ok(p.includes(".helix/hooks/test-on-stop.mjs"));
   });
+
+  // Plugin agents ignore frontmatter `hooks` (sub-agents doc, verified 2026-10-11), so the
+  // reviewer's Bash guard cannot exist there: the plugin reviewer must not get Bash at all.
+  it("gives plugin agents maxTurns but no Bash-for-reviewer and no frontmatter hooks", () => {
+    const files = byPath(pluginPack(CFG));
+    for (const id of ["scout", "architect", "builder", "reviewer"]) {
+      assert.match(files[`${ROOT}/agents/${id}.md`], /^maxTurns: \d+$/m, id);
+      assert.doesNotMatch(files[`${ROOT}/agents/${id}.md`], /^hooks:/m, id);
+    }
+    assert.doesNotMatch(files[`${ROOT}/agents/reviewer.md`], /^tools: .*\bBash\b/m);
+    assert.ok(!Object.keys(files).some((p) => p.endsWith("gate-only.mjs")));
+  });
 });

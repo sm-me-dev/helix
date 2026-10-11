@@ -17,7 +17,7 @@ import { CREW_BY_ID } from "../crew.ts";
 import { antigravityMcpJson } from "../mcps.ts";
 import { SKILL_BY_ID } from "../skills.ts";
 import type { HarnessConfig, PackFile } from "../types";
-import { agentBody, skillFile } from "./parts.ts";
+import { agentBody, describeRole, skillFile } from "./parts.ts";
 import type { PlatformAdapter } from "./types.ts";
 
 /** Tool names documented on https://antigravity.google/docs/hooks (Supported tools). */
@@ -85,7 +85,7 @@ function agentMd(id: HarnessConfig["crew"][number], config: HarnessConfig): stri
   const lines = [
     "---",
     `name: ${c.id}`,
-    `description: ${c.oneLiner}`,
+    `description: ${describeRole(id, config)}`,
     "subagent: true",
     "mainAgent: false",
     `model: ${modelFor(id)}`,

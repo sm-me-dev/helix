@@ -47,7 +47,8 @@ function agentsMd(config: HarnessConfig): string {
   // Platforms that write agent files load each role's description themselves, so the
   // table would only repeat it. Keep it where some selected platform has no agent files.
   const crewSection =
-    config.platforms.length > 0 && config.platforms.every((p) => AGENT_FILE_PLATFORMS.has(p))
+    config.crew.length === 0 ||
+    (config.platforms.length > 0 && config.platforms.every((p) => AGENT_FILE_PLATFORMS.has(p)))
       ? ""
       : `## Crew
 
@@ -61,9 +62,12 @@ ${crewRows}
 
   const graph = REPO_MAP_PROVIDERS[config.graphFirst ? "graphify" : "outline"].instruction;
 
-  const fanout = config.defaultSingleAgent
-    ? `Default to one agent when local, files in context, not security-sensitive.`
-    : `Dispatch the matching crew role for every non-trivial task.`;
+  const fanout =
+    config.crew.length === 0
+      ? `Work in the main session; no subagents are installed.`
+      : config.defaultSingleAgent
+        ? `Default to one agent when local, files in context, not security-sensitive.`
+        : `Dispatch the matching crew role for every non-trivial task.`;
 
   const hooks = config.hooksEnabled
     ? `Hooks own format, lint, and secret denies. Spend no model tokens on them.`
@@ -92,7 +96,7 @@ ${crewRows}
   return `# Helix
 ## Dispatch (you are the orchestrator; no dispatcher subagent)
 
-${dispatchRules().join("\n")}
+${dispatchRules(config.crew).join("\n")}
 - Two product readings: ask.
 
 ## How to work
@@ -159,6 +163,49 @@ Fan-out costs ~15× tokens when the work is coupled. Helix fans out when the Sco
 `;
 }
 
+/** Pinned like this repo's own CI (a floating tag fails scripts/repo-hygiene.test.mjs here and
+ * is a supply-chain hole anywhere). Dependabot can keep them fresh in the target repo. */
+const ACTION_CHECKOUT = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4";
+const ACTION_SETUP_NODE = "actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4";
+const CI_INSTALL: Record<string, string> = {
+  npm: "npm ci",
+  pnpm: "corepack enable && pnpm install --frozen-lockfile",
+  yarn: "corepack enable && yarn install --immutable",
+};
+
+/** The agent-agnostic backstop: only Claude Code and Codex enforce the gate with a Stop hook,
+ * so every other agent's work is checked by the same command on push. Returns null where it
+ * cannot install the repo's dependencies (non-Node stacks, bun): no workflow beats a broken one. */
+function ciWorkflow(config: HarnessConfig): PackFile | null {
+  if (config.ci !== "github" || !config.stack) return null;
+  const lang = config.stack.language;
+  const install = CI_INSTALL[config.stack.packageManager];
+  if ((lang !== "javascript" && lang !== "typescript") || !install) return null;
+  const body = `name: Helix gate
+
+# Runs the same command every Helix agent runs before it finishes.
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ${ACTION_CHECKOUT}
+      - uses: ${ACTION_SETUP_NODE}
+        with:
+          node-version: 22
+      - run: ${install}
+      - run: node .helix/gate.mjs --all
+`;
+  return { path: ".github/workflows/helix-gate.yml", language: "yaml", body };
+}
+
 export function generatePack(config: HarnessConfig): PackFile[] {
   requireKnownIds(config);
   // A skill that names tools the pack does not configure actively misleads, so
@@ -188,6 +235,9 @@ export function generatePack(config: HarnessConfig): PackFile[] {
       body: JSON.stringify(pins, null, 2) + "\n",
     });
   }
+
+  const ci = ciWorkflow(cfg);
+  if (ci) files.push(ci);
 
   const seen = new Set<string>(files.map((f) => f.path));
   // Each adapter emits only at the location its platform reads; the seen-set
