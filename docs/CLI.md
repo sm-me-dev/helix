@@ -83,7 +83,7 @@ as skipped, never invented. `--limit` needs a positive integer (else exit
 ## `helix export --platform <id>`
 
 Print the pack as JSON (`{ files: [{ path, language, body }] }`) for scripted
-use. Uses the same `generatePack` as `init` and the web configurator: for one
+use. Uses the same `generatePack` as `init`: for one
 platform the output is deterministic (byte-identical across runs). Missing or
 unknown `--platform` exits `2`.
 

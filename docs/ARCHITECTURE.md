@@ -1,14 +1,12 @@
 # Helix architecture
 
-The product is the **generated file pack** (`AGENTS.md` + per-platform files
-
-- `.helix/`). The configurator website and the CLI are two thin front ends
-  over one generator.
+The product is the **generated file pack** (`AGENTS.md` + per-platform files +
+`.helix/`). The CLI is a thin front end over one pure generator.
 
 ```text
 catalogs ──► generatePack ──► pack files ──► repo root
 (crew/skills/   (pure: config               CLI init · export ·
- mcps/hooks/     in, files out)             web /export
+ mcps/hooks/     in, files out)             plugin
  platforms/
  practices)
      ▲                  │
@@ -44,19 +42,18 @@ vendor docs      gate.mjs · hooks · map
   in `cli/lib.ts` (detection, doctor, measure, merge, export). Always runs the
   bundled gate source, never a repo-supplied script. Covered by `cli/*.test.mjs`
   end-to-end in scratch dirs.
-- **Web configurator** (`src/routes/`): `/` pitch, `/crew` roles, `/stack`
-  skills/MCP/LSP toggles, `/playbook` doctrine flags, `/run` **illustrative**
-  timeline, `/evals` committed reports only, `/export` live pack preview. The
-  store (`src/lib/store.ts`) builds a `HarnessConfig`; `/export` calls the
-  same `generatePack` as the CLI — parity is regression-tested.
+- **Website**: gone from this repo. The old website lives on the
+  `grok-workspace` branch (tag `pre-split` marks the last shared commit). Any
+  future front end consumes `generatePack` as a library.
 - **Hooks & gate**: shipped as `.helix/` scripts. Hooks own format/lint/secret
   denies (no model tokens); the Stop hook re-runs the repo suite. The gate is
   deterministic: secret scan → lint → typecheck → affected tests, exit
   0/1/2. Secret denies cover editor reads, not subprocess file access — the OS
   sandbox is the only enforcement there.
 - **Tokens & evals**: `measure`/`report` describe real counts or labeled
-  estimates; `/run` simulation is illustrative. Real agent comparisons live in
-  `evals/` (opt-in, never CI) and render on `/evals` only from committed JSON.
+  estimates; `src/simulation.ts` is an illustrative demo. Real agent comparisons
+  live in `evals/` (opt-in, never CI); only committed JSON under `evals/results/`
+  may back a headline number.
 
 ## Extension points
 
@@ -64,7 +61,7 @@ vendor docs      gate.mjs · hooks · map
   adapter + catalog entry with `source`/`verifiedAt`, add golden-file tests
   for emitted paths, let the README matrix regenerate (`npm test` fails on
   drift), record in `docs/DECISIONS.md`.
-- **New skill / MCP / role**: add the catalog entry, wire the toggle through
-  the store and both front ends, keep token math measured.
+- **New skill / MCP / role**: add the catalog entry, wire it through
+  `generate.ts` and the CLI defaults, keep token math measured.
 - **New doctrine flag**: add to `practices.ts` with a confidence badge and
-  source; surface on `/playbook`, never as an unverified claim.
+  source; never as an unverified claim.
