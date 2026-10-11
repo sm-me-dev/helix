@@ -264,9 +264,36 @@ try {
 }
 `;
 
+export const GATE_ONLY_HOOK = `#!/usr/bin/env node
+// Helix PreToolUse (matcher Bash), scoped to the reviewer subagent through its frontmatter:
+// the only command it may run is the portable gate, so it can verify without being able to
+// edit, read secrets or reach the network. Fail CLOSED (exit 2, reason on stderr — the
+// documented block channel): unparseable input and every other command are refused.
+// The pattern is anchored and has no shell metacharacters, so chaining and substitution
+// cannot ride along. Verified 2026-10-11 against
+// https://code.claude.com/docs/en/sub-agents (frontmatter hooks).
+const ALLOWED = /^node \\.helix\\/gate\\.mjs(?: --(?:all|dry|json))*$/;
+function refuse(why) {
+  process.stderr.write("[helix] " + why + " Allowed: node .helix/gate.mjs [--all] [--dry] [--json]\\n");
+  process.exit(2);
+}
+try {
+  const chunks = [];
+  for await (const c of process.stdin) chunks.push(c);
+  const input = JSON.parse(chunks.join("") || "{}");
+  const cmd = input && input.tool_input && input.tool_input.command;
+  if (typeof cmd !== "string") refuse("reviewer guard: no command to check.");
+  if (!ALLOWED.test(cmd.trim())) refuse("reviewer may only run the gate.");
+  process.exit(0);
+} catch (e) {
+  refuse("reviewer guard could not read the tool call.");
+}
+`;
+
 export const HOOK_SOURCES = {
   "prefer-graph": PREFER_GRAPH_HOOK,
   "format-lint": FORMAT_LINT_HOOK,
   "test-on-stop": TEST_ON_STOP_HOOK,
   "codex-stop": CODEX_STOP_HOOK,
+  "gate-only": GATE_ONLY_HOOK,
 } as const;

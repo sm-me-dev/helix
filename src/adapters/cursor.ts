@@ -6,7 +6,7 @@ import type { PlatformAdapter } from "./types.ts";
 
 function cursorAgent(id: HarnessConfig["crew"][number], config: HarnessConfig): string {
   const descriptions: Record<HarnessConfig["crew"][number], string> = {
-    scout: "Scout the codebase and return a graph-cited context brief; do not design or implement.",
+    scout: "Scout the codebase and return a cited context brief; do not design or implement.",
     architect: "Plan non-trivial changes and explain tradeoffs; do not edit files.",
     builder: "Implement the accepted plan and run the relevant checks.",
     reviewer: "Independently review the diff and verification evidence; do not edit files.",

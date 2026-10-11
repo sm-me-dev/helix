@@ -205,8 +205,24 @@ export function selectWorkflow(facts: TaskFacts): WorkflowSelection {
   };
 }
 
-/** Dispatch rules for generated AGENTS.md, derived from the policy above. */
-export function dispatchRules(): string[] {
+/**
+ * Rules for a pack that installs no subagents (`helix init` without `--crew`): there is no one
+ * to dispatch, so the tier table would only describe roles that do not exist. The security
+ * invariant survives as a self-check, because it never depended on a separate window existing.
+ */
+function noCrewRules(): string[] {
+  return [
+    "- No subagents installed: work in the main session (add roles with `helix init --crew`).",
+    `- Security-sensitive (${SECURITY_POLICY.scope}): never skip the gate; re-read your own diff cold and list what you could not verify. Unsure: assume sensitive. Security questions: answer only.`,
+  ];
+}
+
+/**
+ * Dispatch rules for generated AGENTS.md, derived from the policy above. `available` is the
+ * installed crew: omitted means the full policy (the demo and policy tests); empty means none.
+ */
+export function dispatchRules(available?: readonly CrewId[]): string[] {
+  if (available && available.length === 0) return noCrewRules();
   const names = (roles: CrewId[], fresh: boolean) =>
     roles.map((r) => (fresh && r === "reviewer" ? "fresh-window reviewer" : r)).join(", ");
   const tiers = TIER_ORDER.map((t) => {

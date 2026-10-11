@@ -47,6 +47,14 @@ export type HarnessConfig = {
    * and MCP config, so the repo pack writes only what a plugin cannot ship: CLAUDE.md,
    * AGENTS.md, the gate, and the secret-deny permissions. Nothing is registered twice. */
   claudePlugin?: boolean;
+  /** Claude Code only: start scout, architect and reviewer with `omitClaudeMd: true` (needs
+   * Claude Code v2.1.271+), so they stop paying for AGENTS.md on every spawn and work from the
+   * handoff card alone. OFF by default: the saving is static and measurable, the effect on
+   * pass rate is not, until an eval arm says so (docs/DECISIONS.md, F7). */
+  leanSubagents?: boolean;
+  /** Emit a CI workflow that runs the portable gate, the agent-agnostic backstop for platforms
+   * whose hooks cannot enforce it. Only "github" exists; skipped for stacks it cannot install. */
+  ci?: "github";
   /** Detected repo facts from `helix init` (cli/lib detectStack). Optional so
    * hand-built configs keep working; when present AGENTS.md cites exact
    * commands instead of telling the agent to go read package.json. */

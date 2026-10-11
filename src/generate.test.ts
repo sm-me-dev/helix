@@ -344,3 +344,148 @@ describe("lean pack", () => {
     assert.ok(on.some((p) => p.includes("graph-first")));
   });
 });
+
+// F7 (2026-10-11): role controls verified against https://code.claude.com/docs/en/sub-agents
+// (maxTurns, omitClaudeMd >= v2.1.271, frontmatter hooks that are ignored for plugin agents).
+describe("role controls (Claude Code)", () => {
+  const FULL = ["scout", "architect", "builder", "reviewer"] as const;
+  const cfg = (over: Partial<HarnessConfig> = {}): HarnessConfig => ({
+    ...BASE,
+    crew: [...FULL],
+    platforms: ["claude-code"],
+    mcps: ["graphify"],
+    ...over,
+  });
+  const body = (c: HarnessConfig, path: string) =>
+    generatePack(c).find((f) => f.path === path)?.body ?? "";
+  const agent = (c: HarnessConfig, id: string) => body(c, `.claude/agents/${id}.md`);
+  const front = (c: HarnessConfig, id: string) =>
+    agent(c, id).match(/^---\n([\s\S]*?)\n---\n/)?.[1] ?? "";
+
+  it("caps every role with maxTurns so a looping agent has a ceiling", () => {
+    for (const id of FULL) {
+      const m = agent(cfg(), id).match(/^maxTurns: (\d+)$/m);
+      assert.ok(m, `${id} needs maxTurns`);
+      assert.ok(Number(m[1]) >= 5 && Number(m[1]) <= 60, `${id} maxTurns ${m[1]} out of range`);
+    }
+  });
+
+  it("lets the reviewer run the gate and nothing else", () => {
+    const rev = agent(cfg(), "reviewer");
+    assert.match(rev, /^tools: .*\bBash\b/m);
+    assert.match(rev, /^hooks:\n {2}PreToolUse:\n {4}- matcher: "Bash"/m);
+    assert.match(rev, /node \.helix\/hooks\/gate-only\.mjs/);
+    const paths = generatePack(cfg()).map((f) => f.path);
+    assert.ok(paths.includes(".helix/hooks/gate-only.mjs"));
+    for (const id of ["scout", "architect"]) {
+      assert.doesNotMatch(front(cfg(), id), /\bBash\b|^hooks:/m, id);
+    }
+  });
+
+  it("never grants the reviewer an unguarded Bash", () => {
+    const off = cfg({ hooksEnabled: false });
+    assert.doesNotMatch(front(off, "reviewer"), /\bBash\b|^hooks:/m);
+    assert.ok(!generatePack(off).some((f) => f.path.endsWith("gate-only.mjs")));
+  });
+
+  it("omits CLAUDE.md/AGENTS.md for scout, architect and reviewer only when leanSubagents is on", () => {
+    for (const id of FULL) assert.doesNotMatch(agent(cfg(), id), /omitClaudeMd/, `${id} default`);
+    const lean = cfg({ leanSubagents: true });
+    for (const id of ["scout", "architect", "reviewer"]) {
+      assert.match(agent(lean, id), /^omitClaudeMd: true$/m, id);
+    }
+    assert.doesNotMatch(agent(lean, "builder"), /omitClaudeMd/);
+  });
+
+  it("does not call a brief graph-cited when the graphify MCP is absent", () => {
+    const off = cfg({ mcps: [], graphFirst: false, platforms: ["claude-code", "cursor", "codex"] });
+    for (const f of generatePack(off)) {
+      if (/agents\//.test(f.path)) assert.doesNotMatch(f.body, /graph-cited/, f.path);
+    }
+    assert.match(agent(cfg(), "scout"), /graph-cited/);
+  });
+
+  it("denies credential directories outside the repo as well as .env", () => {
+    const s = JSON.parse(body(cfg(), ".claude/settings.json")) as {
+      permissions: { deny: string[] };
+    };
+    for (const rule of ["Read(~/.ssh/**)", "Read(~/.aws/**)", "Read(**/*.pem)", "Read(.env)"]) {
+      assert.ok(s.permissions.deny.includes(rule), rule);
+    }
+  });
+});
+
+describe("no-crew pack", () => {
+  const cfg = (crew: HarnessConfig["crew"]): HarnessConfig => ({
+    ...BASE,
+    crew,
+    platforms: ["claude-code"],
+    mcps: ["context7"],
+    graphFirst: false,
+  });
+  const agentsMd = (c: HarnessConfig) =>
+    generatePack(c).find((f) => f.path === "AGENTS.md")?.body ?? "";
+
+  it("does not tell the agent to dispatch roles that were not installed", () => {
+    const a = agentsMd(cfg([]));
+    assert.doesNotMatch(a, /fresh-window reviewer|scout|architect|Dispatch the matching crew/i);
+    assert.match(a, /main session/);
+    assert.ok(!generatePack(cfg([])).some((f) => f.path.startsWith(".claude/agents/")));
+  });
+
+  it("still states the security rule and the gate", () => {
+    const a = agentsMd(cfg([]));
+    assert.match(a, /Security-sensitive/);
+    assert.match(a, /node \.helix\/gate\.mjs/);
+  });
+
+  it("keeps the role dispatch rules when a crew is installed", () => {
+    assert.match(agentsMd(cfg(["scout", "builder", "reviewer"])), /fresh-window reviewer/);
+  });
+});
+
+describe("CI backstop", () => {
+  const stack = (language: string, packageManager = "npm") => ({
+    language,
+    packageManager,
+    testCommand: "npm test",
+    lintCommand: null,
+    formatCommand: null,
+  });
+  const cfg = (over: Partial<HarnessConfig>): HarnessConfig => ({
+    ...BASE,
+    crew: [],
+    platforms: [],
+    mcps: [],
+    graphFirst: false,
+    ...over,
+  });
+  const wf = (c: HarnessConfig) =>
+    generatePack(c).find((f) => f.path === ".github/workflows/helix-gate.yml");
+
+  it("is emitted only when asked for", () => {
+    assert.equal(wf(cfg({ stack: stack("typescript") })), undefined);
+  });
+
+  it("runs the portable gate on every agent's pushes, with SHA-pinned actions", () => {
+    const f = wf(cfg({ ci: "github", stack: stack("typescript") }));
+    assert.ok(f);
+    assert.match(f.body, /node \.helix\/gate\.mjs --all/);
+    assert.match(f.body, /npm ci/);
+    for (const m of f.body.matchAll(/uses:\s*([^\s#]+)/g)) {
+      assert.match(m[1], /@[0-9a-f]{40}$/, `${m[1]} must be pinned to a SHA`);
+    }
+    assert.match(f.body, /permissions:\n {2}contents: read/);
+  });
+
+  it("uses the detected package manager", () => {
+    assert.match(wf(cfg({ ci: "github", stack: stack("javascript", "pnpm") }))!.body, /pnpm install --frozen-lockfile/);
+    assert.match(wf(cfg({ ci: "github", stack: stack("javascript", "yarn") }))!.body, /yarn install --immutable/);
+  });
+
+  it("is skipped for stacks it cannot install, instead of shipping a broken workflow", () => {
+    assert.equal(wf(cfg({ ci: "github", stack: stack("go") })), undefined);
+    assert.equal(wf(cfg({ ci: "github", stack: stack("javascript", "bun") })), undefined);
+    assert.equal(wf(cfg({ ci: "github" })), undefined);
+  });
+});

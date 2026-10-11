@@ -60,21 +60,60 @@ ${skills ? `Skills to load if present: ${skills}\n\n` : ""}Rules:
 /** Allow-list for a role. Graphify tools are named only when the graphify MCP is configured;
  * otherwise a read-only role gets Grep and Glob so it can still search (Read alone cannot).
  * Tool names verified 2026-10-09/10 against https://code.claude.com/docs/en/sub-agents.md. */
-export function toolsFor(id: HarnessConfig["crew"][number], config: HarnessConfig): string[] {
-  const tools = CREW_BY_ID[id].tools;
+export function toolsFor(
+  id: HarnessConfig["crew"][number],
+  config: HarnessConfig,
+  opts: { bashGuarded?: boolean } = {},
+): string[] {
+  const role = CREW_BY_ID[id];
+  // A guarded role keeps Bash only when the guard hook ships with it.
+  const tools = role.guardedBash && !opts.bashGuarded ? role.tools.filter((t) => t !== "Bash") : role.tools;
   if (config.mcps.includes("graphify")) return tools;
   const rest = tools.filter((t) => !t.startsWith("mcp__graphify__"));
   if (rest.length === tools.length || rest.some((t) => t === "Edit" || t === "Write")) return rest;
   return [...new Set(["Grep", "Glob", ...rest])];
 }
 
-export function agentFile(id: HarnessConfig["crew"][number], config: HarnessConfig): string {
+/** The one-line description the parent reads to decide whether to delegate. "graph-cited" is
+ * only true when Graphify is configured; otherwise the scout cites the repo map. */
+export function describeRole(id: HarnessConfig["crew"][number], config: HarnessConfig): string {
+  const line = CREW_BY_ID[id].oneLiner;
+  return config.mcps.includes("graphify") ? line : line.replaceAll("graph-cited", "map-cited");
+}
+
+/** Reviewer Bash is safe only behind the gate-only hook, which only a repo-level Claude Code
+ * agent can carry: plugin agents ignore frontmatter `hooks` (verified 2026-10-11). */
+function bashGuarded(config: HarnessConfig, plugin: boolean): boolean {
+  return !plugin && config.hooksEnabled;
+}
+
+const GATE_ONLY_FRONTMATTER = `hooks:
+  PreToolUse:
+    - matcher: "Bash"
+      hooks:
+        - type: command
+          command: "node .helix/hooks/gate-only.mjs"`;
+
+/** Claude Code agent file. `plugin: true` drops what a plugin agent cannot carry. */
+export function agentFile(
+  id: HarnessConfig["crew"][number],
+  config: HarnessConfig,
+  opts: { plugin?: boolean } = {},
+): string {
   const c = CREW_BY_ID[id];
+  const plugin = opts.plugin === true;
+  const guarded = bashGuarded(config, plugin);
+  const front = [
+    `name: ${c.id}`,
+    `description: ${describeRole(id, config)}`,
+    `tools: ${toolsFor(id, config, { bashGuarded: guarded }).join(", ")}`,
+    `model: ${c.model}`,
+    `maxTurns: ${c.maxTurns}`,
+  ];
+  if (config.leanSubagents === true && c.omitClaudeMd) front.push("omitClaudeMd: true");
+  if (c.guardedBash && guarded) front.push(GATE_ONLY_FRONTMATTER);
   return `---
-name: ${c.id}
-description: ${c.oneLiner}
-tools: ${toolsFor(id, config).join(", ")}
-model: ${c.model}
+${front.join("\n")}
 ---
 
  ${agentBody(id, config)}`;
@@ -83,13 +122,21 @@ model: ${c.model}
 /** Fail-closed secret protection. Lives in repo permissions, never in a plugin: a plugin's
  * settings.json honors only `agent` and `subagentStatusLine` (verified 2026-10-10,
  * https://code.claude.com/docs/en/plugins/components#default-settings). */
+// ~/ paths are home-relative and `**/` matches at any depth (gitignore syntax; docs.claude.com
+// claude-code/iam "Read & Edit", checked 2026-10-11). Each Read rule is mirrored as an Edit rule
+// because Read denies do not cover NotebookEdit.
+const SECRET_PATHS = [
+  ".env",
+  ".env.*",
+  "**/secrets/**",
+  "~/.ssh/**",
+  "~/.aws/**",
+  "~/.gnupg/**",
+  "**/*.pem",
+];
 const SECRET_DENY = [
-  "Read(.env)",
-  "Read(.env.*)",
-  "Read(**/secrets/**)",
-  "Edit(.env)",
-  "Edit(.env.*)",
-  "Edit(**/secrets/**)",
+  ...SECRET_PATHS.map((p) => `Read(${p})`),
+  ...SECRET_PATHS.map((p) => `Edit(${p})`),
 ];
 
 /** Repo-side settings for plugin mode: the denies, and no hooks (the plugin owns them; plugin
@@ -147,6 +194,10 @@ export function formatHintHook(): string {
 
 export function testOnStopHook(): string {
   return HOOK_SOURCES["test-on-stop"];
+}
+
+export function gateOnlyHook(): string {
+  return HOOK_SOURCES["gate-only"];
 }
 
 export function cursorRule(config: HarnessConfig): string {

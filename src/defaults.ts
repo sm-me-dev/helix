@@ -1,6 +1,5 @@
 // Default harness config as pure harness data: no store, no UI imports, so the
-// CLI, evals and harness tests share it without pulling site code. The site
-// store spreads this same object (src/lib/store.ts).
+// CLI, evals and harness tests share it.
 import { DEFAULT_CREW } from "./crew.ts";
 import { DEFAULT_MCPS } from "./mcps.ts";
 import { DEFAULT_PLATFORMS } from "./platforms.ts";

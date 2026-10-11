@@ -104,7 +104,7 @@ export function pluginPack(config: HarnessConfig, opts: { version?: string } = {
     files.push({
       path: `${ROOT}/agents/${cid}.md`,
       language: "markdown",
-      body: scopeToolNames(agentFile(cid, config)),
+      body: scopeToolNames(agentFile(cid, config, { plugin: true })),
     });
   }
   files.push({ path: `${ROOT}/hooks/hooks.json`, language: "json", body: hooksFile(config) });

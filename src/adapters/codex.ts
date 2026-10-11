@@ -3,7 +3,7 @@ import { HOOK_SOURCES } from "../hooks.ts";
 import { codexToml } from "../mcps.ts";
 import { SKILL_BY_ID } from "../skills.ts";
 import type { HarnessConfig, PackFile } from "../types";
-import { agentBody, skillFile } from "./parts.ts";
+import { agentBody, describeRole, skillFile } from "./parts.ts";
 import type { PlatformAdapter } from "./types.ts";
 
 /** One custom agent per crew role: `.codex/agents/<id>.toml`. The three required fields are
@@ -18,7 +18,7 @@ function codexAgentToml(id: HarnessConfig["crew"][number], config: HarnessConfig
   const body = agentBody(id, config).trimEnd().replaceAll("'''", "' ' '");
   return [
     `name = ${JSON.stringify(c.id)}`,
-    `description = ${JSON.stringify(c.oneLiner)}`,
+    `description = ${JSON.stringify(describeRole(id, config))}`,
     ...(readOnly ? ['sandbox_mode = "read-only"'] : []),
     "developer_instructions = '''",
     body,
