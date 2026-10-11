@@ -1521,3 +1521,33 @@ split`: one file, AGENTS.md 42 lines / 417 tokens for every agent. `helix init -
   skill with Graphify prose (the skill-filter fix landed after launch; the runner had already
   imported its modules). Token numbers carry that overhead equally in helix arms; the comparison
   stays valid but the absolute helix cost is pessimistic vs the fixed pack.
+
+## 2026-10-11 — F6 matrix died with the machine; opencode v2 broke the runner twice
+
+- The 2026-10-10 matrix never wrote a result: the machine rebooted mid-run (uptime reset,
+  /tmp wiped including the run log, runner PID gone) after ~33/60 cells. Treat it as not run.
+  Relaunch logs to ~/.cache (survives reboot), not /tmp.
+- Breakage 1 (reproduced: 1 cell, 0.2s wall, 0 tokens): opencode v2.0.26 removed `run --dir`
+  (`Unrecognized flag: --dir`). Failing test first (`evals/opencode-command.test.mjs`, red on
+  HEAD via stash). Fix: exported `opencodeCommand()` without `--dir` — the runner already
+  spawns with `cwd: workdir`, and a live PONG probe in a scratch dir confirmed v2 honors cwd.
+- Breakage 2 (reproduced: 1 cell, 20.9s wall, pass=false): the clean-HOME run shares the
+  user's background service port and dies (`Failed to start server. Is port 49374 in use?`
+  held by the user's own `opencode serve --service`). Fix: `--standalone` (private server per
+  run; same PONG probe confirmed). Both assertions pinned in the new test.
+- Breakage 3 (same 20.9s cell would have read 0 tokens): v2 stores full transcripts in new
+  `session_v2`/`session_message` tables (usage in `data.tokens`, tool calls in
+  `data.content[]` with renamed tools like `shell`) and only partially mirrors the legacy
+  tables the parser read — every token figure would have been 0. Failing test first
+  (`cli/report.test.mjs` v2-schema case, red). Fix: `parseOpenCodeV2Rows` normalizes v2 rows
+  into the legacy shapes so the ledger/retry/token math runs unchanged; `loadOpenCodeDb`
+  prefers v2 when it matched sessions, else the legacy tables (never both — one run appears
+  in each). Validated on the real passing probe session: total 246,136 / uncached 23,144
+  (same task/arm pilot 2026-10-10: 28,128 uncached). Legacy-only DBs still parse (old test green).
+- Rejected: pinning opencode v1 (auto-updates; v2 is what users have); pointing the eval at
+  the user's live service (breaks clean-HOME isolation); merging v2+legacy rows (double count).
+- Trap: two single-cell probe result files with broken-infra numbers (0.2s/20.9s, 0 tokens)
+  were deleted from `evals/results/` — wrong numbers must not sit where they could be cited.
+- Evidence (Node v26.10.0; stripped PATH; CI Node 22 not run): lint 0, typecheck 0,
+  `npm test` 134 + 1 pre-existing skip / 0 fail (.mjs, 135) and 200 / 0 fail (TS), identical
+  with NODE_ENV unset and NODE_ENV=production. Vendor `claude plugin validate` 6/6 on full PATH.

@@ -378,6 +378,60 @@ export function parseOpenCodeRows(
 
 export type OpenCodeLoad = { sessions: SessionReport[]; skipped: string | null };
 
+type OpenCodeV2SessionRow = { id: string; parent_id: string | null; directory: string };
+type OpenCodeV2MessageRow = { id: string; session_id: string; type: string; data: string };
+
+/** opencode v2 (standalone runs) stores transcripts in session_v2/session_message with a
+ * different message shape: usage lives in data.tokens (same fields as v1) and tool
+ * calls live in data.content[] items (v2 tool names: read/shell/..., not Read/Bash).
+ * Normalized here into the legacy row shapes so the ledger, retry and token math below
+ * run unchanged for both schemas. */
+function parseOpenCodeV2Rows(
+  sessions: OpenCodeV2SessionRow[],
+  messages: OpenCodeV2MessageRow[],
+): SessionReport[] {
+  const legacyMessages: OpenCodeMessageRow[] = [];
+  const legacyParts: OpenCodePartRow[] = [];
+  for (const m of messages) {
+    if (m.type !== "assistant") continue;
+    let data: unknown;
+    try {
+      data = JSON.parse(m.data);
+    } catch {
+      continue;
+    }
+    if (!isObj(data)) continue;
+    // The legacy parser keys on data.role; v2 carries the role in the row instead.
+    legacyMessages.push({
+      id: m.id,
+      session_id: m.session_id,
+      data: JSON.stringify({ ...(data as Record<string, unknown>), role: "assistant" }),
+    });
+    const content = (data as { content?: unknown }).content;
+    if (!Array.isArray(content)) continue;
+    for (const item of content) {
+      if (!isObj(item) || item.type !== "tool" || !isObj(item.state)) continue;
+      legacyParts.push({
+        id: typeof item.id === "string" ? item.id : `${m.id}:${legacyParts.length}`,
+        message_id: m.id,
+        session_id: m.session_id,
+        data: JSON.stringify({
+          type: "tool",
+          tool: item.name,
+          callID: item.id,
+          state: item.state,
+        }),
+      });
+    }
+  }
+  // The legacy parser only reads id/parent_id off sessions; directory already filtered.
+  return parseOpenCodeRows(
+    sessions.map((s) => ({ id: s.id, parent_id: s.parent_id, directory: s.directory })),
+    legacyMessages,
+    legacyParts,
+  );
+}
+
 /**
  * Read an OpenCode database with node:sqlite (no dependency). When the module is
  * unavailable (Node below 22.13 needs a flag) the source is skipped with a message.
@@ -403,6 +457,21 @@ export async function loadOpenCodeDb(
     return { sessions: [], skipped: `opencode: cannot open ${dbPath}: ${(e as Error).message}` };
   }
   try {
+    // opencode v2 writes full transcripts to session_v2/session_message and only a
+    // partial mirror to the legacy tables; v1-era databases have no v2 tables at all.
+    // Prefer v2 when it matched sessions for the filter, else use the legacy tables
+    // (never both: the same run can appear in each and would double count).
+    const tableNames = new Set(
+      (
+        db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as {
+          name: string;
+        }[]
+      ).map((r) => r.name),
+    );
+    if (tableNames.has("session_v2") && tableNames.has("session_message")) {
+      const v2 = loadOpenCodeV2(db, opts);
+      if (v2.sessions.length > 0) return v2;
+    }
     const where: string[] = [];
     const args: (string | number)[] = [];
     if (opts.directory) {
@@ -453,6 +522,51 @@ export async function loadOpenCodeDb(
   } finally {
     db.close();
   }
+}
+
+/** v2 branch of loadOpenCodeDb: same directory/children/limit semantics as legacy. */
+function loadOpenCodeV2(
+  db: {
+    prepare(sql: string): { all(...args: (string | number)[]): Record<string, unknown>[] };
+  },
+  opts: { directory?: string; sessionIds?: string[]; limit?: number },
+): OpenCodeLoad {
+  const where: string[] = [];
+  const args: (string | number)[] = [];
+  if (opts.directory) {
+    where.push("directory = ?");
+    args.push(opts.directory);
+  }
+  if (opts.sessionIds && opts.sessionIds.length > 0) {
+    where.push(`id IN (${opts.sessionIds.map(() => "?").join(",")})`);
+    args.push(...opts.sessionIds);
+  } else {
+    where.push("parent_id IS NULL");
+  }
+  const clause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
+  const limit = opts.limit && opts.limit > 0 ? ` LIMIT ${Math.floor(opts.limit)}` : "";
+  const sessions = db
+    .prepare(
+      `SELECT id, parent_id, directory FROM session_v2 ${clause} ORDER BY time_updated DESC${limit}`,
+    )
+    .all(...args) as unknown as OpenCodeV2SessionRow[];
+  const ids = sessions.map((s) => s.id);
+  const kids =
+    ids.length > 0
+      ? (db
+          .prepare(
+            `SELECT id, parent_id, directory FROM session_v2 WHERE parent_id IN (${ids.map(() => "?").join(",")})`,
+          )
+          .all(...ids) as unknown as OpenCodeV2SessionRow[])
+      : [];
+  const all = [...sessions, ...kids.filter((k) => !ids.includes(k.id))];
+  const allIds = all.map((s) => s.id);
+  if (allIds.length === 0) return { sessions: [], skipped: null };
+  const q = allIds.map(() => "?").join(",");
+  const messages = db
+    .prepare(`SELECT id, session_id, type, data FROM session_message WHERE session_id IN (${q})`)
+    .all(...allIds) as unknown as OpenCodeV2MessageRow[];
+  return { sessions: parseOpenCodeV2Rows(all, messages), skipped: null };
 }
 
 export type RunTotals = {
