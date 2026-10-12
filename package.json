@@ -11,10 +11,12 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "node --test 'scripts/**/*.test.mjs' 'cli/**/*.test.mjs' 'evals/**/*.test.mjs' && node --experimental-strip-types --test src/cache-layout.test.ts src/codex-antigravity.test.ts src/gate.test.ts src/generate.test.ts src/hermetic.test.ts src/hooks.test.ts src/learn.test.ts src/mcp-cost.test.ts src/measure.test.ts src/platforms.test.ts src/plugin.test.ts src/repomap.test.ts src/simulation.test.ts src/tokens.test.ts src/tool-surface.test.ts src/workflow.test.ts",
+    "test": "node scripts/run-tests.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:mjs": "node --test 'scripts/**/*.test.mjs' 'cli/**/*.test.mjs' 'evals/**/*.test.mjs'",
+    "test:ts": "node --experimental-strip-types --test 'src/**/*.test.ts'"
   },
   "lint-staged": {
     "*.{js,ts,mjs,cjs}": [
