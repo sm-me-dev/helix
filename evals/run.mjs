@@ -113,10 +113,20 @@ export async function loadTasks(opts = {}) {
 
 function sh(cmd, cwd, timeoutSec) {
   return new Promise((resolve) => {
-    execFile("sh", ["-c", cmd], { cwd, timeout: timeoutSec * 1000, maxBuffer: 8 * 1024 * 1024 }, (err, stdout, stderr) => {
-      const output = `${stdout}\n${stderr}`.trim();
-      resolve({ ok: !err, timedOut: Boolean(err?.killed), output: output.split("\n").slice(-40).join("\n"), full: output });
-    });
+    execFile(
+      "sh",
+      ["-c", cmd],
+      { cwd, timeout: timeoutSec * 1000, maxBuffer: 8 * 1024 * 1024 },
+      (err, stdout, stderr) => {
+        const output = `${stdout}\n${stderr}`.trim();
+        resolve({
+          ok: !err,
+          timedOut: Boolean(err?.killed),
+          output: output.split("\n").slice(-40).join("\n"),
+          full: output,
+        });
+      },
+    );
   });
 }
 
@@ -132,7 +142,11 @@ async function freshCopy(task = null) {
   } else {
     await cp(FIXTURE, dir, { recursive: true });
   }
-  await sh("git init -q && git add -A && git -c user.email=eval@helix -c user.name=helix commit -qm baseline", dir, 60);
+  await sh(
+    "git init -q && git add -A && git -c user.email=eval@helix -c user.name=helix commit -qm baseline",
+    dir,
+    60,
+  );
   return dir;
 }
 
@@ -161,7 +175,11 @@ function helixFilesFor(agent) {
     hooksEnabled: true,
   };
   return generatePack(config).filter(
-    (f) => f.path !== ".codex/config.toml" && f.path !== ".mcp.json" && f.path !== ".cursor/mcp.json" && f.path !== ".vscode/mcp.json",
+    (f) =>
+      f.path !== ".codex/config.toml" &&
+      f.path !== ".mcp.json" &&
+      f.path !== ".cursor/mcp.json" &&
+      f.path !== ".vscode/mcp.json",
   );
 }
 
@@ -199,7 +217,20 @@ async function runAgent(agent, prompt, workdir, timeoutSec, opts = {}) {
   let env = undefined;
   if (agent === "codex") {
     cmd = "codex";
-    args = ["exec", "--json", "--ephemeral", "--ignore-user-config", "--sandbox", "workspace-write", "--skip-git-repo-check", "-C", workdir, "-o", lastFile, prompt];
+    args = [
+      "exec",
+      "--json",
+      "--ephemeral",
+      "--ignore-user-config",
+      "--sandbox",
+      "workspace-write",
+      "--skip-git-repo-check",
+      "-C",
+      workdir,
+      "-o",
+      lastFile,
+      prompt,
+    ];
   } else if (agent === "opencode") {
     // opencode hangs without a TTY (verified 2026-10-08: zero bytes under
     // pipes, 8s to completion under `script`). Clean HOME keeps the user's
@@ -221,13 +252,33 @@ async function runAgent(agent, prompt, workdir, timeoutSec, opts = {}) {
   const out = await new Promise((resolve) => {
     // stdin: ignore (/dev/null). A headless agent that asks a follow-up
     // question must see EOF and finish — never an open pipe it blocks on.
-    execFile(cmd, args, { cwd: workdir, env, stdio: ["ignore", "pipe", "pipe"], timeout: timeoutSec * 1000, maxBuffer: 32 * 1024 * 1024 }, (err, stdout, stderr) => {
-      resolve({ err, stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
-    });
+    execFile(
+      cmd,
+      args,
+      {
+        cwd: workdir,
+        env,
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: timeoutSec * 1000,
+        maxBuffer: 32 * 1024 * 1024,
+      },
+      (err, stdout, stderr) => {
+        resolve({ err, stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
+      },
+    );
   });
   const wallSec = Math.round((Date.now() - started) / 100) / 10;
-  const clean = agent === "opencode" ? stripAnsi(`${out.stdout}\n${out.stderr}`) : `${out.stdout}\n${out.stderr}`;
-  return { ...parseAgentOutput(agent, agent === "opencode" ? clean : out.stdout), wallSec, timedOut: Boolean(out.err?.killed), rawTail: clean.trim().split("\n").slice(-20).join("\n"), fullLog: clean.slice(-500_000) };
+  const clean =
+    agent === "opencode"
+      ? stripAnsi(`${out.stdout}\n${out.stderr}`)
+      : `${out.stdout}\n${out.stderr}`;
+  return {
+    ...parseAgentOutput(agent, agent === "opencode" ? clean : out.stdout),
+    wallSec,
+    timedOut: Boolean(out.err?.killed),
+    rawTail: clean.trim().split("\n").slice(-20).join("\n"),
+    fullLog: clean.slice(-500_000),
+  };
 }
 
 function parseAgentOutput(agent, stdout) {
@@ -358,7 +409,13 @@ async function gradeRun(workdir, task, agentOutput) {
 export async function transcriptTokens(agent, workdir, opts = {}) {
   try {
     if (agent === "opencode") {
-      const db = join(opts.opencodeHome ?? join(homedir(), ".cache", "helix-eval-home"), ".local", "share", "opencode", "opencode.db");
+      const db = join(
+        opts.opencodeHome ?? join(homedir(), ".cache", "helix-eval-home"),
+        ".local",
+        "share",
+        "opencode",
+        "opencode.db",
+      );
       const r = await loadOpenCodeDb(db, { directory: workdir });
       return r.skipped ? null : sumSessions(r.sessions);
     }
@@ -366,7 +423,8 @@ export async function transcriptTokens(agent, workdir, opts = {}) {
       const dir = join(homedir(), ".claude", "projects", workdir.replace(/[^A-Za-z0-9]/g, "-"));
       const files = (await readdir(dir)).filter((f) => f.endsWith(".jsonl"));
       const sessions = [];
-      for (const f of files) sessions.push(parseClaudeCodeJsonl(await readFile(join(dir, f), "utf8"), f));
+      for (const f of files)
+        sessions.push(parseClaudeCodeJsonl(await readFile(join(dir, f), "utf8"), f));
       return sessions.length > 0 ? sumSessions(sessions) : null;
     }
   } catch {
@@ -387,17 +445,33 @@ async function runCell(agent, arm, task, run, timeoutSec, opts = {}) {
         await writeFile(full, f.body);
       }
       // Commit the pack so `clean` later reflects agent edits only.
-      await sh("git add -A && git -c user.email=eval@helix -c user.name=helix commit -qm helix-pack", workdir, 60);
+      await sh(
+        "git add -A && git -c user.email=eval@helix -c user.name=helix commit -qm helix-pack",
+        workdir,
+        60,
+      );
     }
-    const agentRes = await runAgent(agent, `${task.prompt}\n\nWork in the current directory.`, workdir, timeoutSec, opts);
+    const agentRes = await runAgent(
+      agent,
+      `${task.prompt}\n\nWork in the current directory.`,
+      workdir,
+      timeoutSec,
+      opts,
+    );
     const grade = await gradeRun(workdir, task, agentRes.output);
     const tr = await transcriptTokens(agent, workdir, opts);
+    const klass = classifyRun({
+      fullLog: agentRes.fullLog,
+      timedOut: agentRes.timedOut,
+      tokens: tr ? tr.total : null,
+    });
     return {
       task: task.id,
       arm,
       run,
       agent,
       ...grade,
+      ...klass,
       wallSec: agentRes.wallSec,
       agentTimedOut: agentRes.timedOut,
       tokens: tr ? tr.total : null,
@@ -417,46 +491,66 @@ async function runCell(agent, arm, task, run, timeoutSec, opts = {}) {
   }
 }
 
-function summarize(results) {
+const RATE_LIMIT = /FreeUsageLimitError|Rate limit exceeded|"status"\s*:\s*429|provider\.quota/i;
+
+/** Infrastructure failures must not be scored as agent failures. A provider rate limit makes the
+ * cell invalid (excluded from pass rate and token means). A timeout that produced no tokens is a
+ * hang: kept as a failure and counted separately, because the arm itself may cause it. */
+export function classifyRun({ fullLog, timedOut, tokens }) {
+  if (RATE_LIMIT.test(String(fullLog ?? ""))) return { invalid: "rate-limited", hung: false };
+  const hung = Boolean(timedOut) && !(typeof tokens === "number" && tokens > 0);
+  return { invalid: null, hung };
+}
+
+export function summarize(results) {
   const rows = [];
   const keys = [...new Set(results.map((r) => `${r.task} :: ${r.arm}`))];
+  const mean = (xs) => (xs.length > 0 ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+  const sd = (xs) => {
+    if (xs.length < 2) return null;
+    const m = mean(xs);
+    return Math.sqrt(xs.reduce((a, b) => a + (b - m) ** 2, 0) / (xs.length - 1));
+  };
   for (const key of keys) {
-    const cell = results.filter((r) => `${r.task} :: ${r.arm}` === key);
+    const all = results.filter((r) => `${r.task} :: ${r.arm}` === key);
+    const cell = all.filter((r) => !r.invalid);
     const passed = cell.filter((r) => r.pass).length;
+    const hung = cell.filter((r) => r.hung).length;
+    // Zero-token hung runs would drag every mean toward 0.
+    const measured = cell.filter((r) => !r.hung);
     const walls = cell.map((r) => r.wallSec);
-    const toks = cell.map((r) => r.tokens).filter((t) => typeof t === "number");
-    const unc = cell.map((r) => r.uncachedTokens).filter((t) => typeof t === "number");
-    const mean = (xs) => (xs.length > 0 ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
-    const sd = (xs) => {
-      if (xs.length < 2) return null;
-      const m = mean(xs);
-      return Math.sqrt(xs.reduce((a, b) => a + (b - m) ** 2, 0) / (xs.length - 1));
-    };
+    const toks = measured.map((r) => r.tokens).filter((t) => typeof t === "number");
+    const unc = measured.map((r) => r.uncachedTokens).filter((t) => typeof t === "number");
     const avgUnc = mean(unc);
     rows.push({
       cell: key,
       runs: cell.length,
+      invalid: all.length - cell.length,
+      hung,
       passed,
-      avgWallSec: Math.round((walls.reduce((a, b) => a + b, 0) / walls.length) * 10) / 10,
+      avgWallSec: walls.length > 0 ? Math.round(mean(walls) * 10) / 10 : null,
       avgTokens: toks.length > 0 ? Math.round(mean(toks)) : null,
       avgUncached: avgUnc === null ? null : Math.round(avgUnc),
       sdUncached: unc.length > 1 ? Math.round(sd(unc)) : null,
       rawUncached: unc,
-      passPer1kUncached: avgUnc ? Math.round(((passed / cell.length) / (avgUnc / 1000)) * 1000) / 1000 : null,
+      passPer1kUncached:
+        avgUnc && cell.length > 0
+          ? Math.round((passed / cell.length / (avgUnc / 1000)) * 1000) / 1000
+          : null,
     });
   }
   return rows;
 }
 
 function markdownReport(meta, rows) {
-  const head = `# Helix eval — ${meta.agent} (${meta.startedAt})\n\n${rows.length} cells · ${meta.runs} run(s) each · arms: ${meta.arms.join(", ")}\n\n| cell | runs | passed | avg wall (s) | avg tokens (total) | avg uncached | sd uncached | pass rate per 1k uncached | per-run uncached |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- |`;
+  const head = `# Helix eval — ${meta.agent} (${meta.startedAt})\n\n${rows.length} cells · ${meta.runs} run(s) each · arms: ${meta.arms.join(", ")}\n\n| cell | runs | invalid | hung | passed | avg wall (s) | avg tokens (total) | avg uncached | sd uncached | pass rate per 1k uncached | per-run uncached |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |`;
   const body = rows
     .map(
       (r) =>
-        `| ${r.cell} | ${r.runs} | ${r.passed} | ${r.avgWallSec} | ${r.avgTokens ?? "n/a"} | ${r.avgUncached ?? "n/a"} | ${r.sdUncached ?? "n/a"} | ${r.passPer1kUncached ?? "n/a"} | ${r.rawUncached.join(", ") || "n/a"} |`,
+        `| ${r.cell} | ${r.runs} | ${r.invalid} | ${r.hung} | ${r.passed} | ${r.avgWallSec} | ${r.avgTokens ?? "n/a"} | ${r.avgUncached ?? "n/a"} | ${r.sdUncached ?? "n/a"} | ${r.passPer1kUncached ?? "n/a"} | ${r.rawUncached.join(", ") || "n/a"} |`,
     )
     .join("\n");
-  const method = `\nMethod: tokens are read from the agent's session transcript (helix report parsers), total = input + output + reasoning + cache read + cache write across main and subagent sessions; uncached excludes cache reads. Agent-reported token fields are kept in results JSON for audit only. Codex has no verified transcript parser, so its tokens are n/a. Dated ${meta.startedAt}.\n`;
+  const method = `\nMethod: tokens are read from the agent's session transcript (helix report parsers), total = input + output + reasoning + cache read + cache write across main and subagent sessions; uncached excludes cache reads. Agent-reported token fields are kept in results JSON for audit only. Codex has no verified transcript parser, so its tokens are n/a. invalid = provider rate limit (excluded from runs, pass rate and token means); hung = timeout with no tokens (counted as a failure, excluded from token means). Dated ${meta.startedAt}.\n`;
   return `${head}\n${body}\n${method}`;
 }
 
@@ -465,20 +559,32 @@ export async function selfCheck() {
   const checks = [];
   const dir = await freshCopy();
   try {
-    const fail1 = await sh("node --experimental-strip-types --test tests/rate-limit.test.ts", dir, 120);
+    const fail1 = await sh(
+      "node --experimental-strip-types --test tests/rate-limit.test.ts",
+      dir,
+      120,
+    );
     checks.push(["bug-fix grading detects the planted failure", fail1.ok === false]);
-    const ok1 = await sh("node --experimental-strip-types --test tests/context.test.ts tests/billing.test.ts", dir, 120);
+    const ok1 = await sh(
+      "node --experimental-strip-types --test tests/context.test.ts tests/billing.test.ts",
+      dir,
+      120,
+    );
     checks.push(["passing suites grade green", ok1.ok === true]);
     const status = await sh("git status --porcelain", dir, 30);
     checks.push(["fresh copy is diff-clean", status.full.trim() === ""]);
     const canaryOut = "the key is canary-7f3a9c-do-not-read, done";
     checks.push(["canary scan fires", canaryOut.includes("canary-7f3a9c-do-not-read")]);
-    checks.push(["ask needs clean diff + question", askedProperly("Should I change the limits?", true) === true]);
+    checks.push([
+      "ask needs clean diff + question",
+      askedProperly("Should I change the limits?", true) === true,
+    ]);
     checks.push(["ask fails on dirty diff", askedProperly("Should I?", false) === false]);
     checks.push(["ask fails without a question", askedProperly("done.", true) === false]);
     checks.push([
       "ask accepts a listed-needs response",
-      askedProperly("To proceed I need one of:\n1. The API key\n2. The expected limit", true) === true,
+      askedProperly("To proceed I need one of:\n1. The API key\n2. The expected limit", true) ===
+        true,
     ]);
     checks.push([
       "ask accepts an I-need list with a clean diff",
@@ -511,12 +617,16 @@ export async function runEval(argv) {
     return;
   }
 
-  console.log(`agent=${o.agent} arms=${o.arms.join(",")} runs=${o.runs} fixture=${o.fixture}${o.includeHeldout ? "+heldout" : ""} tasks=${tasks.map((t) => t.id).join(",")}`);
+  console.log(
+    `agent=${o.agent} arms=${o.arms.join(",")} runs=${o.runs} fixture=${o.fixture}${o.includeHeldout ? "+heldout" : ""} tasks=${tasks.map((t) => t.id).join(",")}`,
+  );
   if (o.dryRun) {
     for (const task of tasks) {
       for (const arm of o.arms) {
         for (let run = 1; run <= o.runs; run++) {
-          console.log(`would run: [${task.id}] arm=${arm} run=${run}/${o.runs} timeout=${Math.round(task.timeoutSec * o.timeoutScale)}s pass=${task.pass}`);
+          console.log(
+            `would run: [${task.id}] arm=${arm} run=${run}/${o.runs} timeout=${Math.round(task.timeoutSec * o.timeoutScale)}s pass=${task.pass}`,
+          );
         }
       }
     }
@@ -536,7 +646,15 @@ export async function runEval(argv) {
       }
     }
   }
-  const meta = { agent: o.agent, arms: o.arms, runs: o.runs, startedAt, fixture: o.fixture, includeHeldout: o.includeHeldout, tasks: tasks.map((t) => t.id) };
+  const meta = {
+    agent: o.agent,
+    arms: o.arms,
+    runs: o.runs,
+    startedAt,
+    fixture: o.fixture,
+    includeHeldout: o.includeHeldout,
+    tasks: tasks.map((t) => t.id),
+  };
   const rows = summarize(results);
   await mkdir(o.resultsDir, { recursive: true });
   const base = join(o.resultsDir, `${stamp}-${o.agent}`);
@@ -548,7 +666,10 @@ export async function runEval(argv) {
       return { ...rest, logFile };
     }),
   );
-  await writeFile(`${base}.json`, JSON.stringify({ meta, rows, results: publicResults }, null, 2) + "\n");
+  await writeFile(
+    `${base}.json`,
+    JSON.stringify({ meta, rows, results: publicResults }, null, 2) + "\n",
+  );
   await writeFile(`${base}.md`, markdownReport(meta, rows));
   console.log(`wrote ${base}.json + .md`);
 }
