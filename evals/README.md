@@ -24,9 +24,12 @@ node evals/run.mjs --agent codex --arms none,helix --runs 3
 # or: ./cli/helix.mjs eval --agent codex --arms none,helix --runs 3
 ```
 
-Supported agents: `opencode` (`opencode run --format json`, `--auto` inside a
-temp fixture copy), `codex` (`codex exec --json`, workspace-write sandbox),
-`claude-code` (`claude -p --output-format json`, best-effort parsing).
+Supported agents: `opencode` v2 (`opencode run --format json`, `--auto --standalone`
+inside a temp fixture copy; needs v2 — the v1 `--dir` flag is gone and the shared
+service port collides, so the runner no longer passes it), `codex` (`codex exec
+--json`, workspace-write sandbox), `claude-code` (`claude -p --output-format json`,
+best-effort parsing). Token figures for opencode come from the v2
+`session_v2`/`session_message` tables (the legacy tables are only partially mirrored).
 Reports land in `evals/results/<stamp>-<agent>.json` + `.md`. Per-cell raw logs (`*-<task>-<arm>-<run>.log`,
 ~100KB each) stay local-only via the repo's `*.log` ignore — the committed
 JSON carries the graded fields plus a 20-line tail.

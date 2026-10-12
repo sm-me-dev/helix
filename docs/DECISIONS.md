@@ -1521,3 +1521,103 @@ split`: one file, AGENTS.md 42 lines / 417 tokens for every agent. `helix init -
   skill with Graphify prose (the skill-filter fix landed after launch; the runner had already
   imported its modules). Token numbers carry that overhead equally in helix arms; the comparison
   stays valid but the absolute helix cost is pessimistic vs the fixed pack.
+
+## 2026-10-11 — F6 matrix died with the machine; opencode v2 broke the runner twice
+
+- The 2026-10-10 matrix never wrote a result: the machine rebooted mid-run (uptime reset,
+  /tmp wiped including the run log, runner PID gone) after ~33/60 cells. Treat it as not run.
+  Relaunch logs to ~/.cache (survives reboot), not /tmp.
+- Breakage 1 (reproduced: 1 cell, 0.2s wall, 0 tokens): opencode v2.0.26 removed `run --dir`
+  (`Unrecognized flag: --dir`). Failing test first (`evals/opencode-command.test.mjs`, red on
+  HEAD via stash). Fix: exported `opencodeCommand()` without `--dir` — the runner already
+  spawns with `cwd: workdir`, and a live PONG probe in a scratch dir confirmed v2 honors cwd.
+- Breakage 2 (reproduced: 1 cell, 20.9s wall, pass=false): the clean-HOME run shares the
+  user's background service port and dies (`Failed to start server. Is port 49374 in use?`
+  held by the user's own `opencode serve --service`). Fix: `--standalone` (private server per
+  run; same PONG probe confirmed). Both assertions pinned in the new test.
+- Breakage 3 (same 20.9s cell would have read 0 tokens): v2 stores full transcripts in new
+  `session_v2`/`session_message` tables (usage in `data.tokens`, tool calls in
+  `data.content[]` with renamed tools like `shell`) and only partially mirrors the legacy
+  tables the parser read — every token figure would have been 0. Failing test first
+  (`cli/report.test.mjs` v2-schema case, red). Fix: `parseOpenCodeV2Rows` normalizes v2 rows
+  into the legacy shapes so the ledger/retry/token math runs unchanged; `loadOpenCodeDb`
+  prefers v2 when it matched sessions, else the legacy tables (never both — one run appears
+  in each). Validated on the real passing probe session: total 246,136 / uncached 23,144
+  (same task/arm pilot 2026-10-10: 28,128 uncached). Legacy-only DBs still parse (old test green).
+- Rejected: pinning opencode v1 (auto-updates; v2 is what users have); pointing the eval at
+  the user's live service (breaks clean-HOME isolation); merging v2+legacy rows (double count).
+- Trap: two single-cell probe result files with broken-infra numbers (0.2s/20.9s, 0 tokens)
+  were deleted from `evals/results/` — wrong numbers must not sit where they could be cited.
+- Evidence (Node v26.10.0; stripped PATH; CI Node 22 not run): lint 0, typecheck 0,
+  `npm test` 134 + 1 pre-existing skip / 0 fail (.mjs, 135) and 200 / 0 fail (TS), identical
+  with NODE_ENV unset and NODE_ENV=production. Vendor `claude plugin validate` 6/6 on full PATH.
+
+## 2026-10-11 — F7: audit follow-through (role controls, universal default, CI backstop)
+
+Baseline before any edit: lint, typecheck and `npm test` green (129 + 183 tests, 1 skipped).
+Each change below was written as a failing test first, except the `doctorPack` reviewer-guard
+check, whose tests were written with it.
+
+Verified 2026-10-11 against https://code.claude.com/docs/en/sub-agents (fetched in full):
+
+- Frontmatter fields `maxTurns` (output marked partial and resumable at the limit, v2.1.246+),
+  `omitClaudeMd` (v2.1.271+; managed policy still loads) and `hooks` (PreToolUse/PostToolUse/Stop,
+  scoped to the subagent; `Stop` becomes `SubagentStop`). **Plugin subagents ignore `hooks`,
+  `mcpServers` and `permissionMode`.** Unknown fields are ignored without an error, so a typo
+  would silently do nothing: the tests assert the exact field names.
+- Subagents load the CLAUDE.md hierarchy **including AGENTS.md** unless `omitClaudeMd` is set;
+  only the built-in Explore and Plan skip it. That is the per-spawn cost `--lean-subagents` removes.
+- Frontmatter hooks of a project agent run only after the folder is trusted (not in an untrusted
+  `-p` session). The reviewer's Bash is therefore guarded by a hook that fails closed in the same
+  way: no hook, no Bash.
+
+Changes:
+
+1. `.husky/pre-commit` ended in `|| echo "skipped"`, which swallowed real lint-staged failures, so
+   the hook could never block a commit. It now skips only when lint-staged is not installed.
+   Behavioral tests run the hook against stub binaries (fail, pass, absent).
+2. Reviewer verification. The reviewer prompt required passing criteria to have been run, but its
+   tools were Read only. It now gets Bash restricted to `node .helix/gate.mjs [--all|--dry|--json]`
+   by `.helix/hooks/gate-only.mjs` (anchored pattern, fail closed on malformed input). Plugin and
+   hooks-off packs drop the reviewer's Bash entirely (the guard cannot exist there); the prompt says
+   evidence is gate output the reviewer produced or the main session put in the card, never output
+   the Builder pasted. `helix doctor` fails a reviewer with Bash and no wired, shipped guard.
+3. `maxTurns` on every Claude agent: scout 20, architect 12, builder 40, reviewer 15. These are
+   runaway ceilings, not tuned budgets: no recorded run exercised a model subagent. Retune from
+   F6 transcripts.
+4. `leanSubagents` / `--lean-subagents`: `omitClaudeMd: true` on scout, architect, reviewer. OFF by
+   default; needs an eval arm before it can be a default (pass rate effect unknown).
+5. Role descriptions say "map-cited" when Graphify is not configured (Claude, Codex, Cursor,
+   Antigravity); the parent reads descriptions to decide whether to delegate.
+6. Secret denies now also cover `~/.ssh`, `~/.aws`, `~/.gnupg` and `**/*.pem`, each mirrored as an
+   Edit rule (Read denies do not cover NotebookEdit). Path forms (`~/` home-relative, `//` absolute,
+   gitignore globs) from the official IAM page snippet plus two docs-derived guides; the full
+   permissions page was not fetched, so confirm with `/permissions` in a session.
+7. CI backstop: `--ci` / `.github/` detection writes `.github/workflows/helix-gate.yml` running
+   `node .helix/gate.mjs --all` with SHA-pinned actions (the same pins as this repo's CI), for npm,
+   pnpm and yarn repos only. Cursor, Copilot, OpenCode and Antigravity have no verified Stop hook,
+   so CI is where the gate is enforced for them.
+8. `helix init` runs `graphify update .` when Graphify is on PATH and no index exists (opt out
+   `--no-index`); on failure it falls back to the outline map and says so.
+9. **Default flipped: `helix init` installs no model subagents; `--crew` adds them.** Reason: the
+   recorded evidence (README "Evidence so far") shows no pass-rate or token win for the crew, model
+   subagents never ran in either arm, and the stated goal is least tokens, so the costlier option
+   carries the burden of proof. The tier ladder, `helix plugin` and the library default
+   (`defaultConfig`) still include the crew. AGENTS.md for a no-crew pack drops the role dispatch
+   rules and keeps the security rule as a self-check. **Reverse this** if the F6 matrix (three arms)
+   shows the crew passing more tasks per token.
+10. Removed the ShellCheck CI job (`scripts/` has no shell scripts) and a test that fails if a
+    ShellCheck job is ever pointed at a directory without any. Grok-workspace leftovers: deleted
+    `.vercel/`, `.tanstack/`, `.grok/` (build output and logs); moved `screenshots/` and `artifacts/`
+    to `~/helix-grok-leftovers/` (reversible). Removed their lines from `.graphifyignore`.
+
+Not changed, on purpose:
+
+- `docs/DECISIONS.md` is not split by month: it is cited by name from about fifteen places, it is
+  append-only history, nothing loads it automatically, and every entry sits within five days.
+- AUDIT finding 10's claim that `.husky/post-*` rebuild the graph on every commit does not hold:
+  the tree has only `.husky/pre-commit` (plus husky's generated `_/` stubs).
+- `evals/fixture/secrets/admin-key.txt` is a deliberate canary (`canary-7f3a9c-do-not-read`) for
+  the secret-read eval; leave it, and exclude it from any secret scanner added later.
+- Roles are still unpriced (audit finding 11) and the F6 matrix has not been re-run: it needs a
+  long interactive session and a working opencode v2 runner.

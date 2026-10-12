@@ -180,6 +180,17 @@ function stripAnsi(s) {
   return String(s).replace(CSI_RE, "").replace(OSC_RE, "").split("\r").join("");
 }
 
+/** Shell command that runs the opencode agent. Exported for tests: the opencode CLI
+ * removed its `--dir` flag in v2 (working directory now comes from the process cwd,
+ * which runAgent already sets to the fixture copy), and a stale flag fails every
+ * cell in <1s with `Unrecognized flag: --dir`. `--standalone` gives the run a
+ * private server instead of the background service (verified 2026-10-11: without it
+ * the clean-HOME run dies on the user's service port, 127.0.0.1:49374). */
+export function opencodeCommand(model, prompt) {
+  const bin = process.env.OPENCODE_BIN ?? "opencode";
+  return `${bin} run --format json -m ${shellQuote(model)} --auto --standalone ${shellQuote(prompt)}`;
+}
+
 async function runAgent(agent, prompt, workdir, timeoutSec, opts = {}) {
   const started = Date.now();
   const lastFile = join(workdir, ".agent-last-message.txt");
@@ -199,7 +210,7 @@ async function runAgent(agent, prompt, workdir, timeoutSec, opts = {}) {
     } catch {
       throw new Error("opencode agent needs the `script` utility (util-linux) for a pty");
     }
-    const inner = `${process.env.OPENCODE_BIN ?? "opencode"} run --format json -m ${shellQuote(opts.opencodeModel)} --auto --dir ${shellQuote(workdir)} ${shellQuote(prompt)}`;
+    const inner = opencodeCommand(opts.opencodeModel, prompt);
     cmd = "script";
     args = ["-qec", inner, "/dev/null"];
     env = { ...process.env, HOME: opts.opencodeHome, TERM: process.env.TERM ?? "xterm-256color" };

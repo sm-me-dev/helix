@@ -265,4 +265,53 @@ describe("loadOpenCodeDb", () => {
     const bad = await loadOpenCodeDb(join(dir, "missing.db"));
     assert.ok(bad.skipped);
   });
+
+  it("reads v2-schema databases (opencode v2 standalone runs)", async (t) => {
+    let sqlite;
+    try {
+      sqlite = await import("node:sqlite");
+    } catch {
+      return;
+    }
+    const dir = mkdtempSync(join(tmpdir(), "helix-report-v2-"));
+    t.after(() => rmSync(dir, { recursive: true, force: true }));
+    const path = join(dir, "oc.db");
+    const db = new sqlite.DatabaseSync(path);
+    db.exec(`
+      CREATE TABLE session_v2 (id TEXT PRIMARY KEY, parent_id TEXT, directory TEXT, time_updated INTEGER);
+      CREATE TABLE session_message (id TEXT PRIMARY KEY, session_id TEXT, type TEXT, seq INTEGER, time_created INTEGER, time_updated INTEGER, data TEXT);
+    `);
+    const sess = db.prepare("INSERT INTO session_v2 VALUES (?,?,?,?)");
+    sess.run("a", null, "/proj", 2);
+    sess.run("b", "a", "/proj", 3);
+    sess.run("c", null, "/other", 4);
+    const v2msg = (tok, cost, content) =>
+      JSON.stringify({ time: {}, agent: "build", content, cost, tokens: tok });
+    const v2tok = (input, output, reasoning, read, write) => ({
+      input,
+      output,
+      reasoning,
+      cache: { read, write },
+    });
+    const tool = (id, name, input) => ({
+      type: "tool",
+      id,
+      name,
+      state: { status: "completed", input, output: "ok" },
+    });
+    const ins = db.prepare("INSERT INTO session_message VALUES (?,?,?,?,?,?,?)");
+    ins.run("m1", "a", "assistant", 1, 1, 2, v2msg(v2tok(10, 5, 2, 100, 20), 0.01, [tool("t1", "read", { filePath: "/p/a.ts" })]));
+    ins.run("m2", "b", "assistant", 1, 1, 3, v2msg(v2tok(7, 3, 0, 70, 0), 0.005, [tool("t2", "shell", { command: "pwd" })]));
+    ins.run("m3", "c", "assistant", 1, 1, 4, v2msg(v2tok(9, 9, 0, 9, 9), 9, []));
+    ins.run("m4", "a", "user", 0, 1, 2, JSON.stringify({ time: {}, text: "hi" }));
+    db.close();
+
+    const r = await loadOpenCodeDb(path, { directory: "/proj" });
+    assert.equal(r.skipped, null);
+    assert.deepEqual(r.sessions.map((s) => s.id), ["a"]);
+    const totals = sumSessions(r.sessions);
+    assert.equal(totals.total, (10 + 5 + 2 + 100 + 20) + (7 + 3 + 0 + 70 + 0));
+    assert.equal(totals.subagent, 7 + 3 + 0 + 70 + 0);
+    assert.equal(r.sessions[0].toolCalls.read, 1);
+  });
 });

@@ -1,10 +1,13 @@
 # Helix — a coding harness that earns its tokens
 
-Helix is a drop-in harness for AI coding agents: tier-routed roles, repo-map
+Helix is a drop-in harness for AI coding agents: repo-map
 first context (Graphify when present, a built-in outline otherwise), skills that
 load on demand, and one portable gate command. Full support exists only where the
 vendor docs were checked: see the platform matrix below. Everywhere else the pack
-is AGENTS.md plus at most a pointer file.
+is AGENTS.md plus at most a pointer file. The default pack installs no model
+subagents (they cost tokens on every task and no recorded run shows them paying
+for it yet); `--crew` adds the tier-routed roles for Claude Code, Codex, Cursor,
+OpenCode and Antigravity.
 The product is the generated file pack; this repo holds the generator, the CLI
 and the evals that test whether the pack helps.
 
@@ -16,7 +19,15 @@ git clone <this-repo> && cd helix && npm ci
 ```
 
 `helix init` detects the stack (language, package manager, test/lint/format
-commands, existing agent files), then writes the pack. It never overwrites an
+commands, existing agent files), then writes the pack: `AGENTS.md`, the gate,
+the repo map and, per detected agent, its skills, MCP config and hooks. Options:
+`--crew` (add scout/architect/builder/reviewer; `--lean-subagents` starts the
+read-only roles without `AGENTS.md`, Claude Code v2.1.271+), `--ci`/`--no-ci`
+(a GitHub workflow running `node .helix/gate.mjs --all`, SHA-pinned, written by
+default when the repo already has `.github/`; it is the gate's enforcement on
+agents without a Stop hook) and `--no-index` (with Graphify installed, init runs
+`graphify update .` itself; without a usable index it falls back to the outline
+map instead of pointing agents at a graph that is not there). It never overwrites an
 existing file without showing a diff and asking — pass `--force` to skip the
 prompt. Requires Node 22.6+ (type stripping, no build step).
 When an `opencode.json` already exists, the CLI merges MCP entries into it and
