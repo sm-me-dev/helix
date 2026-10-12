@@ -1,7 +1,2 @@
-.grok/skills/**
-.vercel/**
-screenshots/**
-artifacts/**
-public/__grok/**
 node_modules/**
 graphify-out/cache/**

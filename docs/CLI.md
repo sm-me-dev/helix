@@ -6,9 +6,22 @@ type stripping). No dependencies beyond the repo checkout.
 
 Exit codes everywhere: `0` success · `1` a check failed · `2` usage error.
 
-## `helix init [dir] [--platform a,b|all] [--force]`
+## `helix init [dir] [--platform a,b|all] [--force] [--crew [--lean-subagents]] [--ci|--no-ci] [--no-index]`
 
 Detect the stack and installed agents, write the harness pack.
+
+- Default is the universal pack: no model subagents. `--crew` adds scout,
+  architect, builder and reviewer (Claude Code agents get `maxTurns`; the
+  reviewer may run only `node .helix/gate.mjs` through a PreToolUse hook that
+  ships with it). `--lean-subagents` (needs `--crew`) sets `omitClaudeMd` on
+  scout, architect and reviewer; it is off by default because its effect on pass
+  rate is unmeasured.
+- `--ci` / `--no-ci`: write `.github/workflows/helix-gate.yml` (runs the gate on
+  every push and PR, actions pinned to SHAs). Default: when the repo already has
+  `.github/`. Skipped, with a note, for stacks it cannot install (non-Node, bun).
+- With Graphify on `PATH` and no `graphify-out/GRAPH_REPORT.md`, init runs
+  `graphify update .`; `--no-index` skips that. No usable index means the outline
+  map, never a pack that says "query the graph" over a missing graph.
 
 - Detects language, package manager, test/lint/format commands, file count,
   UI presence, and existing agent config (repo markers first, agent CLIs on
