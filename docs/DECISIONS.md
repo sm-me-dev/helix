@@ -1621,3 +1621,61 @@ Not changed, on purpose:
   the secret-read eval; leave it, and exclude it from any secret scanner added later.
 - Roles are still unpriced (audit finding 11) and the F6 matrix has not been re-run: it needs a
   long interactive session and a working opencode v2 runner.
+
+## 2026-10-12 — Review, tech-debt and harness-review follow-through
+
+Findings came from a five-axis code review, a tech-debt scoring pass and a harness review of a generated
+pack, plus a separate audit of `main` whose plan was supplied by the owner. Every fix was written
+test-first (`src/review-fixes.test.ts`, `cli/lib.test.mjs`, `evals/infra-invalid.test.mjs`).
+
+1. **Secret denies no longer vanish when hooks are off.** `hooksJson` returned `{ hooks: {} }` for
+   `hooksEnabled: false`, dropping every `Read`/`Edit` secret deny. Denies are permissions, not
+   hooks, so they stay.
+2. **Agents cannot edit the files that police them.** `Edit` denies now cover `.helix/gate.mjs`,
+   `.helix/gate.json`, `.helix/hooks/**` and `.claude/settings.json` in every Claude Code mode. A
+   Builder that could rewrite the gate could turn every check green. `helix init --force` writes
+   those files from outside the agent, so updates still work.
+3. **`helix doctor` failed a healthy plugin-mode pack** ("PostToolUse hook missing"). Settings with
+   an empty `hooks` object (plugin mode, hooks off) are the permissions-only form and now pass;
+   settings that declare hooks still need `PostToolUse` and `Stop`.
+4. **Pack content matches the configuration.** `prefer-graph.mjs` ships only with graph-first (it
+   was shipped but never wired). The pack README no longer tells a repo without graph-first to
+   install Graphify or claims a graph-first hint. The README's "~15× tokens" was a vendor figure
+   stated as fact, against the rule that every number comes from a script here; it now says the
+   multiple is vendor-reported and unmeasured.
+5. **Smaller fixes.** Agent bodies no longer start with a stray space. The generated CI workflow
+   sets `persist-credentials: false`. `AGENT_FILE_PLATFORMS` was a second list duplicating the
+   capability matrix; it is derived from `capabilities.subagents` now. Architect and Reviewer no
+   longer list `get_pr_impact` (it analyses a GitHub PR number that does not exist before a PR);
+   they get `query_graph`/`get_neighbors` and `get_neighbors` respectively.
+6. **`npm test` cannot hide a suite.** It ran `a && b`, so a red `.mjs` test meant no TypeScript
+   result at all. `scripts/run-tests.mjs` runs `test:mjs` and `test:ts` to completion and fails if
+   either failed; both discover files by glob, and `scripts/test-coverage.test.mjs` proves the
+   globs cover every test file.
+7. **The eval runner no longer scores infrastructure failures as agent failures.** Provider rate
+   limits make a cell `invalid` (excluded from runs, pass rate and token means). A timeout with no
+   tokens is `hung`: a failure, reported in its own column, excluded from token means.
+8. **`helix gate --all` failed on `main`.** `cli/e2e-workflows.test.mjs` held a literal API-key
+   fixture that the secret scanner flagged. It is assembled at runtime now, the pattern already
+   used in `src/gate.test.ts`.
+9. **Graphify no longer indexes prose.** `docs/DECISIONS.md` was the most-connected node in the
+   graph. `.graphifyignore` now excludes the decision log, audits, eval results and captured
+   fixtures.
+
+### F6 matrix result (opencode free tier, 2026-10-11, 5 runs per cell)
+
+Results are committed under `evals/results/2026-10-11T08-49-10-opencode.*`. Arms `none` and
+`helix-nosub` passed 20 of 20; `helix` (with subagents) passed 16 of 20 valid cells. Of its four
+failures, two were provider rate limits and two were 900-second hangs with an empty log; no hang
+occurred in the other arms, so the subagent arm may cause them. Uncached tokens, `helix-nosub`
+against `none`: cross-module -23%, trace-bug +19%, call-chain and deep-bug flat. With n=5 and these
+standard deviations none of that is significant. Verdict: pass rate ties at the ceiling and no token
+saving is proven, which supports decision 9 of F7 (universal pack by default, crew opt-in). The
+hangs are not yet investigated.
+
+Not changed, on purpose:
+
+- `verifiedAt` in `src/adapters/antigravity.ts` was not bumped. A platform fact's date means someone
+  checked it against the vendor docs that day, and this session did not.
+- `docs/DECISIONS.md` stays one append-only file, as decided in F7.
+- `docs/ANTIGRAVITY-AUDIT-PROMPT.md` is untracked and not mine; left out of the commits.
