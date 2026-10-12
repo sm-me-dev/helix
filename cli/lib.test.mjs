@@ -410,3 +410,35 @@ describe("doctorPack: reviewer guard", () => {
     assert.ok(!doctorPack(files).some((x) => x.check === "reviewer-guard"));
   });
 });
+
+describe("doctorPack: permissions-only settings", () => {
+  const cfg = (extra) => ({
+    crew: ["scout", "architect", "builder", "reviewer"],
+    skills: [],
+    mcps: [],
+    platforms: ["claude-code"],
+    graphFirst: false,
+    progressiveDisclosure: true,
+    defaultSingleAgent: true,
+    hooksEnabled: true,
+    ...extra,
+  });
+  const doctor = (config) =>
+    doctorPack(new Map(generatePack(config).map((f) => [f.path, f.body]))).filter(
+      (f) => f.check !== "mcp-measured",
+    );
+
+  it("plugin mode (settings hold only the denies) is healthy", () => {
+    assert.deepEqual(doctor(cfg({ claudePlugin: true, crew: [] })), []);
+  });
+  it("hooks off (settings hold only the denies) is healthy", () => {
+    assert.deepEqual(doctor(cfg({ hooksEnabled: false, crew: [] })), []);
+  });
+  it("still fails settings that declare hooks but omit the Stop hook", () => {
+    const files = new Map(generatePack(cfg({ crew: [] })).map((f) => [f.path, f.body]));
+    const s = JSON.parse(files.get(".claude/settings.json"));
+    delete s.hooks.Stop;
+    files.set(".claude/settings.json", JSON.stringify(s));
+    assert.ok(doctorPack(files).some((f) => f.check === "config:.claude/settings.json"));
+  });
+});

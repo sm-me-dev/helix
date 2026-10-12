@@ -156,7 +156,10 @@ describe("helix core workflows", () => {
     assert.match(dry.stdout, /plan secrets/);
 
     if (!gitInit(dir)) return; // no git in this environment; unit tests cover the scanner
-    writeFileSync(join(dir, "creds.txt"), 'api_key = "sk-abcdefghij1234567890abcdefghij12"\n');
+    writeFileSync(
+      join(dir, "creds.txt"),
+      'api_key = "' + "sk-" + 'abcdefghij1234567890abcdefghij12"\n',
+    );
     const fail = helix(dir, ["gate"], { PATH: GATE_PATH });
     assert.equal(fail.status, 1, fail.stdout);
     assert.match(fail.stdout, /FAIL secrets/);

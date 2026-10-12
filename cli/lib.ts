@@ -297,6 +297,8 @@ export function doctorPack(files: Map<string, string>): DoctorFailure[] {
       (v) => {
         if (!v || typeof v !== "object") return "not an object";
         const hooks = (v as { hooks?: Record<string, unknown[]> }).hooks ?? {};
+        // Plugin mode and hooks-off ship permissions only (hooks: {}); that is a valid pack.
+        if (Object.keys(hooks).length === 0) return null;
         if (!Array.isArray(hooks.PostToolUse)) return "PostToolUse hook missing";
         if (!Array.isArray(hooks.Stop)) return "Stop hook missing";
         return null;
