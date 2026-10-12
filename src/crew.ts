@@ -66,7 +66,7 @@ export const CREW: CrewRole[] = [
     skipWhen: "The Scout brief already names a single obvious fix.",
     input: "Scout brief + handoff card.",
     output: "Decision table + numbered plan + success criteria. Still no diff.",
-    tools: ["mcp__graphify__get_pr_impact", "Read"],
+    tools: ["mcp__graphify__query_graph", "mcp__graphify__get_neighbors", "Read"],
     model: "opus",
     skills: [],
     isolated: true,
@@ -105,7 +105,7 @@ export const CREW: CrewRole[] = [
     input:
       "Handoff card + plan + diff + gate output from the main session. Not the Builder chain of thought.",
     output: "PASS or FAIL with file:line evidence.",
-    tools: ["Read", "Bash", "mcp__graphify__get_pr_impact"],
+    tools: ["Read", "Bash", "mcp__graphify__get_neighbors"],
     model: "opus",
     skills: [],
     isolated: true,

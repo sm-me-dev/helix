@@ -96,10 +96,10 @@ export const SIM_EVENTS: SimEvent[] = [
     t: 14600,
     role: "reviewer",
     title: "Independent pass",
-    body: "Fresh window. Diff matches the plan's two files plus the test. Success criteria ran. get_pr_impact: RateLimiter callers are tests and gateway only. PASS.",
+    body: "Fresh window. Diff matches the plan's two files plus the test. Success criteria ran. get_neighbors: RateLimiter callers are tests and gateway only. PASS.",
     tokens: 18900,
     naiveTokens: 91000,
-    tool: "graphify.get_pr_impact",
+    tool: "graphify.get_neighbors",
   },
   {
     t: 15800,

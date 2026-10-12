@@ -14,9 +14,12 @@ import {
 } from "./parts.ts";
 import type { PlatformAdapter } from "./types.ts";
 
-function hookFiles(): { path: string; language: string; body: string }[] {
+function hookFiles(config: HarnessConfig): { path: string; language: string; body: string }[] {
   return [
-    { path: ".helix/hooks/prefer-graph.mjs", language: "javascript", body: preferGraphHook() },
+    // hooksJson wires prefer-graph only with graph-first; an unwired hook is dead weight.
+    ...(config.graphFirst
+      ? [{ path: ".helix/hooks/prefer-graph.mjs", language: "javascript", body: preferGraphHook() }]
+      : []),
     { path: ".helix/hooks/format-lint.mjs", language: "javascript", body: formatHintHook() },
     { path: ".helix/hooks/test-on-stop.mjs", language: "javascript", body: testOnStopHook() },
   ];
@@ -97,7 +100,7 @@ export const claudeAdapter: PlatformAdapter = {
     files.push({ path: ".claude/settings.json", language: "json", body: hooksJson(config) });
     files.push({ path: ".mcp.json", language: "json", body: portableMcpJson(config.mcps) });
     if (config.hooksEnabled) {
-      files.push(...hookFiles());
+      files.push(...hookFiles(config));
       // The reviewer's Bash is limited to the gate by this hook; ship it with the reviewer.
       if (config.crew.includes("reviewer")) {
         files.push({

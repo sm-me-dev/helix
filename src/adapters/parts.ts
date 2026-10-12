@@ -33,10 +33,7 @@ const SCOUT_MAP_INPUT =
   "Handoff card (goal, constraints, cited files, done-means, out of scope). Repo map.";
 
 /** The role prompt, without any platform frontmatter. Shared by every platform's agent file. */
-export function agentBody(
-  id: HarnessConfig["crew"][number],
-  config: HarnessConfig,
-): string {
+export function agentBody(id: HarnessConfig["crew"][number], config: HarnessConfig): string {
   const c = CREW_BY_ID[id];
   const graph = config.mcps.includes("graphify");
   const job = id === "scout" && !graph ? SCOUT_MAP_JOB : c.job;
@@ -67,7 +64,8 @@ export function toolsFor(
 ): string[] {
   const role = CREW_BY_ID[id];
   // A guarded role keeps Bash only when the guard hook ships with it.
-  const tools = role.guardedBash && !opts.bashGuarded ? role.tools.filter((t) => t !== "Bash") : role.tools;
+  const tools =
+    role.guardedBash && !opts.bashGuarded ? role.tools.filter((t) => t !== "Bash") : role.tools;
   if (config.mcps.includes("graphify")) return tools;
   const rest = tools.filter((t) => !t.startsWith("mcp__graphify__"));
   if (rest.length === tools.length || rest.some((t) => t === "Edit" || t === "Write")) return rest;
@@ -116,7 +114,7 @@ export function agentFile(
 ${front.join("\n")}
 ---
 
- ${agentBody(id, config)}`;
+${agentBody(id, config)}`;
 }
 
 /** Fail-closed secret protection. Lives in repo permissions, never in a plugin: a plugin's
@@ -134,9 +132,20 @@ const SECRET_PATHS = [
   "~/.gnupg/**",
   "**/*.pem",
 ];
+// Files that police the agents. The Reviewer trusts gate output and the Stop hook trusts the
+// gate, so a Builder that can rewrite them can turn every check green. Edit rules cover Write
+// and NotebookEdit too. `helix init --force` writes them from outside the agent, so updates
+// still work.
+const GUARDED_PATHS = [
+  ".helix/gate.mjs",
+  ".helix/gate.json",
+  ".helix/hooks/**",
+  ".claude/settings.json",
+];
 const SECRET_DENY = [
   ...SECRET_PATHS.map((p) => `Read(${p})`),
   ...SECRET_PATHS.map((p) => `Edit(${p})`),
+  ...GUARDED_PATHS.map((p) => `Edit(${p})`),
 ];
 
 /** Repo-side settings for plugin mode: the denies, and no hooks (the plugin owns them; plugin
@@ -147,7 +156,8 @@ export function permissionsOnlyJson(): string {
 
 export function hooksJson(config: HarnessConfig): string {
   if (!config.hooksEnabled) {
-    return JSON.stringify({ hooks: {} }, null, 2) + "\n";
+    // Hooks off must not mean secrets readable: the denies are permissions, not hooks.
+    return JSON.stringify({ permissions: { deny: SECRET_DENY }, hooks: {} }, null, 2) + "\n";
   }
   const settings: {
     permissions: { deny: string[] };

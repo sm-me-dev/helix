@@ -28,13 +28,10 @@ function requireKnownIds(config: HarnessConfig): void {
   }
 }
 
-const AGENT_FILE_PLATFORMS = new Set<PlatformId>([
-  "claude-code",
-  "codex",
-  "opencode",
-  "cursor",
-  "antigravity",
-]);
+/** Platforms whose adapter writes agent files: derived from the capability matrix, never a
+ * second list that can drift from it. */
+const writesAgentFiles = (id: PlatformId): boolean =>
+  ADAPTER_BY_ID[id].capabilities.subagents === "emitted";
 
 function agentsMd(config: HarnessConfig): string {
   const crewRows = config.crew
@@ -48,7 +45,7 @@ function agentsMd(config: HarnessConfig): string {
   // table would only repeat it. Keep it where some selected platform has no agent files.
   const crewSection =
     config.crew.length === 0 ||
-    (config.platforms.length > 0 && config.platforms.every((p) => AGENT_FILE_PLATFORMS.has(p)))
+    (config.platforms.length > 0 && config.platforms.every(writesAgentFiles))
       ? ""
       : `## Crew
 
@@ -133,7 +130,9 @@ Drop these files at the root of a repo. One harness, many agents.
 
 Enabled for: ${platforms || "AGENTS.md only"}
 
-## Install Graphify (once per machine)
+${
+  config.graphFirst
+    ? `## Install Graphify (once per machine)
 
 \`\`\`
 uv tool install graphifyy
@@ -142,14 +141,16 @@ graphify install
 
 Then inside the assistant: \`/graphify .\` (Codex: \`$graphify\`).
 
-## What you just installed
+`
+    : ""
+}## What you just installed
 
 - \`AGENTS.md\` — always-on, short, vendor-neutral
 - \`.helix/gate.mjs\` — one command for every agent, git hook and CI job: \`node .helix/gate.mjs\` (exit 0 pass, 1 a check failed, 2 usage error; \`--all\`, \`--dry\`, \`--json\`)
 - Skills — progressive disclosure, Agent Skills format
 - Crew roles (main session orchestrates; no dispatcher file) — ${roles || "none"}
 - MCP — ${config.mcps.map((id) => MCP_BY_ID[id].name).join(", ") || "none"}
-- Hooks — ${config.hooksEnabled ? "format/lint + graph-first hint + Stop test gate + .env deny" : "off"}
+- Hooks — ${config.hooksEnabled ? `format/lint${config.graphFirst ? " + graph-first hint" : ""} + Stop test gate + secret denies` : "off (secret denies stay in permissions)"}
 
 Secret denies block Read/Edit/Write/Glob and recognized shell readers (cat,
 head, …) on .env and secrets/ — not subprocess reads (a script opening files
@@ -159,7 +160,7 @@ Vendor files (CLAUDE.md, GEMINI.md, CONVENTIONS.md, …) are pointers. Edit AGEN
 
 ## Default to one agent
 
-Fan-out costs ~15× tokens when the work is coupled. Helix fans out when the Scout cannot name the files, or when Builder and Reviewer must not share a window.
+Fan-out multiplies tokens when the work is coupled (Anthropic reports a large multiple; Helix has not measured one). Helix fans out when the Scout cannot name the files, or when Builder and Reviewer must not share a window.
 `;
 }
 
@@ -197,6 +198,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: ${ACTION_CHECKOUT}
+        with:
+          persist-credentials: false
       - uses: ${ACTION_SETUP_NODE}
         with:
           node-version: 22
