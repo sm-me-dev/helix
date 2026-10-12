@@ -249,6 +249,21 @@ export function doctorPack(files: Map<string, string>): DoctorFailure[] {
     });
   }
 
+  // A reviewer that can run Bash is only safe behind the gate-only hook: wired in its
+  // frontmatter AND shipped. Anything less is an unrestricted shell for a role meant to be read-only.
+  const reviewer = get(".claude/agents/reviewer.md");
+  const reviewerFront = reviewer?.match(/^---\n([\s\S]*?)\n---/)?.[1] ?? "";
+  if (/^tools: .*\bBash\b/m.test(reviewerFront)) {
+    const wired = reviewerFront.includes(".helix/hooks/gate-only.mjs");
+    if (!wired || !files.has(".helix/hooks/gate-only.mjs")) {
+      failures.push({
+        check: "reviewer-guard",
+        detail:
+          "reviewer has Bash but the gate-only hook is not wired and shipped; re-run helix init --crew --force",
+      });
+    }
+  }
+
   // Every emitted JSON config must parse and match its platform shape.
   const jsonChecks: [string, (v: unknown) => string | null][] = [
     [

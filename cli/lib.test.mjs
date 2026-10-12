@@ -81,10 +81,18 @@ describe("configForStack", () => {
   });
 
   it("falls back to the outline map when graphify is not installed, even on a big repo", () => {
-    const c = configForStack(["claude-code"], { fileCount: 500, uiPresent: false, graphifyAvailable: false });
+    const c = configForStack(["claude-code"], {
+      fileCount: 500,
+      uiPresent: false,
+      graphifyAvailable: false,
+    });
     assert.ok(!c.mcps.includes("graphify"));
     assert.equal(c.graphFirst, false);
-    const kept = configForStack(["claude-code"], { fileCount: 500, uiPresent: false, graphifyAvailable: true });
+    const kept = configForStack(["claude-code"], {
+      fileCount: 500,
+      uiPresent: false,
+      graphifyAvailable: true,
+    });
     assert.ok(kept.mcps.includes("graphify"));
   });
 
@@ -116,7 +124,9 @@ describe("diffLines", () => {
 
 describe("doctorPack", () => {
   it("passes a helix-generated pack", () => {
-    const files = new Map(generatePack(defaultConfig(["claude-code", "codex"])).map((f) => [f.path, f.body]));
+    const files = new Map(
+      generatePack(defaultConfig(["claude-code", "codex"])).map((f) => [f.path, f.body]),
+    );
     const failures = doctorPack(files).filter((f) => f.check !== "mcp-measured");
     assert.deepEqual(failures, []);
   });
@@ -136,13 +146,18 @@ describe("doctorPack", () => {
   it("passes an outline-fallback pack with no graphify and flags a missing map file", () => {
     const cfg = { ...defaultConfig(["claude-code"]), graphFirst: false, mcps: [] };
     const files = new Map(generatePack(cfg).map((f) => [f.path, f.body]));
-    assert.deepEqual(doctorPack(files).filter((f) => f.check !== "mcp-measured"), []);
+    assert.deepEqual(
+      doctorPack(files).filter((f) => f.check !== "mcp-measured"),
+      [],
+    );
     files.delete(".helix/map.mjs");
     assert.ok(doctorPack(files).some((f) => f.check === "map"));
   });
 
   it("flags a pack whose AGENTS.md demands the gate but whose gate file is gone", () => {
-    const files = new Map(generatePack(defaultConfig(["claude-code"])).map((f) => [f.path, f.body]));
+    const files = new Map(
+      generatePack(defaultConfig(["claude-code"])).map((f) => [f.path, f.body]),
+    );
     files.delete(".helix/gate.mjs");
     const failures = doctorPack(files).filter((f) => f.check === "gate");
     assert.equal(failures.length, 1);
@@ -154,7 +169,9 @@ describe("doctorPack", () => {
         [
           ".mcp.json",
           JSON.stringify({
-            mcpServers: { g: { command: "uvx", args: ["--from", "graphifyy[mcp]", "graphify-mcp"] } },
+            mcpServers: {
+              g: { command: "uvx", args: ["--from", "graphifyy[mcp]", "graphify-mcp"] },
+            },
           }),
         ],
       ]),
@@ -201,7 +218,10 @@ describe("reconstructConfig", () => {
   it("reads codex toml and vscode servers", () => {
     const files = new Map([
       [".codex/config.toml", '[mcp_servers.context7]\nurl = "https://x"\n'],
-      [".vscode/mcp.json", JSON.stringify({ servers: { github: { type: "http", url: "https://y" } } })],
+      [
+        ".vscode/mcp.json",
+        JSON.stringify({ servers: { github: { type: "http", url: "https://y" } } }),
+      ],
     ]);
     assert.deepEqual([...reconstructConfig(files).mcps].sort(), ["context7", "github"]);
   });
@@ -224,7 +244,10 @@ describe("mcpSummary and graphFreshness", () => {
       () => "aaaaaaa",
     );
     assert.deepEqual(fresh, []);
-    const missing = graphFreshness(() => null, () => "aaaaaaa");
+    const missing = graphFreshness(
+      () => null,
+      () => "aaaaaaa",
+    );
     assert.equal(missing.length, 1);
   });
 });
@@ -241,11 +264,10 @@ describe("measureReport and packJson", () => {
   });
 });
 
-
 describe("mergeOpenCodeConfig", () => {
   it("preserves unrelated config and existing same-name MCP definitions", () => {
     const existing = {
-      "$schema": "https://example.invalid/open-code-config.json",
+      $schema: "https://example.invalid/open-code-config.json",
       theme: "nord",
       mcp: {
         graphify: { type: "local", command: ["custom-graphify", "--private-option"] },
@@ -253,7 +275,7 @@ describe("mergeOpenCodeConfig", () => {
       },
     };
     const generated = {
-      "$schema": "https://opencode.ai/config.json",
+      $schema: "https://opencode.ai/config.json",
       mcp: {
         graphify: { type: "local", command: ["uvx", "--from", "graphifyy[mcp]"] },
         context7: { type: "remote", url: "https://example.invalid/mcp" },
@@ -340,5 +362,51 @@ describe("assertSafePackPath", () => {
 
   it("normalizes separators the same way the validator does", () => {
     assert.deepEqual(packPathSegments("a\\b/c"), ["a", "b", "c"]);
+  });
+});
+
+describe("doctorPack: reviewer guard", () => {
+  const reviewer = (extra = "") =>
+    `---\nname: reviewer\ntools: Read, Bash\nmodel: opus\n${extra}---\n\nbody\n`;
+  const base = () =>
+    new Map([
+      ["AGENTS.md", "# x\n"],
+      [".helix/gate.mjs", "// gate\n"],
+    ]);
+
+  it("fails a reviewer with Bash but no gate-only hook wired", () => {
+    const files = base();
+    files.set(".claude/agents/reviewer.md", reviewer());
+    const f = doctorPack(files).find((x) => x.check === "reviewer-guard");
+    assert.ok(f, "unguarded reviewer Bash must fail doctor");
+  });
+
+  it("fails when the hook is referenced but the script is missing", () => {
+    const files = base();
+    files.set(
+      ".claude/agents/reviewer.md",
+      reviewer(
+        'hooks:\n  PreToolUse:\n    - matcher: "Bash"\n      hooks:\n        - type: command\n          command: "node .helix/hooks/gate-only.mjs"\n',
+      ),
+    );
+    assert.ok(doctorPack(files).some((x) => x.check === "reviewer-guard"));
+  });
+
+  it("passes when the hook and its script are both present", () => {
+    const files = base();
+    files.set(
+      ".claude/agents/reviewer.md",
+      reviewer(
+        'hooks:\n  PreToolUse:\n    - matcher: "Bash"\n      hooks:\n        - type: command\n          command: "node .helix/hooks/gate-only.mjs"\n',
+      ),
+    );
+    files.set(".helix/hooks/gate-only.mjs", "// guard\n");
+    assert.ok(!doctorPack(files).some((x) => x.check === "reviewer-guard"));
+  });
+
+  it("ignores a reviewer without Bash", () => {
+    const files = base();
+    files.set(".claude/agents/reviewer.md", "---\nname: reviewer\ntools: Read\n---\n");
+    assert.ok(!doctorPack(files).some((x) => x.check === "reviewer-guard"));
   });
 });

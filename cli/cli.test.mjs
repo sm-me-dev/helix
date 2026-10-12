@@ -94,7 +94,7 @@ describe("helix cli", () => {
     writeFileSync(
       path,
       JSON.stringify({
-        "$schema": "https://opencode.ai/config.json",
+        $schema: "https://opencode.ai/config.json",
         theme: "nord",
         mcp: { internal: { type: "local", command: ["node", "internal.mjs"] } },
       }),
@@ -243,5 +243,156 @@ describe("helix init containment", { skip: SYMLINK_SKIP }, () => {
       readFileSync(join(dir, "AGENTS.md"), "utf8"),
       readFileSync(join(dir, "CLAUDE.md"), "utf8"),
     );
+  });
+});
+
+// F7 (2026-10-11): the default pack is the universal one (no model subagents until asked for),
+// CI backstop and the index step.
+describe("helix init defaults", () => {
+  const read = (dir, p) => readFileSync(join(dir, p), "utf8");
+  const claudeRepo = () => {
+    const dir = scratch();
+    writeFileSync(join(dir, "CLAUDE.md"), "# mine\n");
+    return dir;
+  };
+
+  it("installs no subagents by default, even for a detected agent that supports them", () => {
+    const dir = claudeRepo();
+    const r = helix(dir, ["init"]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(existsSync(join(dir, ".claude/settings.json")));
+    assert.ok(!existsSync(join(dir, ".claude/agents")), "no agent files without --crew");
+    assert.match(read(dir, "AGENTS.md"), /No subagents installed/);
+  });
+
+  it("--crew installs the four roles, with a guarded reviewer", () => {
+    const dir = claudeRepo();
+    const r = helix(dir, ["init", "--crew"]);
+    assert.equal(r.status, 0, r.stderr);
+    for (const id of ["scout", "architect", "builder", "reviewer"]) {
+      assert.ok(existsSync(join(dir, `.claude/agents/${id}.md`)), id);
+    }
+    assert.match(read(dir, ".claude/agents/reviewer.md"), /gate-only\.mjs/);
+    assert.ok(existsSync(join(dir, ".helix/hooks/gate-only.mjs")));
+    assert.doesNotMatch(read(dir, "AGENTS.md"), /No subagents installed/);
+    assert.doesNotMatch(read(dir, ".claude/agents/scout.md"), /omitClaudeMd/);
+  });
+
+  it("--lean-subagents (with --crew) starts read-only roles without AGENTS.md", () => {
+    const dir = claudeRepo();
+    assert.equal(helix(dir, ["init", "--crew", "--lean-subagents"]).status, 0);
+    assert.match(read(dir, ".claude/agents/scout.md"), /^omitClaudeMd: true$/m);
+    assert.doesNotMatch(read(dir, ".claude/agents/builder.md"), /omitClaudeMd/);
+  });
+
+  it("--lean-subagents alone says it does nothing", () => {
+    const r = helix(claudeRepo(), ["init", "--lean-subagents"]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stdout, /--lean-subagents has no effect without --crew/);
+  });
+
+  describe("CI backstop", () => {
+    const wf = ".github/workflows/helix-gate.yml";
+
+    it("is written when the repo already uses GitHub, and runs the gate", () => {
+      const dir = scratch();
+      mkdirSync(join(dir, ".github"));
+      writeFileSync(join(dir, ".github/CODEOWNERS"), "* @me\n");
+      assert.equal(helix(dir, ["init"]).status, 0);
+      assert.match(read(dir, wf), /node \.helix\/gate\.mjs --all/);
+    });
+
+    it("is not written for a repo with no .github unless asked", () => {
+      const dir = scratch();
+      assert.equal(helix(dir, ["init"]).status, 0);
+      assert.ok(!existsSync(join(dir, wf)));
+      const asked = scratch();
+      assert.equal(helix(asked, ["init", "--ci"]).status, 0);
+      assert.ok(existsSync(join(asked, wf)));
+    });
+
+    it("--no-ci wins over detection", () => {
+      const dir = scratch();
+      mkdirSync(join(dir, ".github"));
+      writeFileSync(join(dir, ".github/CODEOWNERS"), "* @me\n");
+      assert.equal(helix(dir, ["init", "--no-ci"]).status, 0);
+      assert.ok(!existsSync(join(dir, wf)));
+    });
+
+    it("explains when it cannot write one for this stack", () => {
+      const dir = mkdtempSync(join(tmpdir(), "helix-cli-"));
+      writeFileSync(join(dir, "go.mod"), "module x\n");
+      const r = helix(dir, ["init", "--ci"]);
+      assert.equal(r.status, 0, r.stderr);
+      assert.ok(!existsSync(join(dir, wf)));
+      assert.match(r.stdout, /ci: skipped/);
+    });
+  });
+
+  describe("graph index", () => {
+    // A bigger repo (graph-first needs >= 20 files) and a fake `graphify` on PATH that logs
+    // its calls and, when told to, produces the report the real one would.
+    function bigRepo() {
+      const dir = scratch();
+      mkdirSync(join(dir, "src"));
+      for (let i = 0; i < 24; i++)
+        writeFileSync(join(dir, `src/f${i}.ts`), `export const v${i} = ${i};\n`);
+      return dir;
+    }
+    function fakeGraphify({ builds }) {
+      const bin = mkdtempSync(join(tmpdir(), "helix-fakegraph-"));
+      const log = join(bin, "calls.log");
+      writeFileSync(
+        join(bin, "graphify"),
+        `#!/bin/sh\necho "$@" >> "${log}"\n` +
+          (builds
+            ? `if [ "$1" = "update" ]; then /bin/mkdir -p graphify-out; echo 'Built from commit: \`abc\`' > graphify-out/GRAPH_REPORT.md; fi\n`
+            : "") +
+          "exit 0\n",
+        { mode: 0o755 },
+      );
+      return {
+        env: { PATH: `${nodeOnlyBin()}:${bin}` },
+        calls: () => (existsSync(log) ? readFileSync(log, "utf8") : ""),
+      };
+    }
+
+    it("builds the index during init and keeps graph-first when it succeeds", () => {
+      const dir = bigRepo();
+      const g = fakeGraphify({ builds: true });
+      const r = helix(dir, ["init"], g.env);
+      assert.equal(r.status, 0, r.stderr);
+      assert.match(g.calls(), /^update \.$/m);
+      assert.match(read(dir, "AGENTS.md"), /query_graph/);
+    });
+
+    it("falls back to the outline map when the index cannot be built", () => {
+      const dir = bigRepo();
+      const g = fakeGraphify({ builds: false });
+      const r = helix(dir, ["init"], g.env);
+      assert.equal(r.status, 0, r.stderr);
+      assert.doesNotMatch(read(dir, "AGENTS.md"), /query_graph/);
+      assert.ok(existsSync(join(dir, ".helix/map.mjs")));
+      assert.match(r.stdout, /no usable index/);
+    });
+
+    it("--no-index never runs graphify and uses the outline map", () => {
+      const dir = bigRepo();
+      const g = fakeGraphify({ builds: true });
+      const r = helix(dir, ["init", "--no-index"], g.env);
+      assert.equal(r.status, 0, r.stderr);
+      assert.ok(!g.calls().includes("update"));
+      assert.doesNotMatch(read(dir, "AGENTS.md"), /query_graph/);
+    });
+
+    it("keeps an existing index and does not rebuild it", () => {
+      const dir = bigRepo();
+      mkdirSync(join(dir, "graphify-out"));
+      writeFileSync(join(dir, "graphify-out/GRAPH_REPORT.md"), "Built from commit: `abc`\n");
+      const g = fakeGraphify({ builds: false });
+      assert.equal(helix(dir, ["init"], g.env).status, 0);
+      assert.ok(!g.calls().includes("update"));
+      assert.match(read(dir, "AGENTS.md"), /query_graph/);
+    });
   });
 });

@@ -46,9 +46,17 @@ import { formatReport, loadOpenCodeDb, parseClaudeCodeJsonl } from "./report.ts"
 const USAGE = `helix — AI coding harness pack manager
 
   helix init [dir] [--platform a,b|all] [--force] [--claude-plugin]
-                                                detect stack and agents, write the pack
-                                                (--claude-plugin: Claude Code gets only what a
-                                                plugin cannot ship; install \`helix plugin\` output)
+             [--crew [--lean-subagents]] [--ci|--no-ci] [--no-index]
+                                                detect stack and agents, write the pack. Default:
+                                                the universal pack, no model subagents.
+                                                --crew: add scout/architect/builder/reviewer
+                                                  (--lean-subagents: Claude Code starts the
+                                                  read-only roles without AGENTS.md, v2.1.271+)
+                                                --ci / --no-ci: GitHub workflow that runs the gate
+                                                  (default: when the repo already has .github/)
+                                                --no-index: do not run \`graphify update .\`
+                                                --claude-plugin: Claude Code gets only what a
+                                                plugin cannot ship; install \`helix plugin\` output
   helix plugin --out <dir>                      write a Claude Code plugin marketplace (one plugin:
                                                 agents, skills, hooks, MCP) to <dir>
   helix doctor [dir]                            check the installed harness
@@ -71,6 +79,10 @@ function parseArgs(argv) {
     force: false,
     out: null,
     claudePlugin: false,
+    crew: false,
+    leanSubagents: false,
+    ci: null,
+    index: true,
     help: false,
     platform: null,
     evalArgs: [],
@@ -88,6 +100,11 @@ function parseArgs(argv) {
     else if (cmd === "learn") opts.learnArgs.push(a);
     else if (a === "--force") opts.force = true;
     else if (a === "--claude-plugin") opts.claudePlugin = true;
+    else if (a === "--crew") opts.crew = true;
+    else if (a === "--lean-subagents") opts.leanSubagents = true;
+    else if (a === "--ci") opts.ci = true;
+    else if (a === "--no-ci") opts.ci = false;
+    else if (a === "--no-index") opts.index = false;
     else if (a === "--out" && cmd === "plugin") opts.out = rest[++i] ?? null;
     else if (a.startsWith("--out=") && cmd === "plugin") opts.out = a.slice("--out=".length);
     else if (a === "--platform" && cmd === "export") opts.platform = rest[++i];
@@ -232,6 +249,42 @@ async function cmdInit(opts) {
     },
   };
   if (!checkPlatforms(config.platforms)) return;
+  // The universal pack is the default: subagents cost tokens on every task and no recorded run
+  // has shown them paying for it (docs/DECISIONS.md, F7). Ask for them with --crew.
+  if (!opts.crew) config.crew = [];
+  if (opts.leanSubagents) {
+    if (opts.crew) config.leanSubagents = true;
+    else
+      console.log("note: --lean-subagents has no effect without --crew (no subagents installed)");
+  }
+  if (
+    opts.ci === true ||
+    (opts.ci !== false && [...files.keys()].some((p) => p.startsWith(".github/")))
+  ) {
+    config.ci = "github";
+  }
+  // Graph-first is only true once an index exists: build it now (opt out with --no-index) or
+  // fall back to the built-in outline, so a fresh pack never tells agents to query a graph
+  // that is not there.
+  if (config.graphFirst && readText(join(dir, "graphify-out/GRAPH_REPORT.md")) === null) {
+    let indexed = false;
+    if (opts.index) {
+      console.log("graphify: no index yet, running `graphify update .` (skip with --no-index)");
+      const r = spawnSync("graphify", ["update", "."], {
+        cwd: dir,
+        stdio: "ignore",
+        timeout: 600_000,
+      });
+      indexed = r.status === 0 && readText(join(dir, "graphify-out/GRAPH_REPORT.md")) !== null;
+    }
+    if (!indexed) {
+      config.mcps = config.mcps.filter((id) => id !== "graphify");
+      config.graphFirst = false;
+      console.log(
+        "graphify: no usable index, using the built-in outline map. Run `graphify update .` then `helix init --force` to switch.",
+      );
+    }
+  }
   if (opts.claudePlugin) {
     config.claudePlugin = true;
     if (!config.platforms.includes("claude-code")) {
@@ -250,6 +303,9 @@ async function cmdInit(opts) {
     console.error(`helix init: ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 2;
     return;
+  }
+  if (config.ci && !pack.some((f) => f.path === ".github/workflows/helix-gate.yml")) {
+    console.log("ci: skipped (the workflow needs a Node stack with npm, pnpm or yarn)");
   }
   // Fail closed: a pack with any unsafe destination (bad path, or a symlink that
   // leaves the target) is rejected whole, before a single byte is written.

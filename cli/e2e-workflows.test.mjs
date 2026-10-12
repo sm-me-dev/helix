@@ -5,12 +5,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { execSync, spawnSync } from "node:child_process";
-import {
-  mkdtempSync,
-  writeFileSync,
-  readFileSync,
-  existsSync,
-} from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { nodeOnlyBin } from "./test-env.mjs";
@@ -118,10 +113,17 @@ describe("helix core workflows", () => {
     // configurator all share generatePack, never separate approximations.
     // (AGENTS.md alone differs: init embeds the detected stack commands.)
     const dir = scratch();
-    for (let i = 0; i < 25; i++) writeFileSync(join(dir, `mod${i}.ts`), `export const v${i} = ${i};\n`);
+    for (let i = 0; i < 25; i++)
+      writeFileSync(join(dir, `mod${i}.ts`), `export const v${i} = ${i};\n`);
     writeFileSync(join(dir, "App.tsx"), "export default function App() { return null; }\n");
     const bin = mkdtempSync(join(tmpdir(), "helix-bin-"));
-    writeFileSync(join(bin, "graphify"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    // The fake builds the index like the real one, so init keeps graph-first (it now falls
+    // back to the outline map when `graphify update .` produces no report).
+    writeFileSync(
+      join(bin, "graphify"),
+      '#!/bin/sh\nif [ "$1" = "update" ]; then /bin/mkdir -p graphify-out; echo \'Built from commit: `abc`\' > graphify-out/GRAPH_REPORT.md; fi\nexit 0\n',
+      { mode: 0o755 },
+    );
     const r = helix(dir, ["init", "--platform", "claude-code"], {
       PATH: `${nodeOnlyBin()}:${bin}`,
     });
