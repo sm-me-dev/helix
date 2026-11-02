@@ -12,6 +12,13 @@ import {
 import { DefaultContextManager } from "./context.ts";
 import { DefaultObservabilityCollector } from "./observability.ts";
 import { MockAgentRunner } from "./runner.ts";
+import {
+  getDefaultPermissionsForRole,
+  scanSecrets,
+  SecurityAuditLogger,
+  WorkspaceConflictError,
+  WorkspaceLockManager,
+} from "./security.ts";
 import { FileExecutionStateManager } from "./state.ts";
 import { DEFAULT_FORBIDDEN_PATHS } from "./task.ts";
 import {
@@ -553,6 +560,21 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
 
     const rawOutput = (agentOutput.stdout || agentOutput.stderr || "").trim();
 
+    // Check for secrets exposed in diff
+    const secretScan = scanSecrets(diff);
+    if (secretScan.hasSecrets) {
+      return {
+        verdict: "FAIL",
+        summary: `Diff introduces exposed secrets or credentials: ${secretScan.findings.map((f) => f.type).join(", ")}`,
+        evidence: secretScan.findings.map((f) => ({
+          file: "diff",
+          line: f.line,
+          issue: `Exposed secret detected: ${f.type}`,
+        })),
+        rawOutput,
+      };
+    }
+
     // Check for forbidden paths touched in diff
     for (const forbidden of DEFAULT_FORBIDDEN_PATHS) {
       if (diff.includes(forbidden.replace("*", ""))) {
@@ -631,6 +653,7 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
     allowParallel: boolean,
   ): Promise<TaskResult> {
     const obs = new DefaultObservabilityCollector();
+    const securityAuditLogger = new SecurityAuditLogger(task.id);
     const stateManager = new FileExecutionStateManager(task.id, plan.tier, {
       onEvent: options.onEvent,
     });
@@ -771,6 +794,7 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
             obs,
             allocatedWorktrees,
             isParallel: allowParallel && batch.length > 1,
+            securityAuditLogger,
           });
         });
 
@@ -941,6 +965,7 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
 
       this.activeRuns.delete(task.id);
       this.runningSessions.delete(task.id);
+      obs.recordSecuritySummary?.(securityAuditLogger.getSummary());
       const metrics = await obs.generateReport(task.id);
 
       return {
@@ -978,6 +1003,7 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
 
       this.activeRuns.delete(task.id);
       this.runningSessions.delete(task.id);
+      obs.recordSecuritySummary?.(securityAuditLogger.getSummary());
       const metrics = await obs.generateReport(task.id);
 
       return {
@@ -1011,23 +1037,26 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
     obs: DefaultObservabilityCollector;
     allocatedWorktrees: Array<{ path: string; branch?: string }>;
     isParallel: boolean;
+    securityAuditLogger?: SecurityAuditLogger;
   }): Promise<StepExecutionOutcome> {
     const {
       task,
       step,
       integrationWorktree,
       currentHandoffCard,
+      options,
       stateManager,
       obs,
       allocatedWorktrees,
       isParallel,
+      securityAuditLogger,
     } = params;
 
     let stepWorktree = integrationWorktree;
     let stepBranch: string | undefined;
 
     // For parallel implementers, provision an isolated ephemeral worktree
-    if (isParallel && step.role.includes("implementer")) {
+    if (isParallel && step.role.includes("implementer") && options.isolatedWorktree !== false) {
       const provision = await this.worktreeManager.createWorktree(
         task.workspaceRoot,
         `${task.id}-${step.id}`,
@@ -1037,93 +1066,117 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
       allocatedWorktrees.push({ path: stepWorktree, branch: stepBranch });
     }
 
-    const sessionId = `${task.id}-${step.id}-${Date.now().toString(36)}`;
-    const sessionSet = this.runningSessions.get(task.id);
-    if (sessionSet) {
-      sessionSet.add(sessionId);
+    const lockOwner = `${task.id}-${step.id}`;
+    if (options.isolatedWorktree !== false) {
+      const acquired = WorkspaceLockManager.acquireLock(stepWorktree, lockOwner);
+      if (!acquired) {
+        const currentOwner = WorkspaceLockManager.getLockOwner(stepWorktree) || "unknown";
+        throw new WorkspaceConflictError(stepWorktree, currentOwner, lockOwner);
+      }
     }
 
-    await stateManager.recordEvent({
-      taskId: task.id,
-      type: "step_started",
-      workflowState: "implemented",
-      payload: { stepId: step.id, role: step.role, worktreePath: stepWorktree },
-    });
+    try {
+      const sessionId = `${task.id}-${step.id}-${Date.now().toString(36)}`;
+      const sessionSet = this.runningSessions.get(task.id);
+      if (sessionSet) {
+        sessionSet.add(sessionId);
+      }
 
-    // Step Prompt combines handoff card with step description
-    const stepPrompt = [
-      `HANDOFF CONTRACT (MAX 12 LINES):`,
-      currentHandoffCard.serializedText,
-      "",
-      `STEP ASSIGNMENT (${step.role.toUpperCase()}):`,
-      step.description,
-      step.targetFiles.length > 0 ? `Target Files: ${step.targetFiles.join(", ")}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
+      await stateManager.recordEvent({
+        taskId: task.id,
+        type: "step_started",
+        workflowState: "implemented",
+        payload: { stepId: step.id, role: step.role, worktreePath: stepWorktree },
+      });
 
-    const t0 = Date.now();
-    const agentOutput = await this.runner.run({
-      sessionId,
-      taskId: task.id,
-      role: step.role,
-      platform: this.runner.platform,
-      workdir: stepWorktree,
-      systemPrompt: `You are the ${step.role} agent in Helix. Work strictly within cited files.`,
-      messages: [
-        {
-          role: "user",
-          content: stepPrompt,
-          timestamp: new Date().toISOString(),
+      const stepPermissions = getDefaultPermissionsForRole(step.role);
+      securityAuditLogger?.log({
+        type: "permission_check",
+        severity: "info",
+        role: step.role,
+        message: `Assigned least-privilege boundary for step role '${step.role}'`,
+        details: { stepId: step.id, permissions: Array.from(stepPermissions.permissions) },
+      });
+
+      // Step Prompt combines handoff card with step description
+      const stepPrompt = [
+        `HANDOFF CONTRACT (MAX 12 LINES):`,
+        currentHandoffCard.serializedText,
+        "",
+        `STEP ASSIGNMENT (${step.role.toUpperCase()}):`,
+        step.description,
+        step.targetFiles.length > 0 ? `Target Files: ${step.targetFiles.join(", ")}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      const t0 = Date.now();
+      const agentOutput = await this.runner.run({
+        sessionId,
+        taskId: task.id,
+        role: step.role,
+        platform: this.runner.platform,
+        workdir: stepWorktree,
+        systemPrompt: `You are the ${step.role} agent in Helix. Work strictly within cited files.`,
+        messages: [
+          {
+            role: "user",
+            content: stepPrompt,
+            timestamp: new Date().toISOString(),
+          },
+        ],
+        timeoutSec: task.constraints.timeoutSec,
+      });
+
+      const durationMs = Date.now() - t0;
+      obs.recordAgentDuration(durationMs);
+      if (agentOutput.tokens) {
+        const usage = {
+          inputTokens: agentOutput.tokens.input,
+          outputTokens: agentOutput.tokens.output,
+          cacheReadTokens: agentOutput.tokens.cacheRead ?? 0,
+          totalTokens: agentOutput.tokens.input + agentOutput.tokens.output,
+        };
+        obs.recordTokenUsage(usage);
+        obs.recordRoleTokenUsage?.(step.role, usage);
+        // Context reuse benefit: 12-line handoff saves ~1,200 tokens over forwarding raw transcript
+        obs.recordContextReuse?.(1200);
+      }
+
+      const diffResult = await this.worktreeManager.extractDiff(stepWorktree);
+      const isSuccess = agentOutput.exitCode === 0 && !agentOutput.interrupted;
+      const status: StepExecutionStatus = isSuccess ? "completed" : "failed";
+
+      await stateManager.recordEvent({
+        taskId: task.id,
+        type: isSuccess ? "step_completed" : "step_failed",
+        workflowState: "implemented",
+        payload: {
+          stepId: step.id,
+          role: step.role,
+          exitCode: agentOutput.exitCode,
+          affectedFiles: diffResult.affectedFiles,
         },
-      ],
-      timeoutSec: task.constraints.timeoutSec,
-    });
+      });
 
-    const durationMs = Date.now() - t0;
-    obs.recordAgentDuration(durationMs);
-    if (agentOutput.tokens) {
-      const usage = {
-        inputTokens: agentOutput.tokens.input,
-        outputTokens: agentOutput.tokens.output,
-        cacheReadTokens: agentOutput.tokens.cacheRead ?? 0,
-        totalTokens: agentOutput.tokens.input + agentOutput.tokens.output,
-      };
-      obs.recordTokenUsage(usage);
-      obs.recordRoleTokenUsage?.(step.role, usage);
-      // Context reuse benefit: 12-line handoff saves ~1,200 tokens over forwarding raw transcript
-      obs.recordContextReuse?.(1200);
-    }
-
-    const diffResult = await this.worktreeManager.extractDiff(stepWorktree);
-    const isSuccess = agentOutput.exitCode === 0 && !agentOutput.interrupted;
-    const status: StepExecutionStatus = isSuccess ? "completed" : "failed";
-
-    await stateManager.recordEvent({
-      taskId: task.id,
-      type: isSuccess ? "step_completed" : "step_failed",
-      workflowState: "implemented",
-      payload: {
+      return {
         stepId: step.id,
         role: step.role,
-        exitCode: agentOutput.exitCode,
+        status,
+        worktreePath: stepWorktree,
+        branchName: stepBranch,
+        diff: diffResult.diff,
         affectedFiles: diffResult.affectedFiles,
-      },
-    });
-
-    return {
-      stepId: step.id,
-      role: step.role,
-      status,
-      worktreePath: stepWorktree,
-      branchName: stepBranch,
-      diff: diffResult.diff,
-      affectedFiles: diffResult.affectedFiles,
-      stdout: agentOutput.stdout,
-      stderr: agentOutput.stderr,
-      durationMs,
-      tokens: agentOutput.tokens,
-      error: isSuccess ? undefined : agentOutput.stderr || "Step execution failed",
-    };
+        stdout: agentOutput.stdout,
+        stderr: agentOutput.stderr,
+        durationMs,
+        tokens: agentOutput.tokens,
+        error: isSuccess ? undefined : agentOutput.stderr || "Step execution failed",
+      };
+    } finally {
+      if (options.isolatedWorktree !== false) {
+        WorkspaceLockManager.releaseLock(stepWorktree, lockOwner);
+      }
+    }
   }
 }

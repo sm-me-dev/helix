@@ -5,6 +5,12 @@ import { DefaultObservabilityCollector } from "./observability.ts";
 import { DefaultAgentOrchestrator } from "./orchestrator.ts";
 import { DefaultRepositoryRetriever } from "./retrieval.ts";
 import { MockAgentRunner } from "./runner.ts";
+import {
+  getDefaultPermissionsForRole,
+  SecurityAuditLogger,
+  WorkspaceConflictError,
+  WorkspaceLockManager,
+} from "./security.ts";
 import { FileExecutionStateManager } from "./state.ts";
 import { DefaultTaskPlanner, normalizeTaskDefinition } from "./task.ts";
 import { DefaultToolExecutor } from "./tools.ts";
@@ -268,6 +274,21 @@ export class HelixExecutionEngine implements HelixEngine {
     const budgetManager = new TokenBudgetManager(
       task.constraints.maxTokens ? { totalTaskMaxTokens: task.constraints.maxTokens } : undefined,
     );
+
+    const lockAcquired = WorkspaceLockManager.acquireLock(worktreePath, task.id);
+    if (!lockAcquired) {
+      const currentOwner = WorkspaceLockManager.getLockOwner(worktreePath) || "unknown";
+      throw new WorkspaceConflictError(worktreePath, currentOwner, task.id);
+    }
+    const auditLogger = new SecurityAuditLogger(task.id);
+    const permissions = getDefaultPermissionsForRole("single-agent");
+    auditLogger.log({
+      type: "permission_check",
+      severity: "info",
+      role: "single-agent",
+      message: "Initialized single-agent permission boundary",
+      details: { permissions: Array.from(permissions.permissions) },
+    });
 
     try {
       while (retryCount <= maxRetries) {
@@ -587,6 +608,8 @@ export class HelixExecutionEngine implements HelixEngine {
         },
       };
     } finally {
+      WorkspaceLockManager.releaseLock(worktreePath, task.id);
+      obs.recordSecuritySummary?.(auditLogger.getSummary());
       this.activeRuns.delete(task.id);
     }
   }

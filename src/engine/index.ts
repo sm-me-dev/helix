@@ -3,6 +3,7 @@ export * from "./types.ts";
 export * from "./task.ts";
 export * from "./state.ts";
 export * from "./tools.ts";
+export * from "./security.ts";
 export * from "./worktree.ts";
 export * from "./validator.ts";
 export * from "./retrieval.ts";

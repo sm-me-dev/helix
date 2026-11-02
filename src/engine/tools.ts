@@ -1,103 +1,30 @@
-// Helix Tool Execution & Security Confinement (Phase 03)
+// Helix Tool Execution & Security Confinement (Phases 03 & 06)
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { isInside } from "../../cli/safe-write.ts";
-import type { ToolExecutionContext, ToolExecutionResult, ToolExecutor } from "./types.ts";
+import {
+  CommandSecurityInspector,
+  DangerousCommandError,
+  isForbidden,
+  isTamperProtected,
+  redactSecrets,
+  resolveSafePath,
+  sanitizeEnvironment,
+  SecurityGuard,
+  SENSITIVE_PATTERNS,
+  ToolArgumentValidationError,
+  ToolSecurityError,
+  validateToolArguments,
+} from "./security.ts";
+import type {
+  CommandClassificationResult,
+  ToolExecutionContext,
+  ToolExecutionResult,
+  ToolExecutor,
+} from "./types.ts";
 
-export class ToolSecurityError extends Error {
-  public readonly violatedPath?: string;
-
-  constructor(message: string, violatedPath?: string) {
-    super(`Tool security violation: ${message}${violatedPath ? ` (${violatedPath})` : ""}`);
-    this.name = "ToolSecurityError";
-    this.violatedPath = violatedPath;
-  }
-}
-
-export const SENSITIVE_PATTERNS = [
-  /(?:^|[/\\])\.env(?:\..+)?$/i,
-  /(?:^|[/\\])secrets[/\\]/i,
-  /(?:^|[/\\])\.git[/\\]/i,
-  /(?:^|[/\\])\.ssh[/\\]/i,
-  /(?:^|[/\\])\.aws[/\\]/i,
-  /\.(?:pem|key|pfx|pkcs12)$/i,
-];
-
-/**
- * Checks whether a relative or absolute path violates forbidden patterns or sensitive lists.
- */
-export function isForbidden(targetPath: string, customForbidden: string[] = []): boolean {
-  const normalized = targetPath.replace(/\\/g, "/");
-
-  for (const re of SENSITIVE_PATTERNS) {
-    if (re.test(normalized)) return true;
-  }
-
-  for (const pattern of customForbidden) {
-    const cleanPattern = pattern.replace(/\\/g, "/");
-    if (cleanPattern.endsWith("/")) {
-      if (
-        normalized === cleanPattern.slice(0, -1) ||
-        normalized.startsWith(cleanPattern) ||
-        normalized.includes("/" + cleanPattern)
-      ) {
-        return true;
-      }
-    } else if (cleanPattern.includes("*")) {
-      const regexStr = "^" + cleanPattern.replace(/\./g, "\\.").replace(/\*/g, ".*") + "$";
-      if (new RegExp(regexStr).test(path.basename(normalized))) {
-        return true;
-      }
-    } else {
-      if (
-        normalized === cleanPattern ||
-        normalized.endsWith("/" + cleanPattern) ||
-        normalized.startsWith(cleanPattern + "/")
-      ) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-}
-
-/**
- * Resolves and validates that the candidate path is strictly contained within root.
- */
-export function resolveSafePath(
-  workspaceRoot: string,
-  candidatePath: string,
-  forbidden: string[] = [],
-): string {
-  const rootReal = fs.existsSync(workspaceRoot)
-    ? fs.realpathSync(workspaceRoot)
-    : path.resolve(workspaceRoot);
-
-  const resolved = path.isAbsolute(candidatePath)
-    ? path.resolve(candidatePath)
-    : path.resolve(rootReal, candidatePath);
-
-  // Containment check
-  if (!isInside(rootReal, resolved)) {
-    throw new ToolSecurityError(
-      `Access denied: path escapes workspace root [${rootReal}]`,
-      candidatePath,
-    );
-  }
-
-  // Deny-list check
-  const rel = path.relative(rootReal, resolved);
-  if (isForbidden(rel, forbidden)) {
-    throw new ToolSecurityError(
-      "Access denied: path matches forbidden pattern or security boundary",
-      candidatePath,
-    );
-  }
-
-  return resolved;
-}
+// Re-export core security helpers from security.ts for backward compatibility
+export { ToolSecurityError, SENSITIVE_PATTERNS, isForbidden, isTamperProtected, resolveSafePath };
 
 export type CachedFileRead = {
   content: string;
@@ -109,6 +36,11 @@ export type CachedFileRead = {
 export class DefaultToolExecutor implements ToolExecutor {
   private fileReadCache = new Map<string, CachedFileRead>();
   private repeatedReadCount = 0;
+  private readonly defaultSecurityGuard: SecurityGuard;
+
+  constructor(securityGuard?: SecurityGuard) {
+    this.defaultSecurityGuard = securityGuard || new SecurityGuard();
+  }
 
   getRepeatedReadCount(): number {
     return this.repeatedReadCount;
@@ -119,16 +51,77 @@ export class DefaultToolExecutor implements ToolExecutor {
     this.repeatedReadCount = 0;
   }
 
+  getSecurityGuard(): SecurityGuard {
+    return this.defaultSecurityGuard;
+  }
+
   async executeCommand(
     command: string,
     context: ToolExecutionContext,
   ): Promise<ToolExecutionResult> {
     const t0 = Date.now();
+    const guard = this.defaultSecurityGuard;
+    const auditLogger = context.auditLogger || guard.getAuditLogger();
     const timeoutMs = context.timeoutMs > 0 ? context.timeoutMs : 30000;
     const maxBytes = context.maxOutputBytes > 0 ? context.maxOutputBytes : 4096;
 
-    // Check if command references sensitive system directories
+    // 1. Argument validation
+    if (context.validateArguments !== false) {
+      try {
+        validateToolArguments("executeCommand", { command }, context.permissions);
+      } catch (err) {
+        auditLogger.log({
+          type: "argument_validation",
+          severity: "violation",
+          role: context.role,
+          message: err instanceof Error ? err.message : String(err),
+          details: { command },
+        });
+        return {
+          exitCode: 1,
+          output: `Command blocked by security policy: ${err instanceof Error ? err.message : String(err)}`,
+          truncated: false,
+          durationMs: 0,
+          error: "SecurityViolation",
+        };
+      }
+    }
+
+    // 2. Command Security & Permission Boundary Inspection
+    let _inspection: CommandClassificationResult;
+    try {
+      _inspection = CommandSecurityInspector.assertCommandPermitted(
+        command,
+        context.permissions,
+        context.role,
+      );
+    } catch (err) {
+      auditLogger.log({
+        type:
+          err instanceof DangerousCommandError ? "dangerous_command_blocked" : "permission_check",
+        severity: "violation",
+        role: context.role,
+        message: err instanceof Error ? err.message : String(err),
+        details: { command },
+      });
+      return {
+        exitCode: 1,
+        output: `Command blocked by security policy: ${err instanceof Error ? err.message : String(err)}`,
+        truncated: false,
+        durationMs: 0,
+        error: "SecurityViolation",
+      };
+    }
+
+    // Check system directory access (retaining Phase 03 credentials check)
     if (/\b(~|\$HOME)\/(\.ssh|\.aws|\.gnupg)\b/.test(command)) {
+      auditLogger.log({
+        type: "forbidden_path_access",
+        severity: "violation",
+        role: context.role,
+        message: "Command references sensitive system directories",
+        details: { command },
+      });
       return {
         exitCode: 1,
         output: "Command blocked by security policy: access to sensitive credentials detected",
@@ -137,6 +130,13 @@ export class DefaultToolExecutor implements ToolExecutor {
         error: "SecurityViolation",
       };
     }
+
+    // 3. Environment Variable Sanitization
+    const sanitizedEnv = sanitizeEnvironment(
+      { ...process.env, ...context.environmentVariables },
+      [],
+      context.networkPolicy || context.permissions?.networkPolicy || "none",
+    );
 
     return new Promise((resolve) => {
       let stdoutFull = "";
@@ -156,13 +156,20 @@ export class DefaultToolExecutor implements ToolExecutor {
       const proc = spawn(command, {
         shell: true,
         cwd: context.workspaceRoot,
-        env: { ...process.env, ...context.environmentVariables },
+        env: sanitizedEnv,
         stdio: ["ignore", "pipe", "pipe"],
         detached: isPosix,
       });
 
       const timer = setTimeout(() => {
         killed = true;
+        auditLogger.log({
+          type: "execution_limit_exceeded",
+          severity: "warning",
+          role: context.role,
+          message: `Command timed out after ${timeoutMs}ms: ${command}`,
+          details: { command, timeoutMs },
+        });
         try {
           if (isPosix && proc.pid) {
             process.kill(-proc.pid, "SIGKILL");
@@ -240,6 +247,21 @@ export class DefaultToolExecutor implements ToolExecutor {
 
         const truncated = outRes.wasTruncated || errRes.wasTruncated;
 
+        // Secret redaction filter on output
+        if (context.redactSecrets !== false) {
+          const redacted = redactSecrets(output);
+          if (redacted.count > 0) {
+            auditLogger.log({
+              type: "secret_redacted",
+              severity: "warning",
+              role: context.role,
+              message: `Redacted ${redacted.count} secret(s) from command output`,
+              details: { command, count: redacted.count, types: redacted.types },
+            });
+            output = redacted.text;
+          }
+        }
+
         if (killed) {
           resolve({
             exitCode: 124,
@@ -270,6 +292,17 @@ export class DefaultToolExecutor implements ToolExecutor {
     context?: ToolExecutionContext,
   ): Promise<string> {
     const root = context?.workspaceRoot || process.cwd();
+    const guard = this.defaultSecurityGuard;
+    const auditLogger = context?.auditLogger || guard.getAuditLogger();
+
+    // 1. Permission check
+    guard.assertPermission("readFile", context?.permissions, context?.role);
+
+    // 2. Argument validation
+    if (context?.validateArguments !== false) {
+      validateToolArguments("readFile", { filePath, startLine, endLine }, context?.permissions);
+    }
+
     const safePath = resolveSafePath(root, filePath, context?.forbiddenPaths);
 
     if (!fs.existsSync(safePath)) {
@@ -281,6 +314,16 @@ export class DefaultToolExecutor implements ToolExecutor {
       throw new Error(`Path is not a regular file: ${filePath}`);
     }
 
+    // 3. File size limit
+    const maxFileSize = context?.permissions?.maxFileSizeBytes || 10 * 1024 * 1024;
+    if (stat.size > maxFileSize) {
+      throw new ToolArgumentValidationError(
+        "readFile",
+        "filePath",
+        `File size (${stat.size} bytes) exceeds maximum allowable limit (${maxFileSize} bytes)`,
+      );
+    }
+
     const cacheKey = `${safePath}:${stat.mtimeMs}:${stat.size}:${startLine ?? 1}:${endLine ?? -1}`;
     const cached = this.fileReadCache.get(cacheKey);
     if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
@@ -289,9 +332,24 @@ export class DefaultToolExecutor implements ToolExecutor {
       return cached.content;
     }
 
-    const content = fs.readFileSync(safePath, "utf8");
-    let result: string;
+    let content = fs.readFileSync(safePath, "utf8");
 
+    // Redact secrets if requested
+    if (context?.redactSecrets) {
+      const red = redactSecrets(content);
+      if (red.count > 0) {
+        auditLogger.log({
+          type: "secret_redacted",
+          severity: "warning",
+          role: context?.role,
+          message: `Redacted ${red.count} secret(s) during file read of ${filePath}`,
+          details: { filePath, count: red.count, types: red.types },
+        });
+        content = red.text;
+      }
+    }
+
+    let result: string;
     if (startLine !== undefined || endLine !== undefined) {
       const lines = content.split("\n");
       const start = Math.max(1, startLine ?? 1) - 1;
@@ -327,6 +385,17 @@ export class DefaultToolExecutor implements ToolExecutor {
   ): Promise<ToolExecutionResult> {
     const t0 = Date.now();
     const root = context?.workspaceRoot || process.cwd();
+    const guard = this.defaultSecurityGuard;
+    const auditLogger = context?.auditLogger || guard.getAuditLogger();
+
+    // 1. Permission check
+    guard.assertPermission("writeFile", context?.permissions, context?.role);
+
+    // 2. Argument validation
+    if (context?.validateArguments !== false) {
+      validateToolArguments("writeFile", { filePath, content }, context?.permissions);
+    }
+
     const safePath = resolveSafePath(root, filePath, context?.forbiddenPaths);
 
     try {
@@ -345,6 +414,14 @@ export class DefaultToolExecutor implements ToolExecutor {
           this.fileReadCache.delete(key);
         }
       }
+
+      auditLogger.log({
+        type: "argument_validation",
+        severity: "info",
+        role: context?.role,
+        message: `Successfully wrote ${Buffer.byteLength(content, "utf8")} bytes to ${filePath}`,
+        details: { filePath, bytes: Buffer.byteLength(content, "utf8") },
+      });
 
       return {
         exitCode: 0,

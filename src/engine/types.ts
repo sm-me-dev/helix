@@ -257,6 +257,111 @@ export interface ModelProvider {
 // 6. Tool Execution Interface & Confinement
 // ============================================================================
 
+export type ToolPermissionName =
+  "readFile" | "writeFile" | "runTests" | "executeCommand" | "network" | "git" | "externalService";
+
+export type NetworkPolicy = "none" | "localhost-only" | "allowlist" | "unrestricted";
+
+export type PermissionBoundary = {
+  permissions: Set<ToolPermissionName> | ToolPermissionName[];
+  allowedPaths?: string[];
+  forbiddenPaths?: string[];
+  allowedCommands?: string[];
+  forbiddenCommands?: string[];
+  networkPolicy?: NetworkPolicy;
+  allowedHosts?: string[];
+  maxCommandTimeoutMs?: number;
+  maxOutputBytes?: number;
+  maxFileSizeBytes?: number;
+  allowDestructive?: boolean;
+};
+
+export type CommandCategory =
+  "read-only" | "test" | "build" | "git" | "network" | "mutation" | "dangerous" | "arbitrary";
+
+export type CommandClassificationResult = {
+  category: CommandCategory;
+  isDangerous: boolean;
+  requiresNetwork: boolean;
+  isTestCommand: boolean;
+  dangerReason?: string;
+};
+
+export type SecuritySeverity = "info" | "warning" | "violation";
+
+export type SecurityEventType =
+  | "permission_check"
+  | "argument_validation"
+  | "path_escape_attempt"
+  | "forbidden_path_access"
+  | "dangerous_command_blocked"
+  | "command_classification"
+  | "network_violation"
+  | "secret_detected"
+  | "secret_redacted"
+  | "prompt_injection_detected"
+  | "workspace_lock_conflict"
+  | "execution_limit_exceeded";
+
+export type SecurityAuditEvent = {
+  id: string;
+  timestamp: string;
+  type: SecurityEventType;
+  severity: SecuritySeverity;
+  role?: string;
+  taskId?: string;
+  details: Record<string, unknown>;
+  message: string;
+};
+
+export type SecurityAuditSummary = {
+  totalEvents: number;
+  violationsCount: number;
+  warningsCount: number;
+  secretsDetectedCount: number;
+  secretsRedactedCount: number;
+  dangerousCommandsBlocked: number;
+  promptInjectionsDetected: number;
+  networkViolationsCount: number;
+  hasViolations: boolean;
+};
+
+export interface SecurityAuditLoggerInterface {
+  log(params: {
+    type: SecurityEventType;
+    severity: SecuritySeverity;
+    message: string;
+    role?: string;
+    details?: Record<string, unknown>;
+  }): SecurityAuditEvent;
+  getEvents(): SecurityAuditEvent[];
+  getViolations(): SecurityAuditEvent[];
+  hasViolations(): boolean;
+  getSummary(): SecurityAuditSummary;
+}
+
+export type UntrustedContentOptions = {
+  source: string;
+  integrity?: "untrusted" | "verified";
+  scanPromptInjection?: boolean;
+  sanitizeDelimiters?: boolean;
+};
+
+export type PromptInjectionDetectionResult = {
+  detected: boolean;
+  patterns: string[];
+  neutralizedText: string;
+};
+
+export type SecretDetectionResult = {
+  hasSecrets: boolean;
+  findings: Array<{
+    type: string;
+    line?: number;
+    matchedPattern: string;
+  }>;
+};
+
 export type ToolExecutionResult = {
   exitCode: number;
   output: string;
@@ -271,6 +376,12 @@ export type ToolExecutionContext = {
   forbiddenPaths: string[];
   maxOutputBytes: number;
   timeoutMs: number;
+  role?: AgentRole;
+  permissions?: PermissionBoundary;
+  networkPolicy?: NetworkPolicy;
+  validateArguments?: boolean;
+  redactSecrets?: boolean;
+  auditLogger?: SecurityAuditLoggerInterface;
 };
 
 export interface ToolExecutor {
@@ -344,6 +455,8 @@ export type ContextAssemblyOptions = {
   includeInterfaces?: boolean;
   includeTests?: boolean;
   role?: AgentRole;
+  wrapUntrusted?: boolean;
+  scanPromptInjection?: boolean;
 };
 
 export type AssembledContext = {
@@ -352,6 +465,7 @@ export type AssembledContext = {
   tokenCount: number;
   budgetRemaining: number;
   includedReferences: string[];
+  securityWarnings?: string[];
   layerBreakdown?: {
     systemTokens: number;
     contractTokens: number;
@@ -630,6 +744,7 @@ export type RunMetrics = {
     tokensByRole: Record<string, TokenUsage>;
     tokensPerSuccessfulTask: number;
   };
+  security?: SecurityAuditSummary;
 };
 
 export interface ObservabilityCollector {
@@ -640,6 +755,8 @@ export interface ObservabilityCollector {
   recordRoleTokenUsage?(role: string, usage: TokenUsage): void;
   recordContextReuse?(tokensSaved: number): void;
   recordCompaction?(): void;
+  recordSecurityEvent?(event: SecurityAuditEvent): void;
+  recordSecuritySummary?(summary: SecurityAuditSummary): void;
   /** Finalize and generate complete run report. */
   generateReport(taskId: string): Promise<RunMetrics>;
 }

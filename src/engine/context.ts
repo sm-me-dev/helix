@@ -1,5 +1,6 @@
 // Helix Context Manager, Progressive Disclosure & Token Optimization (Phase 05 - Component 7)
 import { countTokens } from "../measure.ts";
+import { UntrustedContentHandler } from "./security.ts";
 import type {
   AgentMessage,
   AgentRole,
@@ -377,6 +378,7 @@ export class DefaultContextManager implements ContextManager {
     options?: ContextAssemblyOptions,
   ): Promise<AssembledContext> {
     const includedReferences: string[] = [];
+    const securityWarnings: string[] = [];
     let systemTokens = 0;
     let contractTokens = 0;
     let repoStructureTokens = 0;
@@ -492,11 +494,26 @@ export class DefaultContextManager implements ContextManager {
       if (citedExcerpts.length > 0) {
         const excerptLines = ["", "## Cited Repository Excerpts"];
         for (const ex of citedExcerpts) {
+          let excerptBody = ex.content;
+          if (options.scanPromptInjection !== false) {
+            const injection = UntrustedContentHandler.detectPromptInjection(excerptBody);
+            if (injection.detected) {
+              securityWarnings.push(
+                `Prompt injection signature detected in ${ex.filePath}: ${injection.patterns.join(", ")}`,
+              );
+              excerptBody = injection.neutralizedText;
+            }
+          }
+          if (options.wrapUntrusted) {
+            excerptBody = UntrustedContentHandler.wrapUntrustedContent(excerptBody, {
+              source: `${ex.filePath}:L${ex.startLine}-L${ex.endLine}`,
+              integrity: "untrusted",
+              scanPromptInjection: false,
+            });
+          }
           excerptLines.push(
             `### ${ex.filePath} (L${ex.startLine}-L${ex.endLine}) - ${ex.relevanceReason}`,
-            "```ts",
-            ex.content,
-            "```",
+            options.wrapUntrusted ? excerptBody : ["```ts", excerptBody, "```"].join("\n"),
           );
           if (!includedReferences.includes(ex.filePath)) {
             includedReferences.push(ex.filePath);
@@ -537,6 +554,14 @@ export class DefaultContextManager implements ContextManager {
       }
     }
 
+    if (securityWarnings.length > 0) {
+      taskPromptLines.unshift(
+        "## Security Notice (Untrusted Repository Content)",
+        ...securityWarnings.map((w) => `> [!WARNING] ${w}`),
+        "",
+      );
+    }
+
     const taskPrompt = taskPromptLines.join("\n");
     const totalTokens = countTokens(systemPrompt) + countTokens(taskPrompt);
     const budgetRemaining = Math.max(0, this.budget.totalPromptMaxTokens - totalTokens);
@@ -547,6 +572,7 @@ export class DefaultContextManager implements ContextManager {
       tokenCount: totalTokens,
       budgetRemaining,
       includedReferences,
+      securityWarnings: securityWarnings.length > 0 ? securityWarnings : undefined,
       layerBreakdown: {
         systemTokens,
         contractTokens,

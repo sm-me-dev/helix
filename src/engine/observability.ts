@@ -1,7 +1,13 @@
 // Helix Observability & Telemetry Collector (Phase 03 - Component 12)
 import fs from "node:fs";
 import path from "node:path";
-import type { ObservabilityCollector, RunMetrics, TokenUsage } from "./types.ts";
+import type {
+  ObservabilityCollector,
+  RunMetrics,
+  SecurityAuditEvent,
+  SecurityAuditSummary,
+  TokenUsage,
+} from "./types.ts";
 
 export type ObservabilityCollectorOptions = {
   reportOutputDir?: string;
@@ -25,6 +31,8 @@ export class DefaultObservabilityCollector implements ObservabilityCollector {
   private roleTokens = new Map<string, TokenUsage>();
   private contextReuseTokens = 0;
   private compactionCount = 0;
+  private securityEvents: SecurityAuditEvent[] = [];
+  private securitySummary?: SecurityAuditSummary;
 
   constructor(options: ObservabilityCollectorOptions = {}) {
     this.reportOutputDir = options.reportOutputDir
@@ -67,6 +75,14 @@ export class DefaultObservabilityCollector implements ObservabilityCollector {
 
   recordCompaction(): void {
     this.compactionCount++;
+  }
+
+  recordSecurityEvent(event: SecurityAuditEvent): void {
+    this.securityEvents.push(event);
+  }
+
+  recordSecuritySummary(summary: SecurityAuditSummary): void {
+    this.securitySummary = summary;
   }
 
   recordGateRun(durationMs: number, _passed: boolean): void {
@@ -121,6 +137,39 @@ export class DefaultObservabilityCollector implements ObservabilityCollector {
       tokensByRole[role] = { ...usage };
     }
 
+    let securitySummary = this.securitySummary;
+    if (!securitySummary && this.securityEvents.length > 0) {
+      let violationsCount = 0;
+      let warningsCount = 0;
+      let secretsDetectedCount = 0;
+      let secretsRedactedCount = 0;
+      let dangerousCommandsBlocked = 0;
+      let promptInjectionsDetected = 0;
+      let networkViolationsCount = 0;
+
+      for (const e of this.securityEvents) {
+        if (e.severity === "violation") violationsCount++;
+        if (e.severity === "warning") warningsCount++;
+        if (e.type === "secret_detected") secretsDetectedCount++;
+        if (e.type === "secret_redacted") secretsRedactedCount++;
+        if (e.type === "dangerous_command_blocked") dangerousCommandsBlocked++;
+        if (e.type === "prompt_injection_detected") promptInjectionsDetected++;
+        if (e.type === "network_violation") networkViolationsCount++;
+      }
+
+      securitySummary = {
+        totalEvents: this.securityEvents.length,
+        violationsCount,
+        warningsCount,
+        secretsDetectedCount,
+        secretsRedactedCount,
+        dangerousCommandsBlocked,
+        promptInjectionsDetected,
+        networkViolationsCount,
+        hasViolations: violationsCount > 0,
+      };
+    }
+
     const metrics: RunMetrics = {
       wallClockDurationMs,
       agentDurationMs: this.agentDurationMs,
@@ -148,6 +197,7 @@ export class DefaultObservabilityCollector implements ObservabilityCollector {
         tokensByRole,
         tokensPerSuccessfulTask: totalTokens,
       },
+      security: securitySummary,
     };
 
     // Save report to disk if directory exists or can be created
