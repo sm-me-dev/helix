@@ -16,6 +16,7 @@
   "files": [
     "cli/",
     "src/",
+    "fixtures/baseline/",
     "LICENSE",
     "README.md"
   ],

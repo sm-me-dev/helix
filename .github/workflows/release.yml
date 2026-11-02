@@ -46,7 +46,7 @@ jobs:
 
           # Create distribution staging directory
           mkdir -p dist/package
-          cp -r cli src package.json LICENSE README.md dist/package/
+          cp -r cli src fixtures package.json LICENSE README.md dist/package/
 
           # Create tar.gz and zip archives
           tar -czf "dist/helix-${TAG}.tar.gz" -C dist/package .
