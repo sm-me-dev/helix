@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Adaptive Project Knowledge System (APKS - Phase 11)**:
+  - **SQLite FTS5 Full-Text Indexing & Repository (`src/knowledge/`)**: Full-text and metadata indexing for codebases with BM25-backed ranking, incremental change tracking, and zero external binary dependencies.
+  - **Automated Project Discovery (`src/knowledge/discovery.ts`)**: Auto-generates structured canonical documentation in `.helix/knowledge/` (domains, architecture decisions, workflows, project profile).
+  - **Context Optimization & Retrieval (`src/knowledge/retriever.ts`, `src/knowledge/context-adapter.ts`)**: Adaptive knowledge injection adhering to strict token ceilings (≤600 tokens by default) with relevant snippets, decisions, and domain rules.
+  - **Knowledge Validation & Health Auditing (`src/knowledge/maintenance.ts`)**: Health scoring (0–100), broken internal link detection, stale entry detection, and auto-repair.
+  - **CLI Command Suite (`helix knowledge`)**: Subcommands for `init`, `index`, `search`, `status`, `validate`, and `export`.
+  - **Continuous Retrieval Benchmark (`src/knowledge/benchmark.ts`)**: Synthetic and query-based retrieval accuracy benchmarking.
 - **Cross-Platform Distribution & Zero-Clone Installation Architecture (Phase 10.1)**:
   - **Scoped Public npm Package (`@sm-me-dev/helix`)**: Built via automated transpilation (`scripts/build.mjs`) into standard ES modules in `dist/` avoiding type-stripping errors inside `node_modules`.
   - **Self-Contained Standalone Application Bundles (`scripts/build-bundles.mjs`)**: Portable bundles with embedded Node.js 22 LTS runtime across 5 targets (`linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`, `windows-x64`) requiring zero host Node installation.
