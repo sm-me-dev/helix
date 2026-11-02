@@ -459,6 +459,22 @@ export type ContextAssemblyOptions = {
   role?: AgentRole;
   wrapUntrusted?: boolean;
   scanPromptInjection?: boolean;
+  knowledgeRetriever?: {
+    retrieve(context: {
+      taskId: string;
+      prompt: string;
+      targetFiles?: string[];
+      changedPaths?: string[];
+      agentRole?: string;
+      tokenBudget?: number;
+    }): Promise<{
+      items: Array<{ item: { id: string; title: string; content: string } }>;
+      markdownSection: string;
+      totalEstimatedTokens: number;
+    }>;
+  };
+  enableProjectKnowledge?: boolean;
+  knowledgeTokenBudget?: number;
 };
 
 export type AssembledContext = {
@@ -472,9 +488,11 @@ export type AssembledContext = {
     systemTokens: number;
     contractTokens: number;
     repoStructureTokens: number;
+    knowledgeTokens?: number;
     citedExcerptsTokens: number;
     diagnosticTokens: number;
   };
+  projectKnowledgePackage?: unknown;
   citedExcerpts?: CitedExcerpt[];
   handoffCard?: HandoffCard;
 };

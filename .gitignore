@@ -82,3 +82,7 @@ graphify-out/
 
 # Helix implementation work & reports
 .helix-work/
+
+# Helix cache (SQLite indexes, ephemeral caches)
+.helix/cache/
+

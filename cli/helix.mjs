@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 import { GATE_SOURCE } from "../src/gate.ts";
 import { generatePack } from "../src/generate.ts";
 import { pluginPack } from "../src/plugin.ts";
+import { cmdKnowledge } from "./knowledge.ts";
 import { cmdLearn } from "./learn.ts";
 import { cmdRun } from "./run.ts";
 import { addRcBlock, installShim, isOnPath, rcFileFor, removeRcBlock, removeShim } from "./link.ts";
@@ -78,6 +79,8 @@ const USAGE = `helix — AI coding harness pack manager
                                                 and 5 strategies (--strategy, --category, --json)
   helix eval [options]                          run the eval harness (see evals/README.md)
   helix learn <sub> [dir] [flags]               Learning Ledger: opt-in, evidence-gated
+  helix knowledge <sub> [options]               Adaptive Project Knowledge System: discover,
+                                                index, search, retrieve, validate, audit
   helix link [--bin-dir <dir>] [--modify-rc|--no-modify-rc] [--force]
                                                 put a \`helix\` command on your PATH (a shim in
                                                 ~/.local/bin that points at this checkout)
@@ -107,6 +110,7 @@ function parseArgs(argv) {
     gateArgs: [],
     reportArgs: [],
     learnArgs: [],
+    knowledgeArgs: [],
     runArgs: [],
     binDir: null,
     modifyRc: null,
@@ -116,8 +120,14 @@ function parseArgs(argv) {
   const positional = [];
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
-    // eval, bench, and run have their own --help; every other command shows the shared usage.
-    if ((a === "--help" || a === "-h") && cmd !== "eval" && cmd !== "bench" && cmd !== "run")
+    // eval, bench, run, and knowledge have their own --help; every other command shows the shared usage.
+    if (
+      (a === "--help" || a === "-h") &&
+      cmd !== "eval" &&
+      cmd !== "bench" &&
+      cmd !== "run" &&
+      cmd !== "knowledge"
+    )
       opts.help = true;
     else if (a === "--version" || a === "-v") opts.version = true;
     else if (cmd === "bench") opts.benchArgs.push(a);
@@ -125,6 +135,7 @@ function parseArgs(argv) {
     else if (cmd === "gate" && a.startsWith("--")) opts.gateArgs.push(a);
     else if (cmd === "report") opts.reportArgs.push(a);
     else if (cmd === "learn") opts.learnArgs.push(a);
+    else if (cmd === "knowledge") opts.knowledgeArgs.push(a);
     else if (a === "--force") opts.force = true;
     else if (a === "--claude-plugin") opts.claudePlugin = true;
     else if (a === "--crew") opts.crew = true;
@@ -792,7 +803,9 @@ async function main() {
   else if (cmd === "report") await cmdReport(opts);
   else if (cmd === "export") cmdExport(opts);
   else if (cmd === "learn") await cmdLearn(opts.learnArgs);
-  else if (cmd === "run") await cmdRun(opts);
+  else if (cmd === "knowledge") {
+    process.exitCode = await cmdKnowledge(opts.knowledgeArgs);
+  } else if (cmd === "run") await cmdRun(opts);
   else if (cmd === "link") await cmdLink(opts);
   else if (cmd === "unlink") cmdUnlink(opts);
   else if (cmd === "ui") await cmdUi(opts);

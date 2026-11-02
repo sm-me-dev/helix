@@ -382,8 +382,10 @@ export class DefaultContextManager implements ContextManager {
     let systemTokens = 0;
     let contractTokens = 0;
     let repoStructureTokens = 0;
+    let knowledgeTokens = 0;
     let citedExcerptsTokens = 0;
     let diagnosticTokens = 0;
+    let projectKnowledgePackage: unknown = undefined;
 
     // --------------------------------------------------------------------------
     // Layer 0: System Instructions (Target budget: <= 300 tokens)
@@ -485,6 +487,37 @@ export class DefaultContextManager implements ContextManager {
     }
 
     // --------------------------------------------------------------------------
+    // Layer 2.5: Adaptive Project Knowledge System (APKS) Retrieval
+    // --------------------------------------------------------------------------
+    if (options?.knowledgeRetriever && options.enableProjectKnowledge !== false) {
+      try {
+        const pkg = await options.knowledgeRetriever.retrieve({
+          taskId: task.id,
+          prompt: task.prompt,
+          targetFiles: task.targetFiles,
+          changedPaths: options.recentDiff ? [options.recentDiff] : undefined,
+          agentRole: role,
+          tokenBudget: options.knowledgeTokenBudget || 1200,
+        });
+
+        if (pkg && pkg.items && pkg.items.length > 0) {
+          projectKnowledgePackage = pkg;
+          const kSection = "\n" + pkg.markdownSection;
+          knowledgeTokens = countTokens(kSection);
+          taskPromptLines.push(kSection);
+
+          for (const item of pkg.items) {
+            includedReferences.push(`knowledge:${item.item.id}`);
+          }
+        }
+      } catch (kErr) {
+        securityWarnings.push(
+          `Project knowledge retrieval degraded gracefully: ${kErr instanceof Error ? kErr.message : String(kErr)}`,
+        );
+      }
+    }
+
+    // --------------------------------------------------------------------------
     // Layer 3: Cited Line Excerpts (Target: <= 1,400 tokens)
     // --------------------------------------------------------------------------
     let citedExcerpts: CitedExcerpt[] | undefined;
@@ -577,9 +610,11 @@ export class DefaultContextManager implements ContextManager {
         systemTokens,
         contractTokens,
         repoStructureTokens,
+        knowledgeTokens,
         citedExcerptsTokens,
         diagnosticTokens,
       },
+      projectKnowledgePackage,
       citedExcerpts,
       handoffCard: options?.handoffCard,
     };
