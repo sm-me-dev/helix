@@ -3,6 +3,7 @@ import type { WorkflowState } from "../workflow.ts";
 import { DefaultContextManager, TokenBudgetManager } from "./context.ts";
 import { DefaultObservabilityCollector } from "./observability.ts";
 import { DefaultAgentOrchestrator } from "./orchestrator.ts";
+import { DefaultRepositoryRetriever } from "./retrieval.ts";
 import { MockAgentRunner } from "./runner.ts";
 import { FileExecutionStateManager } from "./state.ts";
 import { DefaultTaskPlanner, normalizeTaskDefinition } from "./task.ts";
@@ -260,6 +261,10 @@ export class HelixExecutionEngine implements HelixEngine {
     };
     let lastOutputStderr = "";
 
+    const retriever = new DefaultRepositoryRetriever({
+      workspaceRoot: worktreePath,
+      forbiddenPaths: task.constraints.forbiddenPaths,
+    });
     const budgetManager = new TokenBudgetManager(
       task.constraints.maxTokens ? { totalTaskMaxTokens: task.constraints.maxTokens } : undefined,
     );
@@ -289,8 +294,13 @@ export class HelixExecutionEngine implements HelixEngine {
           payload: { sessionId, retryCount, role: "single-agent" },
         });
 
-        // Assemble minimal progressive context
-        const assembled = await this.contextManager.assembleContext(task, plan, errorFeedback);
+        // Assemble minimal progressive context with semantic retrieval
+        const assembled = await this.contextManager.assembleContext(task, plan, errorFeedback, {
+          retriever,
+          includeInterfaces: true,
+          includeTests: true,
+          role: "single-agent",
+        });
 
         // Run agent
         const agentOutput = await this.runner.run({

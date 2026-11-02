@@ -5,6 +5,7 @@ export * from "./state.ts";
 export * from "./tools.ts";
 export * from "./worktree.ts";
 export * from "./validator.ts";
+export * from "./retrieval.ts";
 export * from "./context.ts";
 export * from "./runner.ts";
 export * from "./observability.ts";
