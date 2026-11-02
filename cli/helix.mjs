@@ -5,6 +5,7 @@ import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   accessSync,
   constants,
+  existsSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -22,6 +23,7 @@ import { pluginPack } from "../src/plugin.ts";
 import { cmdKnowledge } from "./knowledge.ts";
 import { cmdLearn } from "./learn.ts";
 import { cmdRun } from "./run.ts";
+import { cmdUpdate, cmdUninstall } from "./update.ts";
 import { addRcBlock, installShim, isOnPath, rcFileFor, removeRcBlock, removeShim } from "./link.ts";
 import { startUi } from "./ui.ts";
 import { DEFAULT_PLATFORMS, PLATFORM_BY_ID } from "../src/platforms.ts";
@@ -85,6 +87,8 @@ const USAGE = `helix — AI coding harness pack manager
                                                 put a \`helix\` command on your PATH (a shim in
                                                 ~/.local/bin that points at this checkout)
   helix unlink [--bin-dir <dir>]                remove the shim and the PATH line \`link\` added
+  helix update [--check]                        check for updates based on installation method
+  helix uninstall [--force]                     cleanly remove installation without touching user projects
   helix ui [dir] [--port <n>] [--open]          local web view (127.0.0.1 only, token-protected):
                                                 doctor, measure, gate, report, init
   helix --version, -v                           print version information
@@ -793,8 +797,25 @@ async function main() {
   const { cmd, opts } = parseArgs(process.argv.slice(2));
   if (opts.help || cmd === "--help" || cmd === "-h" || cmd === "help") process.stdout.write(USAGE);
   else if (cmd === "--version" || cmd === "-v" || cmd === "version" || opts.version) {
-    const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
-    process.stdout.write(`helix ${pkg.version || "0.9.0"}\n`);
+    let version = "0.9.1";
+    try {
+      const candidates = [
+        new URL("../package.json", import.meta.url),
+        new URL("../../package.json", import.meta.url),
+      ];
+      for (const u of candidates) {
+        if (existsSync(u)) {
+          const pkg = JSON.parse(readFileSync(u, "utf8"));
+          if (pkg.version) {
+            version = pkg.version;
+            break;
+          }
+        }
+      }
+    } catch {
+      // fallback
+    }
+    process.stdout.write(`helix ${version}\n`);
   } else if (cmd === "init") await cmdInit(opts);
   else if (cmd === "plugin") cmdPlugin(opts);
   else if (cmd === "doctor") cmdDoctor(opts);
@@ -808,6 +829,8 @@ async function main() {
   } else if (cmd === "run") await cmdRun(opts);
   else if (cmd === "link") await cmdLink(opts);
   else if (cmd === "unlink") cmdUnlink(opts);
+  else if (cmd === "update") await cmdUpdate(opts);
+  else if (cmd === "uninstall") await cmdUninstall(opts);
   else if (cmd === "ui") await cmdUi(opts);
   else if (cmd === "bench") await cmdBench(opts);
   else if (cmd === "eval") {

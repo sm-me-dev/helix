@@ -1,22 +1,23 @@
 {
-  "name": "helix",
-  "version": "0.9.0",
+  "name": "@sm-me-dev/helix",
+  "version": "0.9.1",
   "description": "An AI coding harness that earns its tokens through bounded context, ephemeral worktrees, and zero-token mechanical gates",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/sm-me-dev/helix.git"
   },
-  "private": true,
   "sideEffects": false,
   "type": "module",
   "bin": {
-    "helix": "cli/helix.mjs"
+    "helix": "bin/helix.mjs"
   },
   "files": [
-    "cli/",
-    "src/",
-    "fixtures/baseline/",
+    "bin/",
+    "dist/",
     "LICENSE",
     "README.md"
   ],
@@ -24,6 +25,8 @@
     "node": ">=22.6"
   },
   "scripts": {
+    "build": "node scripts/build.mjs",
+    "prepack": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node scripts/run-tests.mjs",
     "lint": "eslint .",

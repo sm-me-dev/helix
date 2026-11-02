@@ -1,0 +1,8 @@
+Origin: Helix
+Label: Helix
+Suite: stable
+Codename: stable
+Architectures: amd64 arm64
+Components: main
+Description: Official APT repository for Helix AI Coding Harness
+SignWith: 45BFE7B566C24F984EF00F6AEE0178A118050BDB

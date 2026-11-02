@@ -2,145 +2,185 @@
 
 Helix is an AI coding harness engineered to maximize coding agent success while strictly controlling token consumption, execution latency, and coordination overhead.
 
----
-
-## 1. System Requirements
-
-- **Runtime**: **Node.js 22.6+** (Helix executes TypeScript natively via Node's experimental type stripping; no global build or transpilation step is required).
-- **VCS**: **Git 2.30+** (required for ephemeral worktree isolation and diff extraction).
-- **Operating System**: Linux, macOS, or Windows via WSL2.
-- **Optional Knowledge Graph**: `uv tool install graphifyy` (for semantic graph retrieval; built-in structural outline fallback is used if absent).
+Helix can be installed and updated without cloning its source repository.
 
 ---
 
-## 2. Recommended Installation: Direct PATH Link
+## 1. Quick Installation Channels
 
-The fastest and most maintainable way to use Helix is by linking a local repository checkout to your system `PATH`:
+### 1.1 Global npm (Recommended for Node Users)
+
+Install globally via npm:
 
 ```sh
-# 1. Clone the repository
+npm install -g @sm-me-dev/helix
+```
+
+Or execute directly without a permanent installation:
+
+```sh
+npx @sm-me-dev/helix --help
+```
+
+**Requirements**: Node.js >= 22.6, Git >= 2.30.
+
+---
+
+### 1.2 Universal Standalone Installer (Linux & macOS)
+
+For systems without Node.js installed, the universal installer downloads a self-contained application bundle with an embedded Node runtime:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/sm-me-dev/helix/main/scripts/install.sh | sh
+```
+
+#### Installer Features:
+
+- Automatically detects OS (`linux`, `darwin`) and CPU architecture (`x64`, `arm64`).
+- Downloads the official release bundle and verifies its SHA-256 digest against `SHA256SUMS.txt`.
+- Installs to `~/.local/lib/helix` (or `/usr/local/lib/helix` if run as root) and creates an executable symlink in `~/.local/bin/helix`.
+- Requires zero system dependencies beyond `curl`/`wget` and standard shell utilities.
+
+#### Customizing Installation:
+
+```sh
+# Specify explicit release version
+curl -fsSL https://raw.githubusercontent.com/sm-me-dev/helix/main/scripts/install.sh | sh -s -- --version 0.9.0
+
+# Custom binary and library directories
+curl -fsSL https://raw.githubusercontent.com/sm-me-dev/helix/main/scripts/install.sh | sh -s -- --dir /opt/helix --bin-dir /usr/local/bin
+```
+
+---
+
+### 1.3 Homebrew (macOS & Linux)
+
+Install via official tap:
+
+```sh
+brew install sm-me-dev/tap/helix
+```
+
+Updates are managed through Homebrew:
+
+```sh
+brew update && brew upgrade helix
+```
+
+---
+
+### 1.4 Debian & Ubuntu (APT)
+
+Add the signed repository and install:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/sm-me-dev/helix/main/scripts/apt/install-apt.sh | sudo sh
+```
+
+Or download the `.deb` package directly from [GitHub Releases](https://github.com/sm-me-dev/helix/releases/latest):
+
+```sh
+sudo dpkg -i helix_0.9.0_linux_amd64.deb
+```
+
+---
+
+### 1.5 Fedora & RHEL (RPM)
+
+Download the `.rpm` package from [GitHub Releases](https://github.com/sm-me-dev/helix/releases/latest) and install via `dnf`:
+
+```sh
+sudo dnf install helix-0.9.0-1.x86_64.rpm
+```
+
+---
+
+### 1.6 Windows (PowerShell)
+
+Install via the official PowerShell installer:
+
+```powershell
+irm https://raw.githubusercontent.com/sm-me-dev/helix/main/scripts/install.ps1 | iex
+```
+
+Or using Windows package managers:
+
+```powershell
+# WinGet
+winget install sm-me-dev.Helix
+
+# Scoop
+scoop bucket add helix https://github.com/sm-me-dev/helix
+scoop install helix
+```
+
+---
+
+## 2. Standalone Release Archives (Manual Download)
+
+Pre-built self-contained archives are published with every release on [GitHub Releases](https://github.com/sm-me-dev/helix/releases):
+
+| Platform    | Architecture                | Release Artifact                   |
+| ----------- | --------------------------- | ---------------------------------- |
+| **Linux**   | x64 (AMD64)                 | `helix-v0.9.0-linux-x64.tar.gz`    |
+| **Linux**   | ARM64 (aarch64)             | `helix-v0.9.0-linux-arm64.tar.gz`  |
+| **macOS**   | Apple Silicon (M1/M2/M3/M4) | `helix-v0.9.0-darwin-arm64.tar.gz` |
+| **macOS**   | Intel (x86_64)              | `helix-v0.9.0-darwin-x64.tar.gz`   |
+| **Windows** | x64 (AMD64)                 | `helix-v0.9.0-windows-x64.zip`     |
+
+### Manual Verification and Extraction:
+
+```sh
+# 1. Download release archive and checksums
+curl -LO https://github.com/sm-me-dev/helix/releases/download/v0.9.0/helix-v0.9.0-linux-x64.tar.gz
+curl -LO https://github.com/sm-me-dev/helix/releases/download/v0.9.0/SHA256SUMS.txt
+
+# 2. Verify SHA-256 checksum
+sha256sum --check --ignore-missing SHA256SUMS.txt
+
+# 3. Extract and link
+mkdir -p ~/.local/lib/helix ~/.local/bin
+tar -xzf helix-v0.9.0-linux-x64.tar.gz -C ~/.local/lib/helix --strip-components=1
+ln -sf ~/.local/lib/helix/bin/helix ~/.local/bin/helix
+```
+
+---
+
+## 3. Contributor & Source Installation
+
+For developers contributing directly to Helix:
+
+```sh
 git clone https://github.com/sm-me-dev/helix.git ~/helix
 cd ~/helix
-
-# 2. Install dependencies
 npm ci
-
-# 3. Create a PATH link
 ./cli/helix.mjs link
 ```
 
-### What `helix link` Does:
-
-- Creates an executable shim at `~/.local/bin/helix` that delegates to your checkout.
-- If `~/.local/bin` is not already in your `PATH`, it offers to add an exported line to your shell configuration (`~/.bashrc` or `~/.zshrc`).
-- Pass `--modify-rc` to approve automatic shell file configuration, or `--no-modify-rc` to configure it manually.
-
----
-
-## 3. Alternative Installation Methods
-
-### Option A: Direct Repository Checkout (No System Changes)
-
-You can run Helix directly without modifying your system `PATH`:
-
-```sh
-git clone https://github.com/sm-me-dev/helix.git ~/helix
-cd ~/helix && npm ci
-node cli/helix.mjs --help
-```
-
-### Option B: npm Global Installation (Staged)
-
-Once published to npm:
-
-```sh
-npm install -g helix
-```
-
-### Option C: Claude Code Plugin
-
-Install Helix as a native Claude Code plugin marketplace bundle:
-
-```sh
-node cli/helix.mjs plugin --out ~/helix-marketplace
-claude plugin marketplace add ~/helix-marketplace
-claude plugin install helix@helix-harness
-```
+`helix link` creates an executable shim in `~/.local/bin/helix` that delegates to your checkout. Running `git pull` instantly updates your development installation.
 
 ---
 
 ## 4. Verifying Installation
 
-Verify that the CLI is correctly installed and accessible:
+Verify that the CLI is correctly installed:
 
 ```sh
-# Check version
+# Verify version
 helix --version
 
-# Check help and available subcommands
+# Check help and subcommands
 helix --help
-```
 
-Expected output:
-
-```text
-helix 0.9.0
+# Verify environment and health
+helix doctor
 ```
 
 ---
 
-## 5. First-Time Execution
+## 5. Next Steps
 
-Once installed, try running Helix on a repository:
-
-```sh
-# 1. Initialize a harness pack for your target project
-helix init ~/your-project --platform claude-code
-
-# 2. Verify repository health and pack integrity
-helix doctor ~/your-project
-
-# 3. Execute a dry-run task planning test
-helix run "Fix bug in calculation module" --dry
-```
-
----
-
-## 6. Upgrading
-
-Because `helix link` delegates to your local checkout, updating is as simple as pulling the latest changes:
-
-```sh
-cd ~/helix
-git pull --ff-only
-npm ci
-```
-
----
-
-## 7. Uninstallation
-
-To cleanly remove Helix from your system:
-
-```sh
-# 1. Remove the ~/.local/bin/helix shim and shell PATH additions
-cd ~/helix && helix unlink
-
-# 2. Delete the repository checkout
-cd ~ && rm -rf ~/helix
-```
-
-Without `helix link`, Helix makes zero persistent changes to your operating system.
-
----
-
-## 8. Common Installation Issues
-
-For detailed solutions to common installation and runtime errors, see [Troubleshooting & FAQ](docs/TROUBLESHOOTING.md).
-
-| Symptom                    | Cause                           | Solution                                                      |
-| -------------------------- | ------------------------------- | ------------------------------------------------------------- |
-| `helix: command not found` | `~/.local/bin` not in `$PATH`   | Run `node cli/helix.mjs link --modify-rc` and restart shell.  |
-| `permission denied`        | Missing execute permission      | Run `chmod +x cli/helix.mjs`.                                 |
-| `Node too old`             | Node version is older than 22.6 | Install Node 22 LTS via `fnm install 22` or `nvm install 22`. |
-| `npm ci` skips dev deps    | `NODE_ENV=production` set       | Run `npm ci --include=dev`.                                   |
+- [Updating Helix](UPDATING.md) — How to upgrade your installation.
+- [Uninstalling Helix](UNINSTALLING.md) — Clean removal without data loss.
+- [Platform Support Matrix](PLATFORM_SUPPORT.md) — Tested architectures and features.
+- [Quick Start Guide](QUICKSTART.md) — Running your first autonomous coding task.

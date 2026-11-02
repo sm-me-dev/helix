@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -27,6 +28,8 @@ jobs:
           npm run lint
           npm run typecheck
           npm test
+          node --test scripts/doc-paths.test.mjs
+          node --experimental-strip-types --test src/platforms.test.ts
 
   package-and-release:
     needs: test
@@ -39,37 +42,39 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Build release archives
+      - name: Install dependencies & packaging utilities
+        run: |
+          npm ci --no-audit --no-fund
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq rpm dpkg zip
+
+      - name: Compile ES modules distribution
+        run: node scripts/build.mjs
+
+      - name: Build standalone platform bundles
+        run: node scripts/build-bundles.mjs all
+
+      - name: Build Debian packages
+        run: |
+          ./scripts/build-deb.sh amd64
+          ./scripts/build-deb.sh arm64
+
+      - name: Build RPM packages
+        run: |
+          ./scripts/build-rpm.sh x86_64
+
+      - name: Build source distribution archives
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
-          echo "Packaging release: ${TAG}"
+          echo "Packaging source archive: ${TAG}"
+          mkdir -p dist/packages
+          tar -czf "dist/packages/helix-${TAG}-source.tar.gz" --exclude=".git" --exclude="node_modules" --exclude="dist" .
+          zip -rq "dist/packages/helix-${TAG}-source.zip" . -x "*.git*" "*node_modules*" "*dist*"
+          (cd dist/packages && sha256sum helix-${TAG}-source.* >> SHA256SUMS.txt)
+          sort -u -k2,2 dist/packages/SHA256SUMS.txt -o dist/packages/SHA256SUMS.txt
 
-          # Create distribution staging directory
-          mkdir -p dist/package
-          cp -r cli src fixtures package.json LICENSE README.md dist/package/
-
-          # Create tar.gz and zip archives
-          tar -czf "dist/helix-${TAG}.tar.gz" -C dist/package .
-          (cd dist/package && zip -r "../../dist/helix-${TAG}.zip" .)
-
-          # Generate SHA-256 checksums
-          (cd dist && sha256sum helix-${TAG}.* > SHA256SUMS.txt)
-
-      - name: Validate distribution artifact integrity
-        run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-
-          # Verify checksums
-          (cd dist && sha256sum --check SHA256SUMS.txt)
-
-          # Smoke test extracted artifact in isolated environment
-          mkdir -p test-install
-          tar -xzf "dist/helix-${TAG}.tar.gz" -C test-install
-          cd test-install
-          npm install --omit=dev --ignore-scripts --no-audit --no-fund
-          node cli/helix.mjs --version
-          node cli/helix.mjs --help
-          node cli/helix.mjs run "Smoke test from release archive" --dry
+      - name: Validate all release artifacts
+        run: ./scripts/verify-release.sh dist/packages
 
       - name: Create GitHub Release
         env:
@@ -79,16 +84,12 @@ jobs:
           awk "/^## \[${TAG#v}\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md > release-notes.md
           if [ -s release-notes.md ]; then
             gh release create "${TAG}" \
-              dist/helix-${TAG}.tar.gz \
-              dist/helix-${TAG}.zip \
-              dist/SHA256SUMS.txt \
+              dist/packages/* \
               --title "Helix ${TAG}" \
               --notes-file release-notes.md
           else
             gh release create "${TAG}" \
-              dist/helix-${TAG}.tar.gz \
-              dist/helix-${TAG}.zip \
-              dist/SHA256SUMS.txt \
+              dist/packages/* \
               --title "Helix ${TAG}" \
               --generate-notes
           fi

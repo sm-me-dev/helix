@@ -5,6 +5,31 @@ All notable changes to **Helix** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1] - 2026-11-02
+
+### Added
+
+- **Cross-Platform Distribution & Zero-Clone Installation Architecture (Phase 10.1)**:
+  - **Scoped Public npm Package (`@sm-me-dev/helix`)**: Built via automated transpilation (`scripts/build.mjs`) into standard ES modules in `dist/` avoiding type-stripping errors inside `node_modules`.
+  - **Self-Contained Standalone Application Bundles (`scripts/build-bundles.mjs`)**: Portable bundles with embedded Node.js 22 LTS runtime across 5 targets (`linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`, `windows-x64`) requiring zero host Node installation.
+  - **Universal Unix Installer (`scripts/install.sh`)**: Architecture-detecting, checksum-verifying curl installer for Linux and macOS.
+  - **PowerShell Installer (`scripts/install.ps1`)**: Windows installer with SHA-256 verification and user PATH configuration.
+  - **Package Manager Integrations**:
+    - Homebrew Formula: `Formula/helix.rb` supporting macOS Apple Silicon/Intel and Linux.
+    - Debian / Ubuntu (`.deb`): `scripts/build-deb.sh` producing compliant packages for `amd64` and `arm64`.
+    - Fedora / RHEL (`.rpm`): `scripts/build-rpm.sh` producing compliant packages for `x86_64`.
+    - Windows: WinGet singleton manifest (`manifests/winget/sm-me-dev.Helix.yaml`) and Scoop bucket manifest (`manifests/scoop/helix.json`).
+  - **Lifecycle Management Commands**:
+    - `helix update`: Automatic detection of installation channel (npm, brew, apt, rpm, standalone, git-link) with channel-specific upgrade commands.
+    - `helix uninstall`: Safe uninstallation preserving user project data, Git worktrees, and repository configs.
+  - **Release Pipeline Overhaul (`.github/workflows/release.yml`)**: Automated multi-platform bundle builds, deb/rpm generation, SHA-256 digest signing, artifact verification, and GitHub Release deployment.
+  - **Dedicated Distribution Documentation**: Added `docs/UPDATING.md`, `docs/UNINSTALLING.md`, and `docs/PLATFORM_SUPPORT.md`.
+
+### Removed
+
+- Removed legacy agent prompts (`docs/ANTIGRAVITY-AUDIT-PROMPT.md`, `docs/NEXT-PROMPT.md`).
+- Removed IDE tool configuration directory (`.serena/`).
+
 ## [0.9.0] - 2026-11-02
 
 ### Added

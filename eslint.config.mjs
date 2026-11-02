@@ -9,6 +9,7 @@ export default tseslint.config(
     // Generated or machine-local trees: linting them buries real findings (a stray
     // .vercel/output once produced 4,467 errors).
     ignores: [
+      "dist/**",
       "node_modules/**",
       ".vercel/**",
       ".tanstack/**",

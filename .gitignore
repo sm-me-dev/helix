@@ -50,8 +50,8 @@ test-results/
 playwright-report/
 playwright/.cache/
 
-# Local tooling caches (keep configs, ignore runtime state)
-.serena/cache/
+# Local tooling and agent caches
+.serena/
 .grok/status
 .tanstack/
 

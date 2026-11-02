@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.6.0.schema.json
+PackageIdentifier: sm-me-dev.Helix
+PackageVersion: 0.9.1
+DefaultLocale: en-US
+Publisher: sm-me-dev
+PackageName: Helix
+PackageUrl: https://github.com/sm-me-dev/helix
+License: MIT
+LicenseUrl: https://github.com/sm-me-dev/helix/blob/main/LICENSE
+ShortDescription: AI coding harness with bounded context, ephemeral worktrees, and mechanical gates
+Moniker: helix
+Tags:
+  - ai
+  - coding-agent
+  - harness
+  - developer-tools
+Installers:
+  - Architecture: x64
+    InstallerType: zip
+    InstallerUrl: https://github.com/sm-me-dev/helix/releases/download/v0.9.1/helix-v0.9.1-windows-x64.zip
+    NestedInstallerType: portable
+    NestedInstallerFiles:
+      - RelativeFilePath: helix\bin\helix.cmd
+        PortableCommandAlias: helix
+ManifestType: singleton
+ManifestVersion: 1.6.0

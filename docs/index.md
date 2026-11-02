@@ -29,15 +29,18 @@ docs/
 
 ## 1. Getting Started
 
-- **[Installation Guide](docs/INSTALL.md)**: System prerequisites (Node 22.6+, Git), PATH link setup, and verifying your environment.
-- **[Developer Quickstart](docs/QUICKSTART.md)**: Step-by-step walkthrough to configure an LLM provider and execute your first task with `helix run`.
-- **[Configuration Reference](docs/CONFIGURATION.md)**: Details on `.helix/config.json`, environment variables (`HELIX_*`), and CLI flag precedence.
+- **[Installation Guide](INSTALL.md)**: Zero-clone installation methods (npm, universal installer, Homebrew, APT, RPM, Windows).
+- **[Updating Helix](UPDATING.md)**: Checking for updates and upgrading via your installation method.
+- **[Uninstalling Helix](UNINSTALLING.md)**: Clean removal without data loss or project disruption.
+- **[Platform Support Matrix](PLATFORM_SUPPORT.md)**: Tested operating systems, architectures, and packages.
+- **[Developer Quickstart](QUICKSTART.md)**: Step-by-step walkthrough to configure an LLM provider and execute your first task with `helix run`.
+- **[Configuration Reference](CONFIGURATION.md)**: Details on `.helix/config.json`, environment variables (`HELIX_*`), and CLI flag precedence.
 
 ---
 
 ## 2. Using Helix
 
-- **[CLI Reference](docs/CLI.md)**: Comprehensive reference for all commands:
+- **[CLI Reference](CLI.md)**: Comprehensive reference for all commands:
   - `helix init`: Inspect your stack and generate agent configuration packs.
   - `helix run`: Execute coding tasks with worktree isolation and mechanical gates.
   - `helix bench`: Repeatable benchmark suite comparing pass rates and token costs across 5 strategies.
@@ -45,14 +48,16 @@ docs/
   - `helix gate`: Run zero-token mechanical validation (secrets, lint, typecheck, tests).
   - `helix measure`: Audit real token counts using byte-pair encoding (BPE).
   - `helix report`: Analyze real session transcripts for token waste and retries.
+  - `helix update`: Check for updates based on installation method.
+  - `helix uninstall`: Clean removal of standalone or development links.
   - `helix ui`: Local web dashboard for visualizing tasks and benchmarks.
-- **[Troubleshooting & FAQ](docs/TROUBLESHOOTING.md)**: Common failure modes, exit codes, and answers to frequently asked questions.
+- **[Troubleshooting & FAQ](TROUBLESHOOTING.md)**: Common failure modes, exit codes, and answers to frequently asked questions.
 
 ---
 
 ## 3. Architecture & Core Concepts
 
-- **[Architecture Deep Dive](docs/ARCHITECTURE.md)**: Detailed breakdown of the 13 core engine components:
+- **[Architecture Deep Dive](ARCHITECTURE.md)**: Detailed breakdown of the 13 core engine components:
   - Task Definition & Heuristic Planner (`src/engine/task.ts`)
   - Layered Context Manager & Token Budgets (`src/engine/context.ts`)
   - Multi-Tier Repository Retriever (`src/engine/retrieval.ts`)
@@ -62,13 +67,13 @@ docs/
   - Multi-Agent Orchestrator & 12-Line Handoff Cards (`src/engine/orchestrator.ts`)
   - Model Provider & Token Cost Accounting (`src/engine/provider.ts`)
   - Repeatable Benchmark Framework (`src/engine/benchmark.ts`)
-- **[Empirical Evidence & Benchmark Data](docs/EVIDENCE.md)**: Head-to-head evaluation results proving why single-agent execution is token-optimal and when independent review is justified.
-- **[Architectural Decision Records](docs/DECISIONS.md)**: Immutable record of design choices, rejected alternatives, and verified platform facts.
+- **[Empirical Evidence & Benchmark Data](EVIDENCE.md)**: Head-to-head evaluation results proving why single-agent execution is token-optimal and when independent review is justified.
+- **[Architectural Decision Records](DECISIONS.md)**: Immutable record of design choices, rejected alternatives, and verified platform facts.
 
 ---
 
 ## 4. Development & Release
 
-- **[Distribution & Packaging](docs/DISTRIBUTION.md)**: Standalone binary releases, npm publishing, Homebrew formula, and supply-chain security.
-- **[Contributing Guide](CONTRIBUTING.md)**: Development environment setup, quality gates, conventional commits, and pull request expectations.
-- **[Security Policy](SECURITY.md)**: Vulnerability disclosure and confidential reporting procedures.
+- **[Distribution & Packaging](DISTRIBUTION.md)**: Standalone binary releases, npm publishing, Homebrew formula, and supply-chain security.
+- **[Contributing Guide](../CONTRIBUTING.md)**: Development environment setup, quality gates, conventional commits, and pull request expectations.
+- **[Security Policy](../SECURITY.md)**: Vulnerability disclosure and confidential reporting procedures.

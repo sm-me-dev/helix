@@ -32,7 +32,49 @@ Helix enforces a disciplined, evidence-based engineering philosophy:
 
 ## Installation
 
-Helix requires **Node.js 22.6+** (native TypeScript type stripping, zero compilation step) and **Git**.
+Install Helix without cloning its source repository:
+
+### Global npm (Recommended)
+
+```sh
+npm install -g @sm-me-dev/helix
+```
+
+Or execute directly with zero install:
+
+```sh
+npx @sm-me-dev/helix --help
+```
+
+### Universal Standalone Installer (Linux & macOS)
+
+Downloads a self-contained application bundle with an embedded Node runtime (no system Node installation required):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/sm-me-dev/helix/main/scripts/install.sh | sh
+```
+
+### Homebrew (macOS & Linux)
+
+```sh
+brew install sm-me-dev/tap/helix
+```
+
+### Debian / Ubuntu (APT)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/sm-me-dev/helix/main/scripts/apt/install-apt.sh | sudo sh
+```
+
+### Windows (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/sm-me-dev/helix/main/scripts/install.ps1 | iex
+```
+
+### Contributor & Development Installation
+
+For developers working directly on the Helix codebase:
 
 ```sh
 git clone https://github.com/sm-me-dev/helix.git ~/helix
@@ -40,9 +82,7 @@ cd ~/helix && npm ci
 ./cli/helix.mjs link
 ```
 
-`helix link` installs a lightweight command shim at `~/.local/bin/helix` and configures your shell `PATH`.
-
-For alternative installation options and system requirements, see the complete [Installation Guide](docs/INSTALL.md).
+For complete distribution details, see [Installation Guide](docs/INSTALL.md) · [Updating](docs/UPDATING.md) · [Uninstalling](docs/UNINSTALLING.md) · [Platform Support](docs/PLATFORM_SUPPORT.md).
 
 ---
 
