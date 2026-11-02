@@ -33,7 +33,29 @@ function requireKnownIds(config: HarnessConfig): void {
 const writesAgentFiles = (id: PlatformId): boolean =>
   ADAPTER_BY_ID[id].capabilities.subagents === "emitted";
 
+function minimalAgentsMd(config: HarnessConfig): string {
+  if (config.crew.length > 0) {
+    throw new Error("[helix] minimalInstructions cannot be combined with a crew (no role table)");
+  }
+  const s = config.stack;
+  const facts = s
+    ? `- stack: ${s.language} · ${s.packageManager}${[
+        ["test", s.testCommand],
+        ["lint", s.lintCommand],
+        ["format", s.formatCommand],
+      ]
+        .filter(([, cmd]) => cmd)
+        .map(([name, cmd]) => `; ${name}: \`${cmd}\``)
+        .join("")}.\n`
+    : "";
+  return `# Helix
+${facts}- Before you finish, run \`node .helix/gate.mjs\` once (secrets, lint, typecheck, affected tests; failures only; exit 0 = pass). Do not re-run the full suite on every edit.
+- Never read or print secret files (\`.env*\`, \`secrets/\`, \`~/.ssh\`, \`~/.aws\`, \`*.pem\`).
+`;
+}
+
 function agentsMd(config: HarnessConfig): string {
+  if (config.minimalInstructions) return minimalAgentsMd(config);
   const crewRows = config.crew
     .map((id) => {
       const c = CREW_BY_ID[id];

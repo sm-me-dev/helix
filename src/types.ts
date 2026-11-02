@@ -52,6 +52,12 @@ export type HarnessConfig = {
    * handoff card alone. OFF by default: the saving is static and measurable, the effect on
    * pass rate is not, until an eval arm says so (docs/DECISIONS.md, F7). */
   leanSubagents?: boolean;
+  /** AGENTS.md carries only what an agent cannot cheaply discover: the detected commands, the
+   * gate and the secret rule. No process prose, dispatch rules or repo overview. Basis: the ETH
+   * Zurich study (arXiv 2602.11988) found generic or overview content in context files raised
+   * cost ~20% with no resolution gain. Needs an eval arm before it can be a default
+   * (docs/DECISIONS.md). Incompatible with a crew, whose role table has to live somewhere. */
+  minimalInstructions?: boolean;
   /** Emit a CI workflow that runs the portable gate, the agent-agnostic backstop for platforms
    * whose hooks cannot enforce it. Only "github" exists; skipped for stacks it cannot install. */
   ci?: "github";

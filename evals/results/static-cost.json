@@ -1,0 +1,180 @@
+{
+  "schema": 1,
+  "method": "o200k_base BPE via gpt-tokenizer (approximation of frontier tokenizers, not the serving model's own count)",
+  "note": "Static sizes only. A plain agent adds 0 tokens, so this is Helix's cost, not a saving. Per-task tokens come from evals/results/*.json. Claude Code defers MCP schemas (verified 2026-10-10); other platforms are assumed to load them.",
+  "packs": [
+    {
+      "label": "small repo (context7)",
+      "agentsMd": 290,
+      "skillIndex": 74,
+      "mcpSchemas": 420,
+      "crewIndex": 0,
+      "alwaysOn": 784,
+      "mcps": [
+        {
+          "id": "context7",
+          "tokens": 420,
+          "measured": false
+        }
+      ]
+    },
+    {
+      "label": "small repo (context7) + --crew",
+      "agentsMd": 472,
+      "skillIndex": 74,
+      "mcpSchemas": 420,
+      "crewIndex": 237,
+      "alwaysOn": 1203,
+      "mcps": [
+        {
+          "id": "context7",
+          "tokens": 420,
+          "measured": false
+        }
+      ]
+    },
+    {
+      "label": "large repo (graphify + context7)",
+      "agentsMd": 293,
+      "skillIndex": 74,
+      "mcpSchemas": 1756,
+      "crewIndex": 0,
+      "alwaysOn": 2123,
+      "mcps": [
+        {
+          "id": "graphify",
+          "tokens": 1336,
+          "measured": true
+        },
+        {
+          "id": "context7",
+          "tokens": 420,
+          "measured": false
+        }
+      ]
+    },
+    {
+      "label": "large repo (graphify + context7) + --crew",
+      "agentsMd": 475,
+      "skillIndex": 74,
+      "mcpSchemas": 1756,
+      "crewIndex": 286,
+      "alwaysOn": 2591,
+      "mcps": [
+        {
+          "id": "graphify",
+          "tokens": 1336,
+          "measured": true
+        },
+        {
+          "id": "context7",
+          "tokens": 420,
+          "measured": false
+        }
+      ]
+    },
+    {
+      "label": "large UI repo (graphify + context7 + playwright)",
+      "agentsMd": 296,
+      "skillIndex": 74,
+      "mcpSchemas": 6169,
+      "crewIndex": 0,
+      "alwaysOn": 6539,
+      "mcps": [
+        {
+          "id": "graphify",
+          "tokens": 1336,
+          "measured": true
+        },
+        {
+          "id": "context7",
+          "tokens": 420,
+          "measured": false
+        },
+        {
+          "id": "playwright",
+          "tokens": 4413,
+          "measured": true
+        }
+      ]
+    },
+    {
+      "label": "large UI repo (graphify + context7 + playwright) + --crew",
+      "agentsMd": 478,
+      "skillIndex": 74,
+      "mcpSchemas": 6169,
+      "crewIndex": 286,
+      "alwaysOn": 7007,
+      "mcps": [
+        {
+          "id": "graphify",
+          "tokens": 1336,
+          "measured": true
+        },
+        {
+          "id": "context7",
+          "tokens": 420,
+          "measured": false
+        },
+        {
+          "id": "playwright",
+          "tokens": 4413,
+          "measured": true
+        }
+      ]
+    }
+  ],
+  "crewRoles": [
+    {
+      "id": "scout",
+      "index": 83,
+      "body": 314
+    },
+    {
+      "id": "architect",
+      "index": 62,
+      "body": 252
+    },
+    {
+      "id": "builder",
+      "index": 50,
+      "body": 276
+    },
+    {
+      "id": "reviewer",
+      "index": 91,
+      "body": 364
+    }
+  ],
+  "mcpCaptures": [
+    {
+      "server": "chrome-devtools",
+      "capturedAt": "2026-10-07",
+      "toolCount": 30,
+      "schemaTokens": 5914
+    },
+    {
+      "server": "graphify",
+      "capturedAt": "2026-10-07",
+      "toolCount": 10,
+      "schemaTokens": 1336
+    },
+    {
+      "server": "playwright",
+      "capturedAt": "2026-10-07",
+      "toolCount": 25,
+      "schemaTokens": 4413
+    },
+    {
+      "server": "serena",
+      "capturedAt": "2026-10-07",
+      "toolCount": 29,
+      "schemaTokens": 8204
+    }
+  ],
+  "mcpAllCapturedLoaded": 19867,
+  "gate": {
+    "modelTokens": 0,
+    "basis": "src/gate.ts is a deterministic script (secrets, lint, typecheck, tests)"
+  }
+}

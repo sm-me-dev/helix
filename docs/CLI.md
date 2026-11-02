@@ -112,3 +112,26 @@ Opt-in Learning Ledger (evidence-gated, default off). Subcommands: `init`
 (never overwrites), `capture`, `accept`, `confirm`, `human-accept`, `list`,
 `compile`, `decay`. Lessons can never write hooks, settings, or permissions.
 `helix learn` with no subcommand prints the subcommand reference.
+
+## `helix link [--bin-dir <dir>] [--modify-rc|--no-modify-rc] [--force]` · `helix unlink`
+
+Install or remove a `helix` command. The shim (`cli/link.ts`) is a POSIX script in `~/.local/bin`
+(or `--bin-dir`) that runs this checkout with Node's type stripping, using the `node` on `PATH` at run
+time and falling back to the one that ran `link`. It is idempotent, and it never replaces a `helix`
+file it did not write unless `--force` is given. When the directory is not on `PATH`, `link` asks
+before appending a marked block to `.zshrc` or `.bashrc` (no prompt without a terminal: it prints the
+line instead); `unlink` removes the shim and exactly that block. Windows: not supported.
+
+## `helix ui [dir] [--port <n>] [--open]`
+
+A local web view (`cli/ui.ts`) for `doctor`, `measure`, `gate`, `gate --all`, `report` and `init`. It
+runs the same CLI commands as child processes in `dir` and shows their exit code and output.
+
+- Listens on `127.0.0.1` only. Default port 4317 (a free one if that is taken; `--port` fails
+  instead). Prints a URL with a one-time token; open it, or pass `--open`.
+- The token is traded for an HttpOnly, SameSite=Strict cookie. Requests need that cookie, a loopback
+  `Host`, a same-origin `Origin` when one is sent, and an `X-Helix` header on actions.
+- The browser cannot pick the directory, the command or free-form arguments: actions are a fixed
+  list, and `init` accepts only a platform list and a crew flag. `gate` runs the repo's own test and
+  lint commands, so only point `ui` at a repo you trust.
+- The page loads nothing from the network (CSP `default-src 'none'`). One action runs at a time.

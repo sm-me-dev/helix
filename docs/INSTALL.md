@@ -7,9 +7,16 @@ step) and git. Optional: `uv tool install graphifyy` for the repo-map backend.
 ```sh
 git clone https://github.com/sm-me-dev/helix.git ~/helix
 cd ~/helix && npm ci
-./cli/helix.mjs init ~/your-repo            # detects agents and stack
-./cli/helix.mjs doctor ~/your-repo          # exits non-zero on any failure
+./cli/helix.mjs link                         # puts a `helix` command on your PATH
+helix init ~/your-repo                      # detects agents and stack
+helix doctor ~/your-repo                    # exits non-zero on any failure
+helix ui ~/your-repo                        # local web view
 ```
+
+`helix link` writes a small shim, `~/.local/bin/helix`, that runs this checkout (the CLI needs the
+repo's `node_modules`, so keep the checkout where it is). If `~/.local/bin` is not on your `PATH`, it
+offers to add one marked line to your `.zshrc`/`.bashrc` (`--modify-rc` says yes, `--no-modify-rc` says
+no; other shells get the line to paste). `helix unlink` removes both. Windows is not supported yet.
 
 `init` never overwrites a differing file without `--force`. Flags and every other
 command: `docs/CLI.md`. What gets written, and why: `README.md`.
@@ -22,13 +29,14 @@ See "Claude Code as a plugin" in `README.md` (`helix plugin`, `helix init --clau
 
 ```sh
 cd ~/helix && git pull --ff-only && npm ci
-./cli/helix.mjs init ~/your-repo            # keeps differing files unless --force
+helix init ~/your-repo                      # keeps differing files unless --force
 ```
 
 ## Uninstall
 
-Helix makes no system changes. Delete the checkout (`rm -rf ~/helix`) and the files
-`init` wrote into your repo (listed in `.helix/README.md` there).
+Run `helix unlink` (removes the shim and the PATH line), delete the checkout (`rm -rf ~/helix`) and
+the files `init` wrote into your repo (listed in `.helix/README.md` there). Without `helix link`,
+Helix makes no system changes.
 
 ## Troubleshooting
 
