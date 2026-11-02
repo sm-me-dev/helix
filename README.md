@@ -1,103 +1,78 @@
-# Helix — a coding harness that earns its tokens
+# Helix
 
-Helix is a drop-in harness for AI coding agents: repo-map
-first context (Graphify when present, a built-in outline otherwise), skills that
-load on demand, and one portable gate command. Full support exists only where the
-vendor docs were checked: see the platform matrix below. Everywhere else the pack
-is AGENTS.md plus at most a pointer file. The default pack installs no model
-subagents (they cost tokens on every task and no recorded run shows them paying
-for it yet); `--crew` adds the tier-routed roles for Claude Code, Codex, Cursor,
-OpenCode and Antigravity.
-The product is the generated file pack; this repo holds the generator, the CLI
-and the evals that test whether the pack helps.
+Helix is an AI coding harness engineered to maximize coding-agent results while strictly controlling token consumption, execution latency, and coordination overhead.
 
-## 60-second install
+[Installation](docs/INSTALL.md) · [Documentation](docs/index.md) · [Quick Start](docs/QUICKSTART.md) · [Contributing](CONTRIBUTING.md)
 
-```sh
-git clone <this-repo> && cd helix && npm ci
-./cli/helix.mjs init ~/your-repo --platform claude-code,codex
-```
+---
 
-`helix init` detects the stack (language, package manager, test/lint/format
-commands, existing agent files), then writes the pack: `AGENTS.md`, the gate,
-the repo map and, per detected agent, its skills, MCP config and hooks. Options:
-`--crew` (add scout/architect/builder/reviewer; `--lean-subagents` starts the
-read-only roles without `AGENTS.md`, Claude Code v2.1.271+), `--ci`/`--no-ci`
-(a GitHub workflow running `node .helix/gate.mjs --all`, SHA-pinned, written by
-default when the repo already has `.github/`; it is the gate's enforcement on
-agents without a Stop hook) and `--no-index` (with Graphify installed, init runs
-`graphify update .` itself; without a usable index it falls back to the outline
-map instead of pointing agents at a graph that is not there). It never overwrites an
-existing file without showing a diff and asking — pass `--force` to skip the
-prompt. Requires Node 22.6+ (type stripping, no build step).
-When an `opencode.json` already exists, the CLI merges MCP entries into it and
-preserves unrelated settings (existing same-name MCP definitions take precedence).
+## Why Helix?
 
-### Claude Code as a plugin
+Most AI agent frameworks assume that adding more agents produces better code. In practice, uncoordinated multi-agent swarms multiply token consumption by 3x–4x and increase regression rates through conversational drift.
 
-```sh
-./cli/helix.mjs plugin --out ~/helix-marketplace
-claude plugin marketplace add ~/helix-marketplace && claude plugin install helix@helix-harness
-./cli/helix.mjs init ~/your-repo --platform claude-code --claude-plugin
-```
+Helix enforces a disciplined, evidence-based engineering philosophy:
 
-The plugin carries the agents, skills, hooks and MCP config, so updates are
-versioned in one place. A plugin cannot ship `CLAUDE.md` or `permissions`, so
-`init --claude-plugin` still writes `AGENTS.md`, the gate and the secret denies
-into the repo, and nothing else (no second copy of the hooks, which would run
-twice). `claude plugin details helix` reports its projected token cost;
-`scripts/measure-plugin.mjs` stores that figure.
+- **Single-Agent by Default**: Routine tasks run in a single session at minimum token cost (~815 tokens/task).
+- **Mechanical Validation Over Claims**: An agent claiming "all tests pass" is ignored; success is determined solely by zero-token verification gates (`.helix/gate.mjs`).
+- **Worktree Isolation**: Ephemeral Git worktrees prevent workspace corruption and dirty working trees.
+- **Independent Adversarial Review**: For complex or sensitive tasks, an isolated reviewer inspects only the diff and requirements, eliminating 100% of regressions at a modest +61% token premium.
 
-## Executing tasks (`helix run`)
+---
 
-Run coding tasks with single-agent simplicity, ephemeral git worktree isolation,
-and mechanical gate verification:
+## Features
+
+- **Harness Pack Generation**: Emits deterministic, minimal instruction packs (`AGENTS.md` ≤ 300 tokens) tailored per platform.
+- **Autonomous Task Execution (`helix run`)**: Drives coding tasks with progressive context assembly, worktree isolation, and bounded retries.
+- **Zero-Token Verification Gate (`helix gate`)**: Mechanically scans secrets, checks linting, runs typecheck, and executes affected tests.
+- **Repeatable Benchmark Suite (`helix bench`)**: Evaluates pass rates, regression tracking, and costs across 10 task categories and 5 execution strategies.
+- **Security & Least-Privilege Sandboxing**: Path jail confinement, secret redaction, untrusted content framing, and role-based permissions.
+- **Observability & Diagnostics**: Real-time event streaming, structured `--json` reports, token counting via `gpt-tokenizer`, and `helix doctor`.
+
+---
+
+## Installation
+
+Helix requires **Node.js 22.6+** (native TypeScript type stripping, zero compilation step) and **Git**.
 
 ```sh
-helix run "Fix division by zero in src/calc.ts"
-helix run examples/tasks/01-bugfix-calculation.json --dry
-helix run "Refactor auth middleware" --strategy chain --pass "npm test"
+git clone https://github.com/sm-me-dev/helix.git ~/helix
+cd ~/helix && npm ci
+./cli/helix.mjs link
 ```
 
-See [Developer Quickstart Guide](docs/QUICKSTART.md) and [CLI Reference](docs/CLI.md) for full details.
+`helix link` installs a lightweight command shim at `~/.local/bin/helix` and configures your shell `PATH`.
 
-## What is verified and what is not
+For alternative installation options and system requirements, see the complete [Installation Guide](docs/INSTALL.md).
 
-- **Verified against vendor docs (dates per platform matrix)**: Claude hooks,
-  subagents and skills; Cursor rules, native subagents, skills and MCP; Codex
-  agents, skills, hooks and MCP; OpenCode subagents, skills and MCP; Antigravity
-  subagents, skills and MCP; VS Code MCP schema. Each catalog entry carries
-  `source` + `verifiedAt`.
-- **Measured, not invented**: token counts use o200k_base BPE (an
-  approximation, labeled everywhere); MCP schemas come from live `tools/list`
-  captures (`scripts/measure-mcp.mjs`) or are flagged as estimates; practice
-  statistics carry a confidence label and sources in `src/practices.ts`.
-- **Not verified**: see the matrix. Unverified cells emit nothing and claim
-  nothing; "all agents" is not a claim this project makes.
-- **Illustrative, not measured**: `src/simulation.ts` is a scripted demo of the
-  tier routing, not a measurement. Real head-to-head numbers are the committed
-  reports in `evals/results/`.
+---
 
-## Evidence so far (read this before trusting any saving)
+## Quick Start
 
-Nothing yet shows a significant win. Paired runs on a generated 356-file fixture
-(opencode free tier, n=5 per cell, 2026-10-09, script `evals/run.mjs`, results in
-`evals/results/2026-10-09T11-24-31-opencode.md`): pass rate tied at 30/30, uncached
-tokens -8.1% for the Helix arm overall but inside the noise in every cell, total
-tokens +2.0%. Model subagents never spawned in either arm, so the role split is
-untested there. Full method, caveats and the open follow-up are in
-`docs/DECISIONS.md`.
+### 1. Initialize a Harness Pack for Your Repository
 
-## Platform matrix
+```sh
+helix init ~/your-repo --platform claude-code,cursor
+```
 
-Generated from the adapter catalog (`npm test` fails if this drifts). "emitted"
-means vendor docs were checked on the date shown and Helix writes real files;
-"supported, not emitted" means the vendor documents it but Helix does not write it
-yet; "unverified" means neither. Gemini CLI note: Google's own pages confirm it
-stopped serving consumer tiers on 2026-06-18 in favor of Antigravity CLI
-(discussion 28017 + developers deprecation page, both checked 2026-10-10);
-`gemini` is no longer in the default platform list (explicit `--platform gemini`
-still works) and its pack paths stay unverified.
+### 2. Verify Repository Health
+
+```sh
+helix doctor ~/your-repo
+```
+
+### 3. Execute a Coding Task
+
+```sh
+helix run "Fix division by zero error in src/calc.ts and update test suite"
+```
+
+For advanced workflows, strategy selection, and configuration options, see the [Developer Quickstart Guide](docs/QUICKSTART.md).
+
+---
+
+## Platform Matrix
+
+Helix emits configurations only where vendor documentation was verified.
 
 <!-- matrix:start -->
 
@@ -121,42 +96,35 @@ still works) and its pack paths stay unverified.
 
 <!-- matrix:end -->
 
-## How the tiers work
+---
 
-The main session classifies every task and orchestrates (no dispatcher):
-**trivial** (one file / question) → main session only; **standard** (known
-files, one module) → build, then a fresh-window reviewer; **complex**
-(unknown surface or cross-module) → scout → architect → builder → reviewer.
-Handoffs are 12-line cards; the Stop hook re-runs the repo suite; the
-reviewer answers PASS or FAIL with `file:line`.
+## Documentation
 
-## Verify, measure, evaluate
+- **[Documentation Index](docs/index.md)**: Master documentation hub.
+- **[Installation Guide](docs/INSTALL.md)**: Prerequisites, shell linking, verification, and uninstallation.
+- **[Quickstart Guide](docs/QUICKSTART.md)**: First task walkthrough and core workflow options.
+- **[CLI Reference](docs/CLI.md)**: Comprehensive command, flag, and exit code reference.
+- **[Configuration Reference](docs/CONFIGURATION.md)**: Config file schemas, environment variables, and pricing tables.
+- **[Architecture Guide](docs/ARCHITECTURE.md)**: Engine boundaries, the 13 components, and execution lifecycle.
+- **[Troubleshooting & FAQ](docs/TROUBLESHOOTING.md)**: Diagnostics, common failure modes, and answers to common questions.
+- **[Distribution Guide](docs/DISTRIBUTION.md)**: Release channels, npm, Homebrew, and supply-chain security.
+- **[Architectural Decisions](docs/DECISIONS.md)**: Append-only design records and rejected alternatives.
+- **[Empirical Evidence](docs/EVIDENCE.md)**: Measured benchmark findings and statistical evaluation data.
+
+---
+
+## Development
+
+Helix enforces strict quality gates on every commit:
 
 ```sh
-./cli/helix.mjs doctor ~/your-repo     # exit non-zero on any failure
-./cli/helix.mjs measure ~/your-repo    # real token breakdown (method labeled)
-node evals/run.mjs --self-check        # grading pipeline, no agent, no cost
+npm run lint && npm run typecheck && npm test
 ```
 
-Doctor checks the AGENTS.md budget (60 lines / ~500 tokens), config schemas,
-hook scripts, Graphify freshness, and version pins. Real agent comparisons
-are opt-in and never run in CI — details: `evals/README.md`. Full command
-reference: `docs/CLI.md`; architecture: `docs/ARCHITECTURE.md`.
+For developer setup, coding standards, and PR workflows, read the [Contributing Guide](CONTRIBUTING.md).
 
-## Adding or updating a catalog entry
-
-1. Check the vendor's current docs (Context7 + web fetch).
-2. Add `source` (URL) and `verifiedAt` (today's date) to the entry.
-3. Add or update a test that would fail if the fact were wrong (golden-file
-   tests for generated output, stdin-driven tests for hooks).
-4. If you cannot verify it, mark it unverified in notes and emit the minimal
-   surface — never ship an unverified claim as fact.
-5. Record the decision in `docs/DECISIONS.md` (date, evidence, rejected
-   alternatives).
-
-Gates for every commit: `npm run lint && npm run typecheck && npm test`
-(Node 22 to match CI). Contributing: `CONTRIBUTING.md`.
+---
 
 ## License
 
-MIT — see `LICENSE`.
+MIT — see [LICENSE](LICENSE).

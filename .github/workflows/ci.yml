@@ -20,7 +20,26 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci --no-audit --no-fund
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm run test
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Code quality (ESLint)
+        run: npm run lint
+
+      - name: Type checking (TypeScript)
+        run: npm run typecheck
+
+      - name: Test suite (TypeScript & ESM)
+        run: npm run test
+
+      - name: Living documentation integrity
+        run: node --test scripts/doc-paths.test.mjs
+
+      - name: Platform capability matrix verification
+        run: node --experimental-strip-types --test src/platforms.test.ts
+
+      - name: CLI smoke test
+        run: |
+          node cli/helix.mjs --version
+          node cli/helix.mjs --help
+          node cli/helix.mjs run "Smoke test execution" --dry

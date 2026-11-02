@@ -178,3 +178,10 @@ runs the same CLI commands as child processes in `dir` and shows their exit code
   list, and `init` accepts only a platform list and a crew flag. `gate` runs the repo's own test and
   lint commands, so only point `ui` at a repo you trust.
 - The page loads nothing from the network (CSP `default-src 'none'`). One action runs at a time.
+
+## Global Options
+
+- `--version`, `-v`: Print the installed Helix version and exit `0`.
+- `--help`, `-h`: Print command syntax, options, and exit `0`.
+
+For full configuration and troubleshooting details, see [Configuration Reference](docs/CONFIGURATION.md) and [Troubleshooting Guide](docs/TROUBLESHOOTING.md).

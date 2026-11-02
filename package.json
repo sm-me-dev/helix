@@ -1,11 +1,24 @@
 {
   "name": "helix",
+  "version": "0.9.0",
+  "description": "An AI coding harness that earns its tokens through bounded context, ephemeral worktrees, and zero-token mechanical gates",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sm-me-dev/helix.git"
+  },
   "private": true,
   "sideEffects": false,
   "type": "module",
   "bin": {
     "helix": "cli/helix.mjs"
   },
+  "files": [
+    "cli/",
+    "src/",
+    "LICENSE",
+    "README.md"
+  ],
   "engines": {
     "node": ">=22.6"
   },

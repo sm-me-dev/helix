@@ -84,6 +84,8 @@ const USAGE = `helix — AI coding harness pack manager
   helix unlink [--bin-dir <dir>]                remove the shim and the PATH line \`link\` added
   helix ui [dir] [--port <n>] [--open]          local web view (127.0.0.1 only, token-protected):
                                                 doctor, measure, gate, report, init
+  helix --version, -v                           print version information
+  helix --help, -h                              show this help message
 `;
 
 function parseArgs(argv) {
@@ -117,6 +119,7 @@ function parseArgs(argv) {
     // eval, bench, and run have their own --help; every other command shows the shared usage.
     if ((a === "--help" || a === "-h") && cmd !== "eval" && cmd !== "bench" && cmd !== "run")
       opts.help = true;
+    else if (a === "--version" || a === "-v") opts.version = true;
     else if (cmd === "bench") opts.benchArgs.push(a);
     else if (cmd === "run") opts.runArgs.push(a);
     else if (cmd === "gate" && a.startsWith("--")) opts.gateArgs.push(a);
@@ -778,7 +781,10 @@ async function cmdBench(opts) {
 async function main() {
   const { cmd, opts } = parseArgs(process.argv.slice(2));
   if (opts.help || cmd === "--help" || cmd === "-h" || cmd === "help") process.stdout.write(USAGE);
-  else if (cmd === "init") await cmdInit(opts);
+  else if (cmd === "--version" || cmd === "-v" || cmd === "version" || opts.version) {
+    const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+    process.stdout.write(`helix ${pkg.version || "0.9.0"}\n`);
+  } else if (cmd === "init") await cmdInit(opts);
   else if (cmd === "plugin") cmdPlugin(opts);
   else if (cmd === "doctor") cmdDoctor(opts);
   else if (cmd === "measure") cmdMeasure(opts);
