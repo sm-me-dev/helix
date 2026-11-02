@@ -19,7 +19,12 @@ describe("eval arms", () => {
         !nosub.some((p) => AGENT_DEF.test(p)),
         `${agent} nosub arm must not define subagents`,
       );
-      assert.deepEqual(nosub, full.filter((p) => !AGENT_DEF.test(p)));
+      // gate-only.mjs guards the reviewer's Bash; without the crew there is no reviewer, so the
+      // guard rightly disappears with it (a hook nobody calls would be shipped-but-unwired).
+      assert.deepEqual(
+        nosub,
+        full.filter((p) => !AGENT_DEF.test(p) && !p.endsWith("hooks/gate-only.mjs")),
+      );
       assert.ok(nosub.includes("AGENTS.md"), "nosub keeps the repo instruction file");
       assert.ok(
         nosub.some((p) => p.endsWith("gate.mjs")),

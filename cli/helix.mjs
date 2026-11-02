@@ -1,7 +1,7 @@
 #!/usr/bin/env -S node --experimental-strip-types
 // helix — init, doctor, measure, export, eval for the Helix harness pack.
 // Requires Node 22.6+ (type stripping). No dependencies beyond the repo.
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   accessSync,
   constants,
@@ -15,10 +15,14 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
+import { fileURLToPath } from "node:url";
 import { GATE_SOURCE } from "../src/gate.ts";
 import { generatePack } from "../src/generate.ts";
 import { pluginPack } from "../src/plugin.ts";
 import { cmdLearn } from "./learn.ts";
+import { cmdRun } from "./run.ts";
+import { addRcBlock, installShim, isOnPath, rcFileFor, removeRcBlock, removeShim } from "./link.ts";
+import { startUi } from "./ui.ts";
 import { DEFAULT_PLATFORMS, PLATFORM_BY_ID } from "../src/platforms.ts";
 import {
   configForStack,
@@ -67,8 +71,19 @@ const USAGE = `helix — AI coding harness pack manager
                                                 tokens, repeated reads, oversized outputs and
                                                 retries from real session transcripts
   helix export --platform <id>                  print the pack as JSON (scripted use)
+  helix run [task] [options]                    execute a coding task with ephemeral worktree,
+                                                bounded context, and mechanical verification
+                                                (--strategy, --platform, --dry, --pass, --json)
+  helix bench [options]                         repeatable benchmark suite across 10 categories
+                                                and 5 strategies (--strategy, --category, --json)
   helix eval [options]                          run the eval harness (see evals/README.md)
   helix learn <sub> [dir] [flags]               Learning Ledger: opt-in, evidence-gated
+  helix link [--bin-dir <dir>] [--modify-rc|--no-modify-rc] [--force]
+                                                put a \`helix\` command on your PATH (a shim in
+                                                ~/.local/bin that points at this checkout)
+  helix unlink [--bin-dir <dir>]                remove the shim and the PATH line \`link\` added
+  helix ui [dir] [--port <n>] [--open]          local web view (127.0.0.1 only, token-protected):
+                                                doctor, measure, gate, report, init
 `;
 
 function parseArgs(argv) {
@@ -85,16 +100,25 @@ function parseArgs(argv) {
     index: true,
     help: false,
     platform: null,
+    benchArgs: [],
     evalArgs: [],
     gateArgs: [],
     reportArgs: [],
     learnArgs: [],
+    runArgs: [],
+    binDir: null,
+    modifyRc: null,
+    port: null,
+    open: false,
   };
   const positional = [];
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
-    // eval has its own --help; every other command shows the shared usage.
-    if ((a === "--help" || a === "-h") && cmd !== "eval") opts.help = true;
+    // eval, bench, and run have their own --help; every other command shows the shared usage.
+    if ((a === "--help" || a === "-h") && cmd !== "eval" && cmd !== "bench" && cmd !== "run")
+      opts.help = true;
+    else if (cmd === "bench") opts.benchArgs.push(a);
+    else if (cmd === "run") opts.runArgs.push(a);
     else if (cmd === "gate" && a.startsWith("--")) opts.gateArgs.push(a);
     else if (cmd === "report") opts.reportArgs.push(a);
     else if (cmd === "learn") opts.learnArgs.push(a);
@@ -110,6 +134,13 @@ function parseArgs(argv) {
     else if (a === "--platform" && cmd === "export") opts.platform = rest[++i];
     else if (a.startsWith("--platform=")) opts.platforms = a.slice("--platform=".length).split(",");
     else if (a === "--platform") opts.platforms = (rest[++i] ?? "").split(",");
+    else if (a === "--bin-dir") opts.binDir = rest[++i] ?? null;
+    else if (a.startsWith("--bin-dir=")) opts.binDir = a.slice("--bin-dir=".length);
+    else if (a === "--modify-rc") opts.modifyRc = true;
+    else if (a === "--no-modify-rc") opts.modifyRc = false;
+    else if (a === "--port") opts.port = Number(rest[++i]);
+    else if (a.startsWith("--port=")) opts.port = Number(a.slice("--port=".length));
+    else if (a === "--open") opts.open = true;
     else if (a.startsWith("-")) opts.evalArgs.push(a);
     else if (cmd === "eval") opts.evalArgs.push(a);
     else positional.push(a);
@@ -148,15 +179,21 @@ function walkFiles(dir, out = new Map(), root = dir) {
   return out;
 }
 
+/** Paths `helix init` itself writes. They must not count as repo size, or a second init on a small
+ * repo sees its own output, crosses the Graphify threshold and rewrites the pack. */
+const PACK_OWNED =
+  /^(\.helix|\.claude|\.cursor|\.codex|\.agents|\.opencode)\/|^(AGENTS\.md|CLAUDE\.md|GEMINI\.md|opencode\.json|\.mcp\.json|\.vscode\/mcp\.json|\.github\/workflows\/helix-gate\.yml|\.github\/copilot-instructions\.md)$/;
+
 function detectDir(dir, files = walkFiles(dir)) {
   const names = new Set(files.keys());
   const pkgRaw = files.get("package.json");
-  return detectStack({
+  const stack = detectStack({
     names,
     packageJson: pkgRaw ? JSON.parse(pkgRaw) : null,
     makefile: files.get("Makefile") ?? files.get("makefile") ?? null,
     justfile: files.get("justfile") ?? files.get("Justfile") ?? null,
   });
+  return { ...stack, fileCount: [...names].filter((n) => !PACK_OWNED.test(n)).length };
 }
 
 async function confirm(question) {
@@ -605,6 +642,139 @@ function cmdExport(opts) {
   }
 }
 
+const CLI_PATH = fileURLToPath(import.meta.url);
+
+async function cmdLink(opts) {
+  if (process.platform === "win32") {
+    console.error(
+      "helix link: Windows is not supported yet. Use `node cli/helix.mjs`, or `npm link`.",
+    );
+    process.exitCode = 2;
+    return;
+  }
+  const binDir = resolve(opts.binDir ?? join(homedir(), ".local", "bin"));
+  const r = installShim({
+    binDir,
+    cliPath: CLI_PATH,
+    nodePath: process.execPath,
+    force: opts.force,
+  });
+  if (r.action === "refused") {
+    console.error(
+      `helix link: ${r.path} exists and is not a Helix shim; pass --force to replace it`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+  console.log(`${r.action === "wrote" ? "write" : "keep "} ${r.path}`);
+  if (isOnPath(binDir, process.env.PATH)) {
+    console.log("on PATH: run `helix --help` (or `helix ui` for the web view)");
+    return;
+  }
+  const rc = rcFileFor(process.env.SHELL, homedir());
+  const line = `export PATH="${binDir}:$PATH"`;
+  let modify = opts.modifyRc;
+  if (modify === null) {
+    modify = rc !== null && (await confirm(`${binDir} is not on your PATH. Add it to ${rc}?`));
+  }
+  if (modify && rc) {
+    const a = addRcBlock(rc, binDir);
+    console.log(`${a === "added" ? "write" : "keep "} ${rc} (PATH line)`);
+    console.log(`open a new terminal, or run: source ${rc}`);
+  } else {
+    console.log(`${binDir} is not on your PATH. Add this line to your shell profile:\n  ${line}`);
+    if (rc === null) console.log("(fish: fish_add_path " + binDir + ")");
+  }
+}
+
+function cmdUnlink(opts) {
+  const binDir = resolve(opts.binDir ?? join(homedir(), ".local", "bin"));
+  const r = removeShim({ binDir });
+  if (r.action === "refused") {
+    console.error(`helix unlink: ${r.path} is not a Helix shim; left alone`);
+    process.exitCode = 1;
+  } else console.log(`${r.action === "removed" ? "remove" : "absent"} ${r.path}`);
+  const rc = rcFileFor(process.env.SHELL, homedir());
+  if (rc && removeRcBlock(rc) === "removed") console.log(`remove PATH line from ${rc}`);
+}
+
+async function cmdUi(opts) {
+  const requested = opts.port;
+  if (
+    requested !== null &&
+    !(Number.isInteger(requested) && requested >= 0 && requested <= 65535)
+  ) {
+    console.error("helix ui: --port must be an integer from 0 to 65535");
+    process.exitCode = 2;
+    return;
+  }
+  const dir = resolve(opts.dir);
+  const ui = await startUi({
+    dir,
+    port: requested ?? 4317,
+    cliPath: CLI_PATH,
+    fallbackToRandomPort: requested === null,
+  });
+  console.log(`helix ui for ${dir}\n  ${ui.url}\nlocal only (127.0.0.1); press Ctrl-C to stop`);
+  if (opts.open) {
+    const opener = process.platform === "darwin" ? "open" : "xdg-open";
+    spawn(opener, [ui.url], { stdio: "ignore", detached: true })
+      .on("error", () => console.log(`could not run ${opener}; open the URL above`))
+      .unref();
+  }
+  const stop = () => void ui.close().then(() => process.exit(0));
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
+}
+
+async function cmdBench(opts) {
+  const { RepeatableBenchmarkSuite } = await import("../src/engine/benchmark.ts");
+  const suite = new RepeatableBenchmarkSuite();
+
+  let json = false;
+  let outPath = null;
+  let runs = 1;
+  const strategies = [];
+  const categories = [];
+
+  const args = opts.benchArgs || [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--json") json = true;
+    else if (a === "--help" || a === "-h") {
+      process.stdout.write(
+        "Usage: helix bench [--strategy s1,s2] [--category c1,c2] [--runs n] [--json] [--out <path>]\n",
+      );
+      return;
+    } else if (a === "--out") outPath = args[++i];
+    else if (a.startsWith("--out=")) outPath = a.slice("--out=".length);
+    else if (a === "--runs") runs = Number(args[++i]) || 1;
+    else if (a.startsWith("--runs=")) runs = Number(a.slice("--runs=".length)) || 1;
+    else if (a === "--strategy") strategies.push(...(args[++i] || "").split(","));
+    else if (a.startsWith("--strategy="))
+      strategies.push(...a.slice("--strategy=".length).split(","));
+    else if (a === "--category") categories.push(...(args[++i] || "").split(","));
+    else if (a.startsWith("--category="))
+      categories.push(...a.slice("--category=".length).split(","));
+  }
+
+  const report = await suite.runSuite({
+    strategies: strategies.length > 0 ? strategies : undefined,
+    categories: categories.length > 0 ? categories : undefined,
+    runsPerTask: runs,
+  });
+
+  if (outPath) {
+    suite.saveReport(report, outPath);
+  }
+
+  if (json) {
+    process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+  } else {
+    process.stdout.write(suite.formatMarkdownReport(report) + "\n");
+  }
+}
+
 async function main() {
   const { cmd, opts } = parseArgs(process.argv.slice(2));
   if (opts.help || cmd === "--help" || cmd === "-h" || cmd === "help") process.stdout.write(USAGE);
@@ -616,9 +786,19 @@ async function main() {
   else if (cmd === "report") await cmdReport(opts);
   else if (cmd === "export") cmdExport(opts);
   else if (cmd === "learn") await cmdLearn(opts.learnArgs);
+  else if (cmd === "run") await cmdRun(opts);
+  else if (cmd === "link") await cmdLink(opts);
+  else if (cmd === "unlink") cmdUnlink(opts);
+  else if (cmd === "ui") await cmdUi(opts);
+  else if (cmd === "bench") await cmdBench(opts);
   else if (cmd === "eval") {
-    const { runEval } = await import("../evals/run.mjs");
-    await runEval(opts.evalArgs);
+    if (opts.evalArgs.includes("--benchmark") || opts.evalArgs.includes("-b")) {
+      opts.benchArgs = opts.evalArgs.filter((a) => a !== "--benchmark" && a !== "-b");
+      await cmdBench(opts);
+    } else {
+      const { runEval } = await import("../evals/run.mjs");
+      await runEval(opts.evalArgs);
+    }
   } else {
     process.stdout.write(USAGE);
     process.exitCode = cmd ? 2 : 0;

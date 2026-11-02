@@ -479,13 +479,64 @@ describe("CI backstop", () => {
   });
 
   it("uses the detected package manager", () => {
-    assert.match(wf(cfg({ ci: "github", stack: stack("javascript", "pnpm") }))!.body, /pnpm install --frozen-lockfile/);
-    assert.match(wf(cfg({ ci: "github", stack: stack("javascript", "yarn") }))!.body, /yarn install --immutable/);
+    assert.match(
+      wf(cfg({ ci: "github", stack: stack("javascript", "pnpm") }))!.body,
+      /pnpm install --frozen-lockfile/,
+    );
+    assert.match(
+      wf(cfg({ ci: "github", stack: stack("javascript", "yarn") }))!.body,
+      /yarn install --immutable/,
+    );
   });
 
   it("is skipped for stacks it cannot install, instead of shipping a broken workflow", () => {
     assert.equal(wf(cfg({ ci: "github", stack: stack("go") })), undefined);
     assert.equal(wf(cfg({ ci: "github", stack: stack("javascript", "bun") })), undefined);
     assert.equal(wf(cfg({ ci: "github" })), undefined);
+  });
+});
+
+describe("minimal instructions", () => {
+  const cfg = (extra: Partial<HarnessConfig> = {}): HarnessConfig => ({
+    ...BASE,
+    crew: [],
+    platforms: ["opencode"],
+    mcps: [],
+    graphFirst: false,
+    minimalInstructions: true,
+    stack: {
+      language: "typescript",
+      packageManager: "npm",
+      testCommand: "npm test",
+      lintCommand: "npm run lint",
+      formatCommand: null,
+    },
+    ...extra,
+  });
+  const agentsMd = (c: HarnessConfig) =>
+    generatePack(c).find((f) => f.path === "AGENTS.md")?.body ?? "";
+
+  it("keeps only what an agent cannot cheaply discover: commands, the gate, the secret rule", () => {
+    const a = agentsMd(cfg());
+    assert.match(a, /npm test/);
+    assert.match(a, /node \.helix\/gate\.mjs/);
+    assert.match(a, /secret/i);
+    assert.doesNotMatch(a, /Classify|orchestrator|Dispatch|Return summaries|failing test first/);
+  });
+
+  it("stays under 90 words and is smaller than the default file", () => {
+    const min = agentsMd(cfg());
+    const full = agentsMd(cfg({ minimalInstructions: false }));
+    assert.ok(min.split(/\s+/).filter(Boolean).length <= 90, min);
+    assert.ok(min.length < full.length / 2);
+  });
+
+  it("never names subagents or a graph that the pack does not ship", () => {
+    const a = agentsMd(cfg());
+    assert.doesNotMatch(a, /subagent|query_graph|Graph/i);
+  });
+
+  it("refuses to drop the role table when a crew is installed", () => {
+    assert.throws(() => generatePack(cfg({ crew: ["scout"] })), /minimalInstructions/);
   });
 });

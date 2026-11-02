@@ -100,6 +100,49 @@ use. Uses the same `generatePack` as `init`: for one
 platform the output is deterministic (byte-identical across runs). Missing or
 unknown `--platform` exits `2`.
 
+## `helix run [task-prompt-or-file] [options]`
+
+Execute a coding task with ephemeral git worktree isolation, progressive context assembly,
+and mechanical gate validation. Single agent is the default execution strategy.
+
+- **Arguments:**
+  - `task-prompt-or-file`: Direct prompt string, path to a `.md` or `.json` task specification, or piped via stdin.
+- **Key Options:**
+  - `--strategy <single|chain|parallel|full-crew>`: Execution strategy (default: `single`).
+  - `--platform <id>`: Target agent platform (e.g. `claude-code`, `opencode`, `codex`, `cursor`).
+  - `--provider <id>`: LLM provider for token and dollar cost tracking (`anthropic`, `openai`, `google`).
+  - `--dry`: Plan only; do not launch agent or modify files.
+  - `--no-worktree`: Execute directly in current workspace instead of an ephemeral worktree.
+  - `--timeout <sec>`: Task timeout in seconds (default: 600).
+  - `--max-retries <n>`: Maximum gate verification retries on failure (default: 2, ceiling: 2).
+  - `--pass <command>`: Verification test/gate command.
+  - `--target <files>`: Comma-separated target files expected to be modified.
+  - `--simulation`: Deterministic simulation mode for testing and CI.
+  - `--json`: Output structured JSON result and metrics.
+  - `--out <path>`: Save execution report JSON to a custom file path.
+- **Exit Codes:**
+  - `0`: Task succeeded and passed mechanical validation.
+  - `1`: Task failed execution or verification (retries exhausted).
+  - `2`: Invalid CLI arguments or malformed task specification.
+  - `3`: Task blocked by workflow policy (e.g. ambiguity or missing facts).
+  - `130`: Interrupted by user signal (SIGINT / SIGTERM).
+
+```sh
+helix run "Fix null check in src/auth.ts"
+helix run examples/tasks/01-bugfix-calculation.json --dry
+helix run "Refactor payment module" --strategy chain --pass "npm test"
+```
+
+## `helix bench [--strategy s1,s2] [--category c1,c2] [--runs n] [--json] [--out <path>]`
+
+Execute the repeatable benchmark evaluation suite across 10 task categories and 5 execution
+strategies, computing regression rates, cost per successful task, and strategy comparison matrices.
+
+```sh
+helix bench --strategy single,chain --category bugfix,feature --runs 1
+helix bench --strategy all --json --out .helix-work/reports/bench-matrix.json
+```
+
 ## `helix eval [options]`
 
 Opt-in head-to-head agent evaluations. Costs money and wall time — never runs
@@ -112,3 +155,26 @@ Opt-in Learning Ledger (evidence-gated, default off). Subcommands: `init`
 (never overwrites), `capture`, `accept`, `confirm`, `human-accept`, `list`,
 `compile`, `decay`. Lessons can never write hooks, settings, or permissions.
 `helix learn` with no subcommand prints the subcommand reference.
+
+## `helix link [--bin-dir <dir>] [--modify-rc|--no-modify-rc] [--force]` · `helix unlink`
+
+Install or remove a `helix` command. The shim (`cli/link.ts`) is a POSIX script in `~/.local/bin`
+(or `--bin-dir`) that runs this checkout with Node's type stripping, using the `node` on `PATH` at run
+time and falling back to the one that ran `link`. It is idempotent, and it never replaces a `helix`
+file it did not write unless `--force` is given. When the directory is not on `PATH`, `link` asks
+before appending a marked block to `.zshrc` or `.bashrc` (no prompt without a terminal: it prints the
+line instead); `unlink` removes the shim and exactly that block. Windows: not supported.
+
+## `helix ui [dir] [--port <n>] [--open]`
+
+A local web view (`cli/ui.ts`) for `doctor`, `measure`, `gate`, `gate --all`, `report` and `init`. It
+runs the same CLI commands as child processes in `dir` and shows their exit code and output.
+
+- Listens on `127.0.0.1` only. Default port 4317 (a free one if that is taken; `--port` fails
+  instead). Prints a URL with a one-time token; open it, or pass `--open`.
+- The token is traded for an HttpOnly, SameSite=Strict cookie. Requests need that cookie, a loopback
+  `Host`, a same-origin `Origin` when one is sent, and an `X-Helix` header on actions.
+- The browser cannot pick the directory, the command or free-form arguments: actions are a fixed
+  list, and `init` accepts only a platform list and a crew flag. `gate` runs the repo's own test and
+  lint commands, so only point `ui` at a repo you trust.
+- The page loads nothing from the network (CSP `default-src 'none'`). One action runs at a time.

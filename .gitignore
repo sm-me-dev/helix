@@ -79,3 +79,6 @@ artifacts/
 
 # Graphify output: generated, ~6000-line churn per refresh; regenerate with `graphify update .`
 graphify-out/
+
+# Helix implementation work & reports
+.helix-work/

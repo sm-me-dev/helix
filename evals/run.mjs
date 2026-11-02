@@ -25,12 +25,23 @@ const DEFAULT_RESULTS = join(HERE, "results");
 
 const AGENTS = ["codex", "claude-code", "opencode"];
 const FIXTURES = ["small", "large", "all"];
+/** Ablation ladder, cheapest to fullest. Each arm adds one thing to the previous one, so a
+ * difference between neighbours is attributable:
+ *  none           no pack (the baseline)
+ *  agents-md-only AGENTS.md alone, no skills, hooks, gate or crew (isolates the instructions)
+ *  helix-min      helix-nosub with the minimal AGENTS.md (commands, gate, secret rule only)
+ *  helix-nosub    universal pack, consistent single-agent AGENTS.md, no subagent definitions
+ *  helix          helix-nosub plus the scout/architect/builder/reviewer crew
+ *  helix-graph    helix-nosub plus a built Graphify index and its MCP, so graph-first is real */
+export const ARMS = ["none", "agents-md-only", "helix-min", "helix-nosub", "helix", "helix-graph"];
 
 function usage() {
   return `helix eval — run none-vs-helix task comparisons
 
   --agent <id>        ${AGENTS.join("|")} (default: codex)
-  --arms <list>       comma list of none,helix,helix-nosub (default: none,helix)
+  --arms <list>       comma list of ${ARMS.join(",")} (default: none,helix)
+  --retry-hung <n>    re-run a cell up to n times when it timed out with zero tokens, an
+                      infrastructure signature, not an agent result (default: 1)
   --runs <n>          repetitions per cell (default: 1)
   --tasks <list>      comma task ids, default all for the fixture
   --fixture <id>      ${FIXTURES.join("|")} (default: small; large = 356-file navigation fixture)
@@ -49,6 +60,7 @@ function parseArgs(argv) {
     agent: "codex",
     arms: ["none", "helix"],
     runs: 1,
+    retryHung: 1,
     tasks: null,
     fixture: "small",
     includeHeldout: false,
@@ -71,6 +83,7 @@ function parseArgs(argv) {
     else if (a.startsWith("--agent")) o.agent = val("--agent");
     else if (a.startsWith("--arms")) o.arms = val("--arms").split(",");
     else if (a.startsWith("--runs")) o.runs = Number(val("--runs"));
+    else if (a.startsWith("--retry-hung")) o.retryHung = Number(val("--retry-hung"));
     else if (a.startsWith("--tasks")) o.tasks = val("--tasks").split(",");
     else if (a.startsWith("--fixture")) o.fixture = val("--fixture");
     else if (a.startsWith("--results-dir")) o.resultsDir = val("--results-dir");
@@ -87,8 +100,10 @@ function parseArgs(argv) {
   if (!AGENTS.includes(o.agent)) throw new Error(`unknown agent: ${o.agent}`);
   if (!FIXTURES.includes(o.fixture)) throw new Error(`unknown fixture: ${o.fixture}`);
   for (const arm of o.arms) {
-    if (!["none", "helix", "helix-nosub"].includes(arm)) throw new Error(`unknown arm: ${arm}`);
+    if (!ARMS.includes(arm)) throw new Error(`unknown arm: ${arm} (known: ${ARMS.join(", ")})`);
   }
+  if (!Number.isInteger(o.retryHung) || o.retryHung < 0)
+    throw new Error("--retry-hung must be >= 0");
   return o;
 }
 
@@ -150,36 +165,65 @@ async function freshCopy(task = null) {
   return dir;
 }
 
-/** Files an eval helix arm writes. helix-nosub drops model-subagent definitions
- * (agent files) but keeps AGENTS.md, skills, hooks, MCP fragments and the gate,
- * so the with/without-subagents comparison measures only the subagents. */
+/** Files an eval arm writes (empty for `none`). See ARMS for what each arm isolates.
+ * Every arm's AGENTS.md must only name files and tools that arm actually ships: an
+ * instruction file that points at a missing graph or missing subagents measures the
+ * inconsistency, not the harness (`evals/run-arms.test.mjs` enforces this). */
 export function packFilesForArm(agent, arm = "helix") {
-  const files = helixFilesFor(agent);
-  if (arm === "helix-nosub") return files.filter((f) => !/(^|\/)agents\//.test(f.path));
+  if (!ARMS.includes(arm)) throw new Error(`unknown arm: ${arm}`);
+  if (arm === "none") return [];
+  if (arm === "helix-graph" && agent === "codex") {
+    throw new Error(
+      "helix-graph is not supported for codex: the eval deliberately skips .codex/config.toml",
+    );
+  }
+  const files = helixFilesFor(agent, arm);
+  // The instructions plus the one command they name (the gate); no skills, hooks, map or crew.
+  if (arm === "agents-md-only") {
+    return files.filter((f) => f.path === "AGENTS.md" || f.path === ".helix/gate.mjs");
+  }
   return files;
 }
 
-function helixFilesFor(agent) {
+export function armConfig(platform, arm) {
+  const graph = arm === "helix-graph";
+  const instructionsOnly = arm === "agents-md-only";
+  return {
+    crew: arm === "helix" ? ["scout", "architect", "builder", "reviewer"] : [],
+    skills: instructionsOnly ? [] : graph ? ["graph-first", "hook-guards"] : ["hook-guards"],
+    mcps: graph ? ["graphify"] : [],
+    platforms: [platform],
+    graphFirst: graph,
+    progressiveDisclosure: true,
+    defaultSingleAgent: true,
+    hooksEnabled: !instructionsOnly,
+    ...(arm === "helix-min"
+      ? {
+          minimalInstructions: true,
+          // The eval fixture is a plain npm/TypeScript repo; the facts are what `helix init` detects.
+          stack: {
+            language: "typescript",
+            packageManager: "npm",
+            testCommand: "npm test",
+            lintCommand: null,
+            formatCommand: null,
+          },
+        }
+      : {}),
+  };
+}
+
+function helixFilesFor(agent, arm) {
   const platform = agent === "codex" ? "codex" : agent === "opencode" ? "opencode" : "claude-code";
   // NOTE: the .codex/config.toml adapter output is deliberately skipped here:
   // dropping a project config into the eval copy could shadow runner MCP/auth
   // settings. The harness under test is AGENTS.md + skills (+ hooks for claude).
-  const config = {
-    crew: ["scout", "architect", "builder", "reviewer"],
-    skills: ["graph-first", "hook-guards"],
-    mcps: [],
-    platforms: [platform],
-    graphFirst: true,
-    progressiveDisclosure: true,
-    defaultSingleAgent: true,
-    hooksEnabled: true,
-  };
-  return generatePack(config).filter(
+  const keepMcpFile = arm === "helix-graph";
+  return generatePack(armConfig(platform, arm)).filter(
     (f) =>
       f.path !== ".codex/config.toml" &&
-      f.path !== ".mcp.json" &&
-      f.path !== ".cursor/mcp.json" &&
-      f.path !== ".vscode/mcp.json",
+      (keepMcpFile ||
+        (f.path !== ".mcp.json" && f.path !== ".cursor/mcp.json" && f.path !== ".vscode/mcp.json")),
   );
 }
 
@@ -436,13 +480,18 @@ export async function transcriptTokens(agent, workdir, opts = {}) {
 async function runCell(agent, arm, task, run, timeoutSec, opts = {}) {
   const workdir = await freshCopy(task);
   try {
-    if (arm === "helix" || arm === "helix-nosub") {
+    if (arm !== "none") {
       const { mkdir, writeFile } = await import("node:fs/promises");
       const { dirname } = await import("node:path");
       for (const f of packFilesForArm(agent, arm)) {
         const full = join(workdir, f.path);
         await mkdir(dirname(full), { recursive: true });
         await writeFile(full, f.body);
+      }
+      if (arm === "helix-graph") {
+        // graph-first is only honest when the index exists before the agent starts.
+        const built = await sh("graphify update .", workdir, 300);
+        if (!built.ok) throw new Error(`graphify update failed: ${built.output.slice(-300)}`);
       }
       // Commit the pack so `clean` later reflects agent edits only.
       await sh(
@@ -637,15 +686,6 @@ export async function runEval(argv) {
   const startedAt = new Date().toISOString().slice(0, 10);
   const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const results = [];
-  for (const task of tasks) {
-    for (const arm of o.arms) {
-      for (let run = 1; run <= o.runs; run++) {
-        const timeoutSec = Math.round(task.timeoutSec * o.timeoutScale);
-        console.log(`run: [${task.id}] arm=${arm} ${run}/${o.runs} (timeout ${timeoutSec}s)`);
-        results.push(await runCell(o.agent, arm, task, run, timeoutSec, o));
-      }
-    }
-  }
   const meta = {
     agent: o.agent,
     arms: o.arms,
@@ -655,23 +695,49 @@ export async function runEval(argv) {
     includeHeldout: o.includeHeldout,
     tasks: tasks.map((t) => t.id),
   };
-  const rows = summarize(results);
   await mkdir(o.resultsDir, { recursive: true });
   const base = join(o.resultsDir, `${stamp}-${o.agent}`);
-  const publicResults = await Promise.all(
-    results.map(async (r) => {
-      const logFile = `${stamp}-${r.task}-${r.arm}-${r.run}.log`;
-      await writeFile(join(o.resultsDir, logFile), r._fullLog ?? "");
-      const { _fullLog, ...rest } = r;
-      return { ...rest, logFile };
-    }),
-  );
-  await writeFile(
-    `${base}.json`,
-    JSON.stringify({ meta, rows, results: publicResults }, null, 2) + "\n",
-  );
+  // Checkpoint after every cell: a multi-hour matrix must not lose everything to one crash.
+  const checkpoint = async (r) => {
+    const logFile = `${stamp}-${r.task}-${r.arm}-${r.run}.log`;
+    await writeFile(join(o.resultsDir, logFile), r._fullLog ?? "");
+    const { _fullLog, ...rest } = r;
+    results[results.indexOf(r)] = { ...rest, logFile };
+    await writeFile(
+      `${base}.json`,
+      JSON.stringify({ meta, rows: summarize(results), results }, null, 2) + "\n",
+    );
+  };
+  // Interleaved order (task, run, arm): paired cells run back to back, so provider load and
+  // time-of-day drift hit every arm alike instead of favouring whichever arm ran first.
+  for (const task of tasks) {
+    for (let run = 1; run <= o.runs; run++) {
+      for (const arm of o.arms) {
+        const timeoutSec = Math.round(task.timeoutSec * o.timeoutScale);
+        console.log(`run: [${task.id}] arm=${arm} ${run}/${o.runs} (timeout ${timeoutSec}s)`);
+        const r = await runCellWithRetry(o, arm, task, run, timeoutSec);
+        results.push(r);
+        await checkpoint(r);
+      }
+    }
+  }
+  const rows = summarize(results);
   await writeFile(`${base}.md`, markdownReport(meta, rows));
   console.log(`wrote ${base}.json + .md`);
+}
+
+/** A zero-token timeout is an infrastructure signature (the agent never produced a turn), not
+ * an agent result. Retry it up to `retryHung` times and record how many attempts it took, so a
+ * flaky provider cannot be charged to an arm. Every attempt's outcome stays visible. */
+async function runCellWithRetry(o, arm, task, run, timeoutSec) {
+  const earlier = [];
+  let r = await runCell(o.agent, arm, task, run, timeoutSec, o);
+  while (r.hung && earlier.length < o.retryHung) {
+    console.log(`  hung (no tokens before timeout); retry ${earlier.length + 1}/${o.retryHung}`);
+    earlier.push({ hung: true, wallSec: r.wallSec });
+    r = await runCell(o.agent, arm, task, run, timeoutSec, o);
+  }
+  return { ...r, attempts: earlier.length + 1, hungAttempts: earlier };
 }
 
 const invoked = process.argv[1] && import.meta.url.endsWith(process.argv[1].split("/").pop() ?? "");
