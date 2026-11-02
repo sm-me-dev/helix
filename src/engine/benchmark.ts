@@ -983,13 +983,33 @@ export class RepeatableBenchmarkSuite {
     const review = strategies["implementer-plus-reviewer"];
     const parallel = strategies["parallel-implementation"];
 
-    return [
-      `1. **Single-Agent Baseline is Token-Optimal for Standard Tasks:** The single-agent strategy achieved the lowest token consumption (~${base?.meanTotalTokens.toLocaleString()} tokens/task). On bug fixes, simple features, test generation, and repo exploration, adding multiple agents increases cost without improving quality.`,
-      `2. **Independent Reviewer Maximizes Quality & Eliminates Regressions:** The Implementer + Reviewer strategy achieved ${review?.qualityScore}% verified quality and ${review?.regressionRate}% regression rate (vs ${base?.regressionRate}% regression rate for unreviewed single-agent). The token premium is modest (+${review?.tokenDeltaPercent}%), making it the most cost-effective multi-agent strategy for high-assurance work.`,
-      `3. **Multiple Implementers Produce Coordination Overhead:** Dispersing work across multiple builders without an independent reviewer resulted in ${multi?.regressionRate}% regression rate and +${multi?.tokenDeltaPercent}% token inflation. Spawning extra agents without clear file boundaries actively degrades reliability.`,
-      `4. **Parallel Implementation Excels Strictly on Disjoint Subtasks:** On independent subtasks, parallel execution lowered implementation latency (mean: ${parallel?.meanDurationMs}ms, ${parallel?.latencyDeltaPercent}% vs baseline), but when applied to sequential dependencies, failure and regression rates increased. Parallel execution must be restricted to verified independent DAG nodes.`,
-      `5. **Planning Overhead Justified on Complex Multi-Module Tasks:** Single agent + planning consumed +${plan?.tokenDeltaPercent}% more tokens than baseline, but reduced regressions on complex multi-file changes to ${plan?.regressionRate}%. Planning should be dynamically selected for complex tasks and skipped for trivial fixes.`,
-    ];
+    const findings: string[] = [];
+    if (base) {
+      findings.push(
+        `1. **Single-Agent Baseline is Token-Optimal for Standard Tasks:** The single-agent strategy achieved the lowest token consumption (~${base.meanTotalTokens.toLocaleString()} tokens/task). On bug fixes, simple features, test generation, and repo exploration, adding multiple agents increases cost without improving quality.`,
+      );
+    }
+    if (review && base) {
+      findings.push(
+        `2. **Independent Reviewer Maximizes Quality & Eliminates Regressions:** The Implementer + Reviewer strategy achieved ${review.qualityScore}% verified quality and ${review.regressionRate}% regression rate (vs ${base.regressionRate}% regression rate for unreviewed single-agent). The token premium is modest (+${review.tokenDeltaPercent}%), making it the most cost-effective multi-agent strategy for high-assurance work.`,
+      );
+    }
+    if (multi) {
+      findings.push(
+        `3. **Multiple Implementers Produce Coordination Overhead:** Dispersing work across multiple builders without an independent reviewer resulted in ${multi.regressionRate}% regression rate and +${multi.tokenDeltaPercent}% token inflation. Spawning extra agents without clear file boundaries actively degrades reliability.`,
+      );
+    }
+    if (parallel) {
+      findings.push(
+        `4. **Parallel Implementation Excels Strictly on Disjoint Subtasks:** On independent subtasks, parallel execution lowered implementation latency (mean: ${parallel.meanDurationMs}ms, ${parallel.latencyDeltaPercent}% vs baseline), but when applied to sequential dependencies, failure and regression rates increased. Parallel execution must be restricted to verified independent DAG nodes.`,
+      );
+    }
+    if (plan) {
+      findings.push(
+        `5. **Planning Overhead Justified on Complex Multi-Module Tasks:** Single agent + planning consumed +${plan.tokenDeltaPercent}% more tokens than baseline, but reduced regressions on complex multi-file changes to ${plan.regressionRate}%. Planning should be dynamically selected for complex tasks and skipped for trivial fixes.`,
+      );
+    }
+    return findings;
   }
 
   /**
