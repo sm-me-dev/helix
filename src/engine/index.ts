@@ -8,4 +8,6 @@ export * from "./validator.ts";
 export * from "./context.ts";
 export * from "./runner.ts";
 export * from "./observability.ts";
+export * from "./orchestrator.ts";
+export * from "./experiment.ts";
 export * from "./engine.ts";

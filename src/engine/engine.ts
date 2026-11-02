@@ -2,6 +2,7 @@
 import type { WorkflowState } from "../workflow.ts";
 import { DefaultContextManager, TokenBudgetManager } from "./context.ts";
 import { DefaultObservabilityCollector } from "./observability.ts";
+import { DefaultAgentOrchestrator } from "./orchestrator.ts";
 import { MockAgentRunner } from "./runner.ts";
 import { FileExecutionStateManager } from "./state.ts";
 import { DefaultTaskPlanner, normalizeTaskDefinition } from "./task.ts";
@@ -54,7 +55,15 @@ export class HelixExecutionEngine implements HelixEngine {
     this.contextManager = deps.contextManager || new DefaultContextManager();
     this.toolExecutor = deps.toolExecutor || new DefaultToolExecutor();
     this.worktreeManager = deps.worktreeManager || new GitWorktreeManager();
-    this.orchestrator = deps.orchestrator as AgentOrchestrator;
+    this.orchestrator =
+      deps.orchestrator ||
+      new DefaultAgentOrchestrator({
+        runner: this.runner,
+        validator: this.validator,
+        contextManager: this.contextManager,
+        worktreeManager: this.worktreeManager,
+        observability: deps.observability,
+      });
   }
 
   async getState(taskId: string): Promise<ExecutionStateSnapshot | null> {
