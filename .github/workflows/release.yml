@@ -37,6 +37,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: 22
+          cache: npm
 
       - name: Build release archives
         run: |
@@ -65,6 +66,7 @@ jobs:
           mkdir -p test-install
           tar -xzf "dist/helix-${TAG}.tar.gz" -C test-install
           cd test-install
+          npm install --omit=dev --ignore-scripts --no-audit --no-fund
           node cli/helix.mjs --version
           node cli/helix.mjs --help
           node cli/helix.mjs run "Smoke test from release archive" --dry
@@ -74,9 +76,19 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
-          gh release create "${TAG}" \
-            dist/helix-${TAG}.tar.gz \
-            dist/helix-${TAG}.zip \
-            dist/SHA256SUMS.txt \
-            --title "Helix ${TAG}" \
-            --generate-notes
+          awk "/^## \[${TAG#v}\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md > release-notes.md
+          if [ -s release-notes.md ]; then
+            gh release create "${TAG}" \
+              dist/helix-${TAG}.tar.gz \
+              dist/helix-${TAG}.zip \
+              dist/SHA256SUMS.txt \
+              --title "Helix ${TAG}" \
+              --notes-file release-notes.md
+          else
+            gh release create "${TAG}" \
+              dist/helix-${TAG}.tar.gz \
+              dist/helix-${TAG}.zip \
+              dist/SHA256SUMS.txt \
+              --title "Helix ${TAG}" \
+              --generate-notes
+          fi
