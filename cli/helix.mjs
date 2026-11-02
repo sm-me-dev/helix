@@ -70,6 +70,8 @@ const USAGE = `helix — AI coding harness pack manager
                                                 tokens, repeated reads, oversized outputs and
                                                 retries from real session transcripts
   helix export --platform <id>                  print the pack as JSON (scripted use)
+  helix bench [options]                         repeatable benchmark suite across 10 categories
+                                                and 5 strategies (--strategy, --category, --json)
   helix eval [options]                          run the eval harness (see evals/README.md)
   helix learn <sub> [dir] [flags]               Learning Ledger: opt-in, evidence-gated
   helix link [--bin-dir <dir>] [--modify-rc|--no-modify-rc] [--force]
@@ -94,6 +96,7 @@ function parseArgs(argv) {
     index: true,
     help: false,
     platform: null,
+    benchArgs: [],
     evalArgs: [],
     gateArgs: [],
     reportArgs: [],
@@ -106,8 +109,9 @@ function parseArgs(argv) {
   const positional = [];
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
-    // eval has its own --help; every other command shows the shared usage.
-    if ((a === "--help" || a === "-h") && cmd !== "eval") opts.help = true;
+    // eval and bench have their own --help; every other command shows the shared usage.
+    if ((a === "--help" || a === "-h") && cmd !== "eval" && cmd !== "bench") opts.help = true;
+    else if (cmd === "bench") opts.benchArgs.push(a);
     else if (cmd === "gate" && a.startsWith("--")) opts.gateArgs.push(a);
     else if (cmd === "report") opts.reportArgs.push(a);
     else if (cmd === "learn") opts.learnArgs.push(a);
@@ -716,6 +720,54 @@ async function cmdUi(opts) {
   process.once("SIGTERM", stop);
 }
 
+async function cmdBench(opts) {
+  const { RepeatableBenchmarkSuite } = await import("../src/engine/benchmark.ts");
+  const suite = new RepeatableBenchmarkSuite();
+
+  let json = false;
+  let outPath = null;
+  let runs = 1;
+  const strategies = [];
+  const categories = [];
+
+  const args = opts.benchArgs || [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--json") json = true;
+    else if (a === "--help" || a === "-h") {
+      process.stdout.write(
+        "Usage: helix bench [--strategy s1,s2] [--category c1,c2] [--runs n] [--json] [--out <path>]\n",
+      );
+      return;
+    } else if (a === "--out") outPath = args[++i];
+    else if (a.startsWith("--out=")) outPath = a.slice("--out=".length);
+    else if (a === "--runs") runs = Number(args[++i]) || 1;
+    else if (a.startsWith("--runs=")) runs = Number(a.slice("--runs=".length)) || 1;
+    else if (a === "--strategy") strategies.push(...(args[++i] || "").split(","));
+    else if (a.startsWith("--strategy="))
+      strategies.push(...a.slice("--strategy=".length).split(","));
+    else if (a === "--category") categories.push(...(args[++i] || "").split(","));
+    else if (a.startsWith("--category="))
+      categories.push(...a.slice("--category=".length).split(","));
+  }
+
+  const report = await suite.runSuite({
+    strategies: strategies.length > 0 ? strategies : undefined,
+    categories: categories.length > 0 ? categories : undefined,
+    runsPerTask: runs,
+  });
+
+  if (outPath) {
+    suite.saveReport(report, outPath);
+  }
+
+  if (json) {
+    process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+  } else {
+    process.stdout.write(suite.formatMarkdownReport(report) + "\n");
+  }
+}
+
 async function main() {
   const { cmd, opts } = parseArgs(process.argv.slice(2));
   if (opts.help || cmd === "--help" || cmd === "-h" || cmd === "help") process.stdout.write(USAGE);
@@ -730,9 +782,15 @@ async function main() {
   else if (cmd === "link") await cmdLink(opts);
   else if (cmd === "unlink") cmdUnlink(opts);
   else if (cmd === "ui") await cmdUi(opts);
+  else if (cmd === "bench") await cmdBench(opts);
   else if (cmd === "eval") {
-    const { runEval } = await import("../evals/run.mjs");
-    await runEval(opts.evalArgs);
+    if (opts.evalArgs.includes("--benchmark") || opts.evalArgs.includes("-b")) {
+      opts.benchArgs = opts.evalArgs.filter((a) => a !== "--benchmark" && a !== "-b");
+      await cmdBench(opts);
+    } else {
+      const { runEval } = await import("../evals/run.mjs");
+      await runEval(opts.evalArgs);
+    }
   } else {
     process.stdout.write(USAGE);
     process.exitCode = cmd ? 2 : 0;

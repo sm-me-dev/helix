@@ -4,6 +4,8 @@
 import type { CrewId, PlatformId, RepoFacts } from "../types.ts";
 import type { TaskTier, WorkflowState, WorkflowSelection } from "../workflow.ts";
 
+export type { CrewId, PlatformId, RepoFacts, TaskTier, WorkflowState, WorkflowSelection };
+
 // ============================================================================
 // 1. Task Interface & Specification
 // ============================================================================
