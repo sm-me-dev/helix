@@ -100,6 +100,49 @@ use. Uses the same `generatePack` as `init`: for one
 platform the output is deterministic (byte-identical across runs). Missing or
 unknown `--platform` exits `2`.
 
+## `helix run [task-prompt-or-file] [options]`
+
+Execute a coding task with ephemeral git worktree isolation, progressive context assembly,
+and mechanical gate validation. Single agent is the default execution strategy.
+
+- **Arguments:**
+  - `task-prompt-or-file`: Direct prompt string, path to a `.md` or `.json` task specification, or piped via stdin.
+- **Key Options:**
+  - `--strategy <single|chain|parallel|full-crew>`: Execution strategy (default: `single`).
+  - `--platform <id>`: Target agent platform (e.g. `claude-code`, `opencode`, `codex`, `cursor`).
+  - `--provider <id>`: LLM provider for token and dollar cost tracking (`anthropic`, `openai`, `google`).
+  - `--dry`: Plan only; do not launch agent or modify files.
+  - `--no-worktree`: Execute directly in current workspace instead of an ephemeral worktree.
+  - `--timeout <sec>`: Task timeout in seconds (default: 600).
+  - `--max-retries <n>`: Maximum gate verification retries on failure (default: 2, ceiling: 2).
+  - `--pass <command>`: Verification test/gate command.
+  - `--target <files>`: Comma-separated target files expected to be modified.
+  - `--simulation`: Deterministic simulation mode for testing and CI.
+  - `--json`: Output structured JSON result and metrics.
+  - `--out <path>`: Save execution report JSON to a custom file path.
+- **Exit Codes:**
+  - `0`: Task succeeded and passed mechanical validation.
+  - `1`: Task failed execution or verification (retries exhausted).
+  - `2`: Invalid CLI arguments or malformed task specification.
+  - `3`: Task blocked by workflow policy (e.g. ambiguity or missing facts).
+  - `130`: Interrupted by user signal (SIGINT / SIGTERM).
+
+```sh
+helix run "Fix null check in src/auth.ts"
+helix run examples/tasks/01-bugfix-calculation.json --dry
+helix run "Refactor payment module" --strategy chain --pass "npm test"
+```
+
+## `helix bench [--strategy s1,s2] [--category c1,c2] [--runs n] [--json] [--out <path>]`
+
+Execute the repeatable benchmark evaluation suite across 10 task categories and 5 execution
+strategies, computing regression rates, cost per successful task, and strategy comparison matrices.
+
+```sh
+helix bench --strategy single,chain --category bugfix,feature --runs 1
+helix bench --strategy all --json --out .helix-work/reports/bench-matrix.json
+```
+
 ## `helix eval [options]`
 
 Opt-in head-to-head agent evaluations. Costs money and wall time — never runs

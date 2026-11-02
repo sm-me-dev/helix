@@ -283,3 +283,76 @@ export class SubprocessAgentRunner implements AgentRunner {
     }
   }
 }
+
+export type AgentRunnerFactoryOptions = {
+  platform?: PlatformId;
+  command?: string;
+  args?: string[];
+  simulation?: boolean;
+  mockActions?: MockAgentAction[];
+  mockHandler?: MockAgentHandler;
+};
+
+export const PLATFORM_DEFAULT_BINARIES: Record<PlatformId, string> = {
+  "claude-code": "claude",
+  cursor: "cursor",
+  codex: "codex",
+  gemini: "gemini",
+  copilot: "copilot",
+  windsurf: "windsurf",
+  cline: "cline",
+  aider: "aider",
+  opencode: "opencode",
+  antigravity: "antigravity",
+  devin: "devin",
+  factory: "factory",
+  kiro: "kiro",
+  amp: "amp",
+  kilo: "kilo",
+};
+
+/**
+ * Check if a command binary exists on system PATH.
+ */
+export function isBinaryAvailable(bin: string): boolean {
+  const pathEnv = process.env.PATH || "";
+  const sep = path.delimiter;
+  const dirs = pathEnv.split(sep);
+  for (const dir of dirs) {
+    if (!dir) continue;
+    const full = path.join(dir, bin);
+    try {
+      if (fs.existsSync(full) && fs.statSync(full).isFile()) {
+        return true;
+      }
+    } catch {
+      // Permission or FS access error
+    }
+  }
+  return false;
+}
+
+/**
+ * Unified factory to create an appropriate AgentRunner instance based on
+ * platform settings, environment variables, or simulation preferences.
+ */
+export function createAgentRunner(options: AgentRunnerFactoryOptions = {}): AgentRunner {
+  const platform = options.platform || (process.env.HELIX_PLATFORM as PlatformId) || "claude-code";
+
+  if (
+    options.simulation ||
+    options.mockActions ||
+    options.mockHandler ||
+    process.env.HELIX_SIMULATION === "1"
+  ) {
+    return new MockAgentRunner(platform, options.mockActions || options.mockHandler);
+  }
+
+  const customCommand = options.command || process.env.HELIX_RUNNER_COMMAND;
+  if (customCommand) {
+    return new SubprocessAgentRunner(platform, customCommand, options.args || []);
+  }
+
+  const defaultBin = PLATFORM_DEFAULT_BINARIES[platform] || "claude";
+  return new SubprocessAgentRunner(platform, defaultBin, options.args || []);
+}

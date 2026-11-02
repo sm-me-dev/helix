@@ -32,6 +32,9 @@ import type {
 import { TokenBudgetExceededError } from "./types.ts";
 import { DefaultValidationEngine } from "./validator.ts";
 import { GitWorktreeManager } from "./worktree.ts";
+import { DefaultModelProvider } from "./provider.ts";
+import type { ExtendedEngineConfig } from "./config.ts";
+import type { ModelProvider } from "./types.ts";
 
 export type HelixExecutionEngineDependencies = {
   planner?: TaskPlanner;
@@ -42,6 +45,8 @@ export type HelixExecutionEngineDependencies = {
   worktreeManager?: GitWorktreeManager;
   observability?: ObservabilityCollector;
   orchestrator?: AgentOrchestrator;
+  provider?: ModelProvider;
+  config?: ExtendedEngineConfig;
 };
 
 export class HelixExecutionEngine implements HelixEngine {
@@ -52,6 +57,8 @@ export class HelixExecutionEngine implements HelixEngine {
   private readonly toolExecutor: ToolExecutor;
   private readonly worktreeManager: GitWorktreeManager;
   private readonly orchestrator: AgentOrchestrator;
+  private readonly provider: ModelProvider;
+  private readonly config?: ExtendedEngineConfig;
   private readonly stateManagers = new Map<string, FileExecutionStateManager>();
   private readonly activeRuns = new Map<string, { abort: (reason: string) => void }>();
 
@@ -62,6 +69,8 @@ export class HelixExecutionEngine implements HelixEngine {
     this.contextManager = deps.contextManager || new DefaultContextManager();
     this.toolExecutor = deps.toolExecutor || new DefaultToolExecutor();
     this.worktreeManager = deps.worktreeManager || new GitWorktreeManager();
+    this.provider = deps.provider || new DefaultModelProvider();
+    this.config = deps.config;
     this.orchestrator =
       deps.orchestrator ||
       new DefaultAgentOrchestrator({
@@ -608,6 +617,11 @@ export class HelixExecutionEngine implements HelixEngine {
         },
       };
     } finally {
+      if (isEphemeral && worktreePath !== task.workspaceRoot) {
+        await this.worktreeManager
+          .cleanupWorktree(task.workspaceRoot, worktreePath, branchName, true)
+          .catch(() => {});
+      }
       WorkspaceLockManager.releaseLock(worktreePath, task.id);
       obs.recordSecuritySummary?.(auditLogger.getSummary());
       this.activeRuns.delete(task.id);

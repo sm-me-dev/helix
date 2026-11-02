@@ -48,6 +48,19 @@ into the repo, and nothing else (no second copy of the hooks, which would run
 twice). `claude plugin details helix` reports its projected token cost;
 `scripts/measure-plugin.mjs` stores that figure.
 
+## Executing tasks (`helix run`)
+
+Run coding tasks with single-agent simplicity, ephemeral git worktree isolation,
+and mechanical gate verification:
+
+```sh
+helix run "Fix division by zero in src/calc.ts"
+helix run examples/tasks/01-bugfix-calculation.json --dry
+helix run "Refactor auth middleware" --strategy chain --pass "npm test"
+```
+
+See [Developer Quickstart Guide](docs/QUICKSTART.md) and [CLI Reference](docs/CLI.md) for full details.
+
 ## What is verified and what is not
 
 - **Verified against vendor docs (dates per platform matrix)**: Claude hooks,

@@ -13,4 +13,6 @@ export * from "./observability.ts";
 export * from "./orchestrator.ts";
 export * from "./experiment.ts";
 export * from "./benchmark.ts";
+export * from "./config.ts";
+export * from "./provider.ts";
 export * from "./engine.ts";

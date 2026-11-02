@@ -20,6 +20,7 @@ import { GATE_SOURCE } from "../src/gate.ts";
 import { generatePack } from "../src/generate.ts";
 import { pluginPack } from "../src/plugin.ts";
 import { cmdLearn } from "./learn.ts";
+import { cmdRun } from "./run.ts";
 import { addRcBlock, installShim, isOnPath, rcFileFor, removeRcBlock, removeShim } from "./link.ts";
 import { startUi } from "./ui.ts";
 import { DEFAULT_PLATFORMS, PLATFORM_BY_ID } from "../src/platforms.ts";
@@ -70,6 +71,9 @@ const USAGE = `helix — AI coding harness pack manager
                                                 tokens, repeated reads, oversized outputs and
                                                 retries from real session transcripts
   helix export --platform <id>                  print the pack as JSON (scripted use)
+  helix run [task] [options]                    execute a coding task with ephemeral worktree,
+                                                bounded context, and mechanical verification
+                                                (--strategy, --platform, --dry, --pass, --json)
   helix bench [options]                         repeatable benchmark suite across 10 categories
                                                 and 5 strategies (--strategy, --category, --json)
   helix eval [options]                          run the eval harness (see evals/README.md)
@@ -101,6 +105,7 @@ function parseArgs(argv) {
     gateArgs: [],
     reportArgs: [],
     learnArgs: [],
+    runArgs: [],
     binDir: null,
     modifyRc: null,
     port: null,
@@ -109,9 +114,11 @@ function parseArgs(argv) {
   const positional = [];
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
-    // eval and bench have their own --help; every other command shows the shared usage.
-    if ((a === "--help" || a === "-h") && cmd !== "eval" && cmd !== "bench") opts.help = true;
+    // eval, bench, and run have their own --help; every other command shows the shared usage.
+    if ((a === "--help" || a === "-h") && cmd !== "eval" && cmd !== "bench" && cmd !== "run")
+      opts.help = true;
     else if (cmd === "bench") opts.benchArgs.push(a);
+    else if (cmd === "run") opts.runArgs.push(a);
     else if (cmd === "gate" && a.startsWith("--")) opts.gateArgs.push(a);
     else if (cmd === "report") opts.reportArgs.push(a);
     else if (cmd === "learn") opts.learnArgs.push(a);
@@ -779,6 +786,7 @@ async function main() {
   else if (cmd === "report") await cmdReport(opts);
   else if (cmd === "export") cmdExport(opts);
   else if (cmd === "learn") await cmdLearn(opts.learnArgs);
+  else if (cmd === "run") await cmdRun(opts);
   else if (cmd === "link") await cmdLink(opts);
   else if (cmd === "unlink") cmdUnlink(opts);
   else if (cmd === "ui") await cmdUi(opts);
