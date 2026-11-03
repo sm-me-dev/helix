@@ -93,3 +93,12 @@ jobs:
               --title "Helix ${TAG}" \
               --generate-notes
           fi
+
+      - name: Publish to npm registry
+        if: env.NPM_TOKEN != ''
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          echo "Publishing @sm-me-dev/helix to npm..."
+          npm publish --access public --provenance
