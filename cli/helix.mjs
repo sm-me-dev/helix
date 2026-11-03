@@ -66,7 +66,8 @@ const USAGE = `helix — AI coding harness pack manager
                                                 plugin cannot ship; install \`helix plugin\` output
   helix plugin --out <dir>                      write a Claude Code plugin marketplace (one plugin:
                                                 agents, skills, hooks, MCP) to <dir>
-  helix doctor [dir]                            check the installed harness
+  helix doctor [dir] [--utilization] [--json]   check the installed harness and utilization
+  helix telemetry [dir] [--json] [--ascii]      system utilization, concurrency, and token efficiency charts
   helix measure [dir]                           print the real token breakdown
   helix gate [dir] [--all] [--dry] [--json]     secrets, lint, typecheck, affected tests
                                                 (exit 0 pass · 1 check failed · 2 usage)
@@ -120,6 +121,9 @@ function parseArgs(argv) {
     modifyRc: null,
     port: null,
     open: false,
+    json: false,
+    utilization: false,
+    ascii: false,
   };
   const positional = [];
   for (let i = 0; i < rest.length; i++) {
@@ -130,7 +134,8 @@ function parseArgs(argv) {
       cmd !== "eval" &&
       cmd !== "bench" &&
       cmd !== "run" &&
-      cmd !== "knowledge"
+      cmd !== "knowledge" &&
+      cmd !== "telemetry"
     )
       opts.help = true;
     else if (a === "--version" || a === "-v") opts.version = true;
@@ -140,6 +145,9 @@ function parseArgs(argv) {
     else if (cmd === "report") opts.reportArgs.push(a);
     else if (cmd === "learn") opts.learnArgs.push(a);
     else if (cmd === "knowledge") opts.knowledgeArgs.push(a);
+    else if (a === "--json") opts.json = true;
+    else if (a === "--utilization") opts.utilization = true;
+    else if (a === "--ascii") opts.ascii = true;
     else if (a === "--force") opts.force = true;
     else if (a === "--claude-plugin") opts.claudePlugin = true;
     else if (a === "--crew") opts.crew = true;
@@ -464,7 +472,7 @@ function cmdPlugin(opts) {
   console.log("then, in each repo: helix init --claude-plugin  (AGENTS.md, gate, secret denies)");
 }
 
-function cmdDoctor(opts) {
+async function cmdDoctor(opts) {
   const dir = resolve(opts.dir);
   const files = walkFiles(dir);
   const failures = doctorPack(files);
@@ -532,6 +540,20 @@ function cmdDoctor(opts) {
     }
   }
   const cfg = reconstructConfig(files);
+  if (opts.json) {
+    const { collectHarnessUtilization } = await import("../src/telemetry/utilization.ts");
+    const snapshot = collectHarnessUtilization({ workspaceRoot: dir });
+    const result = {
+      healthy: failures.length === 0,
+      failures,
+      mcpServers: cfg.mcps.length,
+      mcps: mcpSummary(cfg),
+      utilization: snapshot,
+    };
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    if (failures.length > 0) process.exitCode = 1;
+    return;
+  }
   console.log(`mcp servers: ${cfg.mcps.length}`);
   for (const line of mcpSummary(cfg)) console.log(`  ${line}`);
   if (failures.length === 0) {
@@ -539,6 +561,24 @@ function cmdDoctor(opts) {
   } else {
     for (const f of failures) console.log(`FAIL ${f.check}: ${f.detail}`);
     process.exitCode = 1;
+  }
+  if (opts.utilization) {
+    const { collectHarnessUtilization, renderAsciiUtilizationDashboard } =
+      await import("../src/telemetry/utilization.ts");
+    const snapshot = collectHarnessUtilization({ workspaceRoot: dir });
+    process.stdout.write("\n" + renderAsciiUtilizationDashboard(snapshot) + "\n");
+  }
+}
+
+async function cmdTelemetry(opts) {
+  const dir = resolve(opts.dir);
+  const { collectHarnessUtilization, renderAsciiUtilizationDashboard } =
+    await import("../src/telemetry/utilization.ts");
+  const snapshot = collectHarnessUtilization({ workspaceRoot: dir });
+  if (opts.json) {
+    process.stdout.write(JSON.stringify(snapshot, null, 2) + "\n");
+  } else {
+    process.stdout.write(renderAsciiUtilizationDashboard(snapshot) + "\n");
   }
 }
 
@@ -751,6 +791,7 @@ async function cmdBench(opts) {
 
   let json = false;
   let standardJson = false;
+  let utilization = false;
   let list = false;
   let outPath = null;
   let runs = 1;
@@ -763,10 +804,11 @@ async function cmdBench(opts) {
     const a = args[i];
     if (a === "--json") json = true;
     else if (a === "--standard-json") standardJson = true;
+    else if (a === "--utilization") utilization = true;
     else if (a === "--list" || a === "-l") list = true;
     else if (a === "--help" || a === "-h") {
       process.stdout.write(
-        "Usage: helix bench [--strategy s1,s2] [--category c1,c2] [--task id] [--runs n] [--list] [--json] [--standard-json] [--out <path>]\n",
+        "Usage: helix bench [--strategy s1,s2] [--category c1,c2] [--task id] [--runs n] [--list] [--utilization] [--json] [--standard-json] [--out <path>]\n",
       );
       return;
     } else if (a === "--out") outPath = args[++i];
@@ -813,6 +855,26 @@ async function cmdBench(opts) {
     }
   }
 
+  if (utilization) {
+    const { collectHarnessUtilization, renderAsciiUtilizationDashboard } =
+      await import("../src/telemetry/utilization.ts");
+    const snapshot = collectHarnessUtilization();
+    if (standardJson) {
+      const records = suite.toStandardRecords(report);
+      process.stdout.write(JSON.stringify({ records, utilization: snapshot }, null, 2) + "\n");
+    } else if (json) {
+      process.stdout.write(JSON.stringify({ ...report, utilization: snapshot }, null, 2) + "\n");
+    } else {
+      process.stdout.write(
+        suite.formatMarkdownReport(report) +
+          "\n\n" +
+          renderAsciiUtilizationDashboard(snapshot) +
+          "\n",
+      );
+    }
+    return;
+  }
+
   if (standardJson) {
     process.stdout.write(JSON.stringify(suite.toStandardRecords(report), null, 2) + "\n");
   } else if (json) {
@@ -847,7 +909,8 @@ async function main() {
     process.stdout.write(`helix ${version}\n`);
   } else if (cmd === "init") await cmdInit(opts);
   else if (cmd === "plugin") cmdPlugin(opts);
-  else if (cmd === "doctor") cmdDoctor(opts);
+  else if (cmd === "doctor") await cmdDoctor(opts);
+  else if (cmd === "telemetry") await cmdTelemetry(opts);
   else if (cmd === "measure") cmdMeasure(opts);
   else if (cmd === "gate") cmdGate(opts);
   else if (cmd === "report") await cmdReport(opts);

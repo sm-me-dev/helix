@@ -43,7 +43,7 @@ node cli/helix.mjs init ~/your-repo --platform claude-code,codex
 node cli/helix.mjs init . --platform all --force
 ```
 
-## `helix doctor [dir]`
+## `helix doctor [dir] [--utilization] [--json]`
 
 Check the installed harness. Exit `1` on any failure, else prints `healthy`.
 
@@ -53,9 +53,29 @@ Check the installed harness. Exit `1` on any failure, else prints `healthy`.
   sample input, when `.helix/gate.mjs --dry` fails, or when configs float on
   `@latest` / unpinned refs.
 - Also prints the MCP inventory (measured vs estimate tokens per server).
+- `--utilization`: displays an ASCII harness utilization dashboard (token efficiency,
+  active worktree concurrency, resource saturation status).
+- `--json`: outputs machine-readable JSON status including health checks and system
+  utilization metrics.
 
 ```sh
 node cli/helix.mjs doctor ~/your-repo
+node cli/helix.mjs doctor --utilization
+node cli/helix.mjs doctor --json
+```
+
+## `helix telemetry [dir] [--json] [--ascii]`
+
+Surface harness resource utilization, concurrency levels, and token efficiency charts.
+
+- **Token efficiency tracking**: uncached context tokens vs. cumulative tokens saved by mechanical gates.
+- **Concurrency & queue depth**: inspects active ephemeral git worktrees and queue load.
+- **Resource saturation**: tracks CPU, memory pressure against heap limits, and process health (`nominal`, `elevated`, `saturated`).
+- **Visualizations**: exports formatted ASCII charts and dashboards or JSON-ready timeseries structures.
+
+```sh
+node cli/helix.mjs telemetry
+node cli/helix.mjs telemetry --json
 ```
 
 ## `helix measure [dir]`
@@ -133,13 +153,15 @@ helix run examples/tasks/01-bugfix-calculation.json --dry
 helix run "Refactor payment module" --strategy chain --pass "npm test"
 ```
 
-## `helix bench [--strategy s1,s2] [--category c1,c2] [--runs n] [--json] [--out <path>]`
+## `helix bench [--strategy s1,s2] [--category c1,c2] [--runs n] [--utilization] [--json] [--standard-json] [--out <path>]`
 
 Execute the repeatable benchmark evaluation suite across 10 task categories and 5 execution
 strategies, computing regression rates, cost per successful task, and strategy comparison matrices.
+Use `--utilization` to append harness telemetry and utilization charts.
 
 ```sh
 helix bench --strategy single,chain --category bugfix,feature --runs 1
+helix bench --strategy all --utilization
 helix bench --strategy all --json --out .helix-work/reports/bench-matrix.json
 ```
 
