@@ -50,7 +50,7 @@ describe("Phase 10.1: Cross-Platform Distribution & Installation", () => {
 
     it("identifies Homebrew installation when in Cellar", () => {
       const res = detectInstallMethod(
-        "file:///opt/homebrew/Cellar/helix/0.9.0/libexec/app/dist/cli/update.js",
+        "file:///opt/homebrew/Cellar/helix/0.1.0/libexec/app/dist/cli/update.js",
       );
       assert.equal(res.method, "homebrew");
     });
@@ -75,7 +75,7 @@ describe("Phase 10.1: Cross-Platform Distribution & Installation", () => {
 
     it("identifies Scoop when in scoop/apps/helix", () => {
       const res = detectInstallMethod(
-        "file:///C:/Users/User/scoop/apps/helix/0.9.0/app/dist/cli/update.js",
+        "file:///C:/Users/User/scoop/apps/helix/0.1.0/app/dist/cli/update.js",
       );
       assert.equal(res.method, "scoop");
     });

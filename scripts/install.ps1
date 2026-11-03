@@ -1,8 +1,8 @@
 # scripts/install.ps1 — Universal PowerShell installer for Helix on Windows
 # Usage:
-#   irm https://raw.githubusercontent.com/sm-me-dev/helix/main/scripts/install.ps1 | iex
+#   irm https://sm-me-dev.github.io/helix/install.ps1 | iex
 # Or with options:
-#   .\install.ps1 -Version "0.9.0"
+#   .\install.ps1 -Version "0.1.0"
 
 [CmdletBinding()]
 param(
@@ -29,8 +29,8 @@ if ($Version -eq "latest") {
         $Release = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest"
         $Tag = $Release.tag_name
     } catch {
-        Write-Warning "Could not query GitHub releases API; defaulting to v0.9.0"
-        $Tag = "v0.9.0"
+        Write-Warning "Could not query GitHub releases API; defaulting to v0.1.0"
+        $Tag = "v0.1.0"
     }
 } else {
     if ($Version.StartsWith("v")) { $Tag = $Version } else { $Tag = "v$Version" }

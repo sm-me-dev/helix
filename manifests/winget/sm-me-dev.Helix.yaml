@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.6.0.schema.json
 PackageIdentifier: sm-me-dev.Helix
-PackageVersion: 0.9.1
+PackageVersion: 0.1.0
 DefaultLocale: en-US
 Publisher: sm-me-dev
 PackageName: Helix
@@ -17,7 +17,7 @@ Tags:
 Installers:
   - Architecture: x64
     InstallerType: zip
-    InstallerUrl: https://github.com/sm-me-dev/helix/releases/download/v0.9.1/helix-v0.9.1-windows-x64.zip
+    InstallerUrl: https://github.com/sm-me-dev/helix/releases/download/v0.1.0/helix-v0.1.0-windows-x64.zip
     NestedInstallerType: portable
     NestedInstallerFiles:
       - RelativeFilePath: helix\bin\helix.cmd

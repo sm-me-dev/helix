@@ -184,4 +184,4 @@ runs the same CLI commands as child processes in `dir` and shows their exit code
 - `--version`, `-v`: Print the installed Helix version and exit `0`.
 - `--help`, `-h`: Print command syntax, options, and exit `0`.
 
-For full configuration and troubleshooting details, see [Configuration Reference](docs/CONFIGURATION.md) and [Troubleshooting Guide](docs/TROUBLESHOOTING.md).
+For full configuration and troubleshooting details, see [Configuration Reference](CONFIGURATION.md) and [Troubleshooting Guide](TROUBLESHOOTING.md).

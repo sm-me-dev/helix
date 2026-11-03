@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION=$(node -e 'console.log(JSON.parse(require("fs").readFileSync("package.json")).version || "0.9.0")')
+VERSION=$(node -e 'console.log(JSON.parse(require("fs").readFileSync("package.json")).version || "0.1.0")')
 ARCH="${1:-x86_64}"
 
 case "$ARCH" in

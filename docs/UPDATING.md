@@ -37,13 +37,13 @@ helix --version
 Re-run the universal installer to download and replace the application bundle with the latest version:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/sm-me-dev/helix/main/scripts/install.sh | sh
+curl -fsSL https://sm-me-dev.github.io/helix/install.sh | sh
 ```
 
 Or specify an exact version:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/sm-me-dev/helix/main/scripts/install.sh | sh -s -- --version 0.9.0
+curl -fsSL https://sm-me-dev.github.io/helix/install.sh | sh -s -- --version 0.1.0
 ```
 
 _Note: Your project worktrees and configuration are never touched during upgrades._

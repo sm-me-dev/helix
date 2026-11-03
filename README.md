@@ -51,7 +51,7 @@ npx @sm-me-dev/helix --help
 Downloads a self-contained application bundle with an embedded Node runtime (no system Node installation required):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/sm-me-dev/helix/main/scripts/install.sh | sh
+curl -fsSL https://sm-me-dev.github.io/helix/install.sh | sh
 ```
 
 ### Homebrew (macOS & Linux)
@@ -63,13 +63,13 @@ brew install sm-me-dev/tap/helix
 ### Debian / Ubuntu (APT)
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/sm-me-dev/helix/main/scripts/apt/install-apt.sh | sudo sh
+curl -fsSL https://sm-me-dev.github.io/helix/install-apt.sh | sudo sh
 ```
 
 ### Windows (PowerShell)
 
 ```powershell
-irm https://raw.githubusercontent.com/sm-me-dev/helix/main/scripts/install.ps1 | iex
+irm https://sm-me-dev.github.io/helix/install.ps1 | iex
 ```
 
 ### Contributor & Development Installation

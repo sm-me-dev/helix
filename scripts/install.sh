@@ -4,9 +4,9 @@
 # Works without pre-installed Node.js or Git repository clone.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/sm-me-dev/helix/main/scripts/install.sh | sh
+#   curl -fsSL https://sm-me-dev.github.io/helix/install.sh | sh
 # Or with options:
-#   curl -fsSL ... | sh -s -- --version 0.9.0
+#   curl -fsSL ... | sh -s -- --version 0.1.0
 #   curl -fsSL ... | sh -s -- --dir ~/.helix-app --bin-dir ~/.local/bin
 
 set -eu
@@ -112,8 +112,8 @@ if [ "$TARGET_VERSION" = "latest" ]; then
   fi
 
   if [ -z "$TAG" ]; then
-    warn "Could not determine latest release tag via GitHub API; falling back to v0.9.0"
-    TAG="v0.9.0"
+    warn "Could not determine latest release tag via GitHub API; falling back to v0.1.0"
+    TAG="v0.1.0"
   fi
 else
   case "$TARGET_VERSION" in

@@ -797,7 +797,7 @@ async function main() {
   const { cmd, opts } = parseArgs(process.argv.slice(2));
   if (opts.help || cmd === "--help" || cmd === "-h" || cmd === "help") process.stdout.write(USAGE);
   else if (cmd === "--version" || cmd === "-v" || cmd === "version" || opts.version) {
-    let version = "0.9.1";
+    let version = "0.1.0";
     try {
       const candidates = [
         new URL("../package.json", import.meta.url),

@@ -1,0 +1,75 @@
+name: GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/**"
+      - "package.json"
+      - "README.md"
+      - ".github/workflows/pages.yml"
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v4
+        with:
+          node-version: 22
+
+      - name: Build Pages Site
+        run: |
+          node scripts/generate-pages.mjs
+
+      - name: Deploy to gh-pages branch
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          TMP_DIR=$(mktemp -d)
+          cp -r site/* "$TMP_DIR/"
+
+          # Checkout or create orphan gh-pages branch
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git fetch origin gh-pages:gh-pages
+            git checkout gh-pages
+          else
+            git checkout --orphan gh-pages
+          fi
+
+          # Clear existing tracked files in gh-pages
+          git rm -rf . >/dev/null 2>&1 || true
+
+          # Copy generated site files
+          cp -r "$TMP_DIR"/* .
+          cp "$TMP_DIR"/.nojekyll . 2>/dev/null || true
+
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No changes to deploy to gh-pages."
+          else
+            git commit -m "Deploy GitHub Pages for Helix [skip ci]"
+            git push origin gh-pages
+          fi

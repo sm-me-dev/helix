@@ -71,14 +71,14 @@ For continuous delivery, every tagged release (`v*`) triggers GitHub Actions to 
 
 ```sh
 # 1. Download archive and checksums
-curl -LO https://github.com/sm-me-dev/helix/releases/download/v0.9.0/helix-v0.9.0.tar.gz
-curl -LO https://github.com/sm-me-dev/helix/releases/download/v0.9.0/SHA256SUMS.txt
+curl -LO https://github.com/sm-me-dev/helix/releases/download/v0.1.0/helix-v0.1.0.tar.gz
+curl -LO https://github.com/sm-me-dev/helix/releases/download/v0.1.0/SHA256SUMS.txt
 
 # 2. Verify integrity
 sha256sum --check --ignore-missing SHA256SUMS.txt
 
 # 3. Extract and link
-tar -xzf helix-v0.9.0.tar.gz -C ~/helix
+tar -xzf helix-v0.1.0.tar.gz -C ~/helix
 cd ~/helix && npm ci --production
 ./cli/helix.mjs link
 ```
@@ -100,7 +100,7 @@ brew install helix
 class Helix < Formula
   desc "AI coding harness with bounded context and zero-token mechanical gates"
   homepage "https://github.com/sm-me-dev/helix"
-  url "https://github.com/sm-me-dev/helix/archive/refs/tags/v0.9.0.tar.gz"
+  url "https://github.com/sm-me-dev/helix/archive/refs/tags/v0.1.0.tar.gz"
   sha256 "<INSERT_COMPUTED_SHA256>"
   license "MIT"
 
@@ -113,7 +113,7 @@ class Helix < Formula
   end
 
   test do
-    assert_match "helix 0.9.0", shell_output("#{bin}/helix --version")
+    assert_match "helix 0.1.0", shell_output("#{bin}/helix --version")
     assert_match "helix — AI coding harness", shell_output("#{bin}/helix --help")
   end
 end

@@ -19,7 +19,7 @@ export function detectInstallMethod(entryUrl: string = import.meta.url): Detecti
   const normalized = filePath.replace(/\\/g, "/");
 
   // Read current package version
-  let version = "0.9.1";
+  let version = "0.1.0";
   try {
     const candidates = [
       join(dirname(filePath), "..", "package.json"),

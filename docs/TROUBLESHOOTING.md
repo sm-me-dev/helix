@@ -196,4 +196,4 @@ Since `helix link` creates a symlink shim pointing directly to your checkout, up
 ### How do I report a bug or vulnerability?
 
 - Bug reports: Open an issue at [GitHub Issues](https://github.com/sm-me-dev/helix/issues).
-- Security vulnerabilities: Please report privately via GitHub Security Advisories or as detailed in [Security Policy](SECURITY.md).
+- Security vulnerabilities: Please report privately via GitHub Security Advisories or as detailed in [Security Policy](../SECURITY.md).

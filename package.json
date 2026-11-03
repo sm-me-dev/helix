@@ -1,6 +1,6 @@
 {
   "name": "@sm-me-dev/helix",
-  "version": "0.9.1",
+  "version": "0.1.0",
   "description": "An AI coding harness that earns its tokens through bounded context, ephemeral worktrees, and zero-token mechanical gates",
   "license": "MIT",
   "publishConfig": {

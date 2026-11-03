@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const PKG = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
-const VERSION = PKG.version || "0.9.0";
+const VERSION = PKG.version || "0.1.0";
 const NODE_VERSION = "22.14.0"; // Official Node.js 22 LTS
 
 const TARGETS = {

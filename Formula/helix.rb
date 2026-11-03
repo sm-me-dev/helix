@@ -5,7 +5,7 @@
 class Helix < Formula
   desc "AI coding harness with bounded context, ephemeral worktrees, and mechanical gates"
   homepage "https://github.com/sm-me-dev/helix"
-  version "0.9.1"
+  version "0.1.0"
   license "MIT"
 
   on_macos do

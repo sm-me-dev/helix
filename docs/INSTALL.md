@@ -31,7 +31,7 @@ npx @sm-me-dev/helix --help
 For systems without Node.js installed, the universal installer downloads a self-contained application bundle with an embedded Node runtime:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/sm-me-dev/helix/main/scripts/install.sh | sh
+curl -fsSL https://sm-me-dev.github.io/helix/install.sh | sh
 ```
 
 #### Installer Features:
@@ -45,10 +45,10 @@ curl -fsSL https://raw.githubusercontent.com/sm-me-dev/helix/main/scripts/instal
 
 ```sh
 # Specify explicit release version
-curl -fsSL https://raw.githubusercontent.com/sm-me-dev/helix/main/scripts/install.sh | sh -s -- --version 0.9.0
+curl -fsSL https://sm-me-dev.github.io/helix/install.sh | sh -s -- --version 0.1.0
 
 # Custom binary and library directories
-curl -fsSL https://raw.githubusercontent.com/sm-me-dev/helix/main/scripts/install.sh | sh -s -- --dir /opt/helix --bin-dir /usr/local/bin
+curl -fsSL https://sm-me-dev.github.io/helix/install.sh | sh -s -- --dir /opt/helix --bin-dir /usr/local/bin
 ```
 
 ---
@@ -74,13 +74,13 @@ brew update && brew upgrade helix
 Add the signed repository and install:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/sm-me-dev/helix/main/scripts/apt/install-apt.sh | sudo sh
+curl -fsSL https://sm-me-dev.github.io/helix/install-apt.sh | sudo sh
 ```
 
 Or download the `.deb` package directly from [GitHub Releases](https://github.com/sm-me-dev/helix/releases/latest):
 
 ```sh
-sudo dpkg -i helix_0.9.0_linux_amd64.deb
+sudo dpkg -i helix_0.1.0_linux_amd64.deb
 ```
 
 ---
@@ -90,7 +90,7 @@ sudo dpkg -i helix_0.9.0_linux_amd64.deb
 Download the `.rpm` package from [GitHub Releases](https://github.com/sm-me-dev/helix/releases/latest) and install via `dnf`:
 
 ```sh
-sudo dnf install helix-0.9.0-1.x86_64.rpm
+sudo dnf install helix-0.1.0-1.x86_64.rpm
 ```
 
 ---
@@ -100,7 +100,7 @@ sudo dnf install helix-0.9.0-1.x86_64.rpm
 Install via the official PowerShell installer:
 
 ```powershell
-irm https://raw.githubusercontent.com/sm-me-dev/helix/main/scripts/install.ps1 | iex
+irm https://sm-me-dev.github.io/helix/install.ps1 | iex
 ```
 
 Or using Windows package managers:
@@ -122,25 +122,25 @@ Pre-built self-contained archives are published with every release on [GitHub Re
 
 | Platform    | Architecture                | Release Artifact                   |
 | ----------- | --------------------------- | ---------------------------------- |
-| **Linux**   | x64 (AMD64)                 | `helix-v0.9.0-linux-x64.tar.gz`    |
-| **Linux**   | ARM64 (aarch64)             | `helix-v0.9.0-linux-arm64.tar.gz`  |
-| **macOS**   | Apple Silicon (M1/M2/M3/M4) | `helix-v0.9.0-darwin-arm64.tar.gz` |
-| **macOS**   | Intel (x86_64)              | `helix-v0.9.0-darwin-x64.tar.gz`   |
-| **Windows** | x64 (AMD64)                 | `helix-v0.9.0-windows-x64.zip`     |
+| **Linux**   | x64 (AMD64)                 | `helix-v0.1.0-linux-x64.tar.gz`    |
+| **Linux**   | ARM64 (aarch64)             | `helix-v0.1.0-linux-arm64.tar.gz`  |
+| **macOS**   | Apple Silicon (M1/M2/M3/M4) | `helix-v0.1.0-darwin-arm64.tar.gz` |
+| **macOS**   | Intel (x86_64)              | `helix-v0.1.0-darwin-x64.tar.gz`   |
+| **Windows** | x64 (AMD64)                 | `helix-v0.1.0-windows-x64.zip`     |
 
 ### Manual Verification and Extraction:
 
 ```sh
 # 1. Download release archive and checksums
-curl -LO https://github.com/sm-me-dev/helix/releases/download/v0.9.0/helix-v0.9.0-linux-x64.tar.gz
-curl -LO https://github.com/sm-me-dev/helix/releases/download/v0.9.0/SHA256SUMS.txt
+curl -LO https://github.com/sm-me-dev/helix/releases/download/v0.1.0/helix-v0.1.0-linux-x64.tar.gz
+curl -LO https://github.com/sm-me-dev/helix/releases/download/v0.1.0/SHA256SUMS.txt
 
 # 2. Verify SHA-256 checksum
 sha256sum --check --ignore-missing SHA256SUMS.txt
 
 # 3. Extract and link
 mkdir -p ~/.local/lib/helix ~/.local/bin
-tar -xzf helix-v0.9.0-linux-x64.tar.gz -C ~/.local/lib/helix --strip-components=1
+tar -xzf helix-v0.1.0-linux-x64.tar.gz -C ~/.local/lib/helix --strip-components=1
 ln -sf ~/.local/lib/helix/bin/helix ~/.local/bin/helix
 ```
 

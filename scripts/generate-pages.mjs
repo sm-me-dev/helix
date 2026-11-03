@@ -1,0 +1,463 @@
+#!/usr/bin/env node
+// scripts/generate-pages.mjs — Builds the static GitHub Pages site for Helix
+// Produces site/ directory containing index.html, installer scripts, and .nojekyll
+
+import { readFileSync, writeFileSync, copyFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
+const PKG = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+const VERSION = PKG.version || "0.1.0";
+const SITE_DIR = join(ROOT, "site");
+
+mkdirSync(SITE_DIR, { recursive: true });
+
+// Copy static installer scripts to site root
+const scriptsToCopy = [
+  { src: join(ROOT, "scripts", "install.sh"), dest: join(SITE_DIR, "install.sh") },
+  { src: join(ROOT, "scripts", "install.ps1"), dest: join(SITE_DIR, "install.ps1") },
+  { src: join(ROOT, "scripts", "apt", "install-apt.sh"), dest: join(SITE_DIR, "install-apt.sh") },
+  { src: join(ROOT, "scripts", "uninstall.sh"), dest: join(SITE_DIR, "uninstall.sh") },
+];
+
+for (const { src, dest } of scriptsToCopy) {
+  copyFileSync(src, dest);
+  console.log(`Copied ${src} -> ${dest}`);
+}
+
+// .nojekyll to prevent GitHub Pages from bypassing files
+writeFileSync(join(SITE_DIR, ".nojekyll"), "");
+
+// Generate index.html
+const HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Helix — AI Coding Harness</title>
+  <meta name="description" content="AI coding harness designed to improve agent results while controlling token consumption, execution time, and orchestration overhead.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧬</text></svg>">
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card-bg: #111827;
+      --card-border: #1f2937;
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --accent: #10b981;
+      --code-bg: #030712;
+      --code-border: #1e293b;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      line-height: 1.6;
+      padding: 0;
+      margin: 0;
+    }
+    header {
+      padding: 4rem 1.5rem 3rem;
+      text-align: center;
+      background: radial-gradient(circle at 50% 0%, #1e3a8a33, transparent 70%);
+      border-bottom: 1px solid var(--card-border);
+    }
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+    }
+    .badge-bar {
+      display: flex;
+      justify-content: center;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.25rem;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.25rem 0.75rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      border-radius: 9999px;
+      background: #1f2937;
+      color: #93c5fd;
+      border: 1px solid #374151;
+      text-decoration: none;
+    }
+    .badge-green {
+      color: #34d399;
+      border-color: #065f46;
+      background: #064e3b33;
+    }
+    h1 {
+      font-size: 3rem;
+      font-weight: 800;
+      letter-spacing: -1px;
+      margin-bottom: 0.75rem;
+      background: linear-gradient(135deg, #ffffff 40%, #93c5fd 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .tagline {
+      font-size: 1.25rem;
+      color: var(--text-muted);
+      max-width: 680px;
+      margin: 0 auto 1.5rem;
+    }
+    .nav-links {
+      display: flex;
+      justify-content: center;
+      gap: 1.5rem;
+      margin-top: 1.5rem;
+    }
+    .nav-link {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 0.95rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+    .nav-link:hover {
+      text-decoration: underline;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 1.75rem;
+      margin-bottom: 2rem;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    }
+    .card-title {
+      font-size: 1.35rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .tabs {
+      display: flex;
+      gap: 0.5rem;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 0.75rem;
+      margin-bottom: 1.25rem;
+      overflow-x: auto;
+    }
+    .tab-btn {
+      background: none;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      padding: 0.4rem 0.9rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 600;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+    .tab-btn:hover {
+      color: var(--text);
+      background: #1f2937;
+    }
+    .tab-btn.active {
+      background: #1e3a8a;
+      color: #93c5fd;
+      border-color: #3b82f6;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    .code-box {
+      background: var(--code-bg);
+      border: 1px solid var(--code-border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      position: relative;
+      font-family: var(--font-mono);
+      font-size: 0.92rem;
+      color: #93c5fd;
+      overflow-x: auto;
+      margin-bottom: 0.75rem;
+    }
+    .copy-btn {
+      position: absolute;
+      top: 0.6rem;
+      right: 0.6rem;
+      background: #1f2937;
+      border: 1px solid #374151;
+      color: var(--text-muted);
+      border-radius: 4px;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .copy-btn:hover {
+      background: #374151;
+      color: var(--text);
+    }
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.25rem;
+      margin-top: 1rem;
+    }
+    .feature-item {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 1.25rem;
+    }
+    .feature-item h3 {
+      font-size: 1.05rem;
+      margin-bottom: 0.4rem;
+      color: #f3f4f6;
+    }
+    .feature-item p {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .dl-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+    .dl-btn {
+      display: block;
+      padding: 0.85rem 1rem;
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      color: #f3f4f6;
+      text-decoration: none;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      transition: all 0.15s;
+    }
+    .dl-btn:hover {
+      background: #1e293b;
+      border-color: var(--primary);
+      color: #60a5fa;
+    }
+    .dl-btn span {
+      display: block;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      font-family: var(--font-sans);
+      margin-top: 0.25rem;
+    }
+    footer {
+      border-top: 1px solid var(--card-border);
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+      font-size: 0.88rem;
+      color: var(--text-muted);
+    }
+    footer a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+    footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="badge-bar">
+      <span class="badge badge-green">v${VERSION} Initial Release</span>
+      <span class="badge">Node.js &gt;= 22.6</span>
+      <span class="badge">MIT Licensed</span>
+      <span class="badge">Zero Clone Required</span>
+    </div>
+    <h1>🧬 Helix</h1>
+    <p class="tagline">An AI coding harness that earns its tokens through bounded context, ephemeral worktrees, zero-token mechanical gates, and adaptive project knowledge.</p>
+    <div class="nav-links">
+      <a class="nav-link" href="https://github.com/sm-me-dev/helix">GitHub Repository &rarr;</a>
+      <a class="nav-link" href="https://github.com/sm-me-dev/helix/tree/main/docs">Documentation Hub &rarr;</a>
+      <a class="nav-link" href="https://github.com/sm-me-dev/helix/releases">All Releases &rarr;</a>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="card">
+      <div class="card-title">🚀 Install Helix</div>
+      
+      <div class="tabs">
+        <button class="tab-btn active" onclick="openTab(event, 'tab-curl')">Universal (macOS &amp; Linux)</button>
+        <button class="tab-btn" onclick="openTab(event, 'tab-npm')">npm</button>
+        <button class="tab-btn" onclick="openTab(event, 'tab-brew')">Homebrew</button>
+        <button class="tab-btn" onclick="openTab(event, 'tab-apt')">Debian / Ubuntu</button>
+        <button class="tab-btn" onclick="openTab(event, 'tab-powershell')">Windows PowerShell</button>
+        <button class="tab-btn" onclick="openTab(event, 'tab-package-managers')">WinGet / Scoop / RPM</button>
+      </div>
+
+      <div id="tab-curl" class="tab-content active">
+        <p style="margin-bottom: 0.6rem; color: var(--text-muted); font-size: 0.92rem;">Universal standalone installer with embedded Node runtime (no host Node.js required):</p>
+        <div class="code-box">
+          <code>curl -fsSL https://sm-me-dev.github.io/helix/install.sh | sh</code>
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+        </div>
+      </div>
+
+      <div id="tab-npm" class="tab-content">
+        <p style="margin-bottom: 0.6rem; color: var(--text-muted); font-size: 0.92rem;">Install globally via npm or run directly with npx:</p>
+        <div class="code-box">
+          <code>npm install -g @sm-me-dev/helix</code>
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+        </div>
+        <div class="code-box">
+          <code>npx @sm-me-dev/helix --help</code>
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+        </div>
+      </div>
+
+      <div id="tab-brew" class="tab-content">
+        <p style="margin-bottom: 0.6rem; color: var(--text-muted); font-size: 0.92rem;">Install via the official Homebrew tap (macOS Apple Silicon/Intel &amp; Linux):</p>
+        <div class="code-box">
+          <code>brew install sm-me-dev/tap/helix</code>
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+        </div>
+      </div>
+
+      <div id="tab-apt" class="tab-content">
+        <p style="margin-bottom: 0.6rem; color: var(--text-muted); font-size: 0.92rem;">Add the official Helix APT repository and install:</p>
+        <div class="code-box">
+          <code>curl -fsSL https://sm-me-dev.github.io/helix/install-apt.sh | sudo sh</code>
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+        </div>
+      </div>
+
+      <div id="tab-powershell" class="tab-content">
+        <p style="margin-bottom: 0.6rem; color: var(--text-muted); font-size: 0.92rem;">Install standalone Helix on Windows 10/11 x64:</p>
+        <div class="code-box">
+          <code>irm https://sm-me-dev.github.io/helix/install.ps1 | iex</code>
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+        </div>
+      </div>
+
+      <div id="tab-package-managers" class="tab-content">
+        <p style="margin-bottom: 0.6rem; color: var(--text-muted); font-size: 0.92rem;">Install via native package managers:</p>
+        <div class="code-box">
+          <code># Windows WinGet
+winget install sm-me-dev.Helix
+
+# Windows Scoop
+scoop bucket add helix https://github.com/sm-me-dev/helix && scoop install helix
+
+# Fedora / RHEL RPM (from Releases)
+sudo dnf install https://github.com/sm-me-dev/helix/releases/download/v${VERSION}/helix-${VERSION}-1.x86_64.rpm</code>
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-title">📦 Standalone Release Packages (v${VERSION})</div>
+      <p style="color: var(--text-muted); font-size: 0.9rem;">Self-contained portable archives bundled with official Node.js 22 LTS:</p>
+      
+      <div class="dl-grid">
+        <a class="dl-btn" href="https://github.com/sm-me-dev/helix/releases/download/v${VERSION}/helix-v${VERSION}-linux-x64.tar.gz">
+          helix-v${VERSION}-linux-x64.tar.gz
+          <span>Linux x86_64 / glibc</span>
+        </a>
+        <a class="dl-btn" href="https://github.com/sm-me-dev/helix/releases/download/v${VERSION}/helix-v${VERSION}-linux-arm64.tar.gz">
+          helix-v${VERSION}-linux-arm64.tar.gz
+          <span>Linux aarch64</span>
+        </a>
+        <a class="dl-btn" href="https://github.com/sm-me-dev/helix/releases/download/v${VERSION}/helix-v${VERSION}-darwin-arm64.tar.gz">
+          helix-v${VERSION}-darwin-arm64.tar.gz
+          <span>macOS Apple Silicon (M1/M2/M3/M4)</span>
+        </a>
+        <a class="dl-btn" href="https://github.com/sm-me-dev/helix/releases/download/v${VERSION}/helix-v${VERSION}-darwin-x64.tar.gz">
+          helix-v${VERSION}-darwin-x64.tar.gz
+          <span>macOS Intel x86_64</span>
+        </a>
+        <a class="dl-btn" href="https://github.com/sm-me-dev/helix/releases/download/v${VERSION}/helix-v${VERSION}-windows-x64.zip">
+          helix-v${VERSION}-windows-x64.zip
+          <span>Windows 64-bit</span>
+        </a>
+        <a class="dl-btn" href="https://github.com/sm-me-dev/helix/releases/download/v${VERSION}/helix_${VERSION}_linux_amd64.deb">
+          helix_${VERSION}_linux_amd64.deb
+          <span>Debian / Ubuntu Package</span>
+        </a>
+        <a class="dl-btn" href="https://github.com/sm-me-dev/helix/releases/download/v${VERSION}/helix-${VERSION}-1.x86_64.rpm">
+          helix-${VERSION}-1.x86_64.rpm
+          <span>Fedora / RHEL RPM Package</span>
+        </a>
+        <a class="dl-btn" href="https://github.com/sm-me-dev/helix/releases/download/v${VERSION}/SHA256SUMS.txt">
+          SHA256SUMS.txt
+          <span>Cryptographic Checksums</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-title">💡 Core Architecture &amp; Engineering Principles</div>
+      
+      <div class="feature-grid">
+        <div class="feature-item">
+          <h3>⚡ Single-Agent Default</h3>
+          <p>More agents don't mean better code. Helix prioritizes a single capable agent in an isolated worktree, introducing specialist subagents only when proven by benchmarks.</p>
+        </div>
+        <div class="feature-item">
+          <h3>🔒 Zero-Token Verification Gate</h3>
+          <p><code>helix gate</code> mechanically runs secret scanning, ESLint, TypeScript typechecking, and targeted tests without spending LLM tokens on trivial validations.</p>
+        </div>
+        <div class="feature-item">
+          <h3>🧠 Adaptive Project Knowledge (APKS)</h3>
+          <p>Embedded SQLite FTS5 search indexing repository domains, architecture decisions, and workflows, feeding relevant context strictly within tight token budgets (&le;600t).</p>
+        </div>
+        <div class="feature-item">
+          <h3>🛡️ Path Jail &amp; Least-Privilege Guard</h3>
+          <p>Reviews and edits are path-jailed to task worktrees. Reviewers get read-only sandboxes, while sensitive credentials and secrets are automatically redacted.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Helix is open source under the MIT License • Built by <a href="https://github.com/sm-me-dev">sm-me-dev</a> • Hosted on GitHub Pages</p>
+  </footer>
+
+  <script>
+    function openTab(evt, tabId) {
+      const contents = document.querySelectorAll('.tab-content');
+      contents.forEach(c => c.classList.remove('active'));
+      const buttons = document.querySelectorAll('.tab-btn');
+      buttons.forEach(b => b.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+      evt.currentTarget.classList.add('active');
+    }
+
+    function copyCode(btn) {
+      const code = btn.previousElementSibling.innerText;
+      navigator.clipboard.writeText(code).then(() => {
+        const orig = btn.innerText;
+        btn.innerText = 'Copied!';
+        setTimeout(() => { btn.innerText = orig; }, 2000);
+      });
+    }
+  </script>
+</body>
+</html>
+`;
+
+writeFileSync(join(SITE_DIR, "index.html"), HTML);
+console.log(`Generated ${join(SITE_DIR, "index.html")} for version ${VERSION}`);
