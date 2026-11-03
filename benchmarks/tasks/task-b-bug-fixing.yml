@@ -1,0 +1,20 @@
+id: task-b-bug-fixing
+category: bug-fixing
+title: Fix Off-By-One Anonymous Limit Bug
+difficulty: medium
+pinnedCommit: 96453c8
+environment: node22-isolated
+timeoutSec: 600
+tokenBudget: 80000
+description: >
+  Authenticated clients with valid API keys get 429s from the rate limiter after
+  approx 40 requests/min, even though authenticated quota specifies 80/min.
+  The gateway header casing change causes the limiter to fall back to anonymous limits.
+  Find root cause in src/, fix with minimal diff, and preserve all existing tests.
+acceptanceCriteria:
+  - Fix header lookup in src/context.ts or src/rate-limit.ts
+  - Authenticated clients receive 80 req/min
+  - Anonymous clients still restricted to 40 req/min
+  - Zero regressions across billing and context tests
+verificationCommand: node --experimental-strip-types --test tests/rate-limit.test.ts tests/context.test.ts tests/billing.test.ts
+requireDiff: true

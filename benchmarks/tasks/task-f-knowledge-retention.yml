@@ -1,0 +1,19 @@
+id: task-f-knowledge-retention
+category: knowledge-retention
+title: Domain Architectural Boundary and Naming Enforcement
+difficulty: medium
+pinnedCommit: 96453c8
+environment: node22-isolated
+timeoutSec: 450
+tokenBudget: 60000
+description: >
+  Implement a new endpoint helper adhering to persistent project conventions
+  stored in .helix/knowledge/ (APKS). Compare agent discovery latency and token
+  consumption when project rules are pre-indexed vs when the agent must read 20+
+  unrelated files to rediscover naming rules.
+acceptanceCriteria:
+  - Adhere to project architectural boundaries and naming conventions
+  - Zero token expenditure on irrelevant repo exploration when APKS context is present
+  - Maintain backward compatibility and zero test regression
+verificationCommand: node --experimental-strip-types --test tests/context.test.ts tests/billing.test.ts
+requireDiff: true

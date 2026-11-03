@@ -144,7 +144,7 @@ export function renderedDoc() {
   let meta = {};
   if (existsSync(PAIRED_JSON)) {
     const raw = JSON.parse(readFileSync(PAIRED_JSON, "utf8"));
-    paired = raw.stats;
+    paired = raw.stats ?? (Array.isArray(raw) ? raw : null);
     meta = raw.meta ?? {};
   }
   const withStatic = splice(readFileSync(DOC, "utf8"), renderStatic(cost));

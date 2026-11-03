@@ -192,5 +192,41 @@ describe("Phase 07: Repeatable Benchmark Suite & Evaluation Framework", () => {
         }
       }
     });
+
+    it("resolves strategy and category aliases correctly", async () => {
+      const { resolveBenchmarkStrategy, resolveBenchmarkCategory } = await import("./benchmark.ts");
+      assert.equal(resolveBenchmarkStrategy("baseline"), "single-agent");
+      assert.equal(resolveBenchmarkStrategy("baseline-raw"), "single-agent");
+      assert.equal(resolveBenchmarkStrategy("reviewer"), "implementer-plus-reviewer");
+      assert.equal(resolveBenchmarkStrategy("unknown-strat"), null);
+
+      assert.equal(resolveBenchmarkCategory("bugfix"), "bug-fixing");
+      assert.equal(resolveBenchmarkCategory("bugfix-investigation"), "bug-fixing");
+      assert.equal(resolveBenchmarkCategory("feature"), "feature-implementation");
+      assert.equal(resolveBenchmarkCategory("unknown-cat"), null);
+    });
+
+    it("converts benchmark results to Section 4 standard execution records", async () => {
+      const suite = new RepeatableBenchmarkSuite();
+      const report = await suite.runSuite({
+        strategies: ["single-agent"],
+        categories: ["bug-fixing"],
+        runsPerTask: 1,
+      });
+
+      const records = suite.toStandardRecords(report, "test-sha-123");
+      assert.equal(records.length, 1);
+      const r = records[0];
+      assert.equal(r.task_id, "bench-bugfix-limiter");
+      assert.equal(r.mode, "baseline");
+      assert.equal(r.repository_commit, "test-sha-123");
+      assert.equal(typeof r.success, "boolean");
+      assert.equal(typeof r.input_tokens, "number");
+      assert.equal(typeof r.output_tokens, "number");
+      assert.equal(typeof r.total_tokens, "number");
+      assert.equal(typeof r.duration_seconds, "number");
+      assert.equal(typeof r.tool_calls, "number");
+      assert.equal(r.error, null);
+    });
   });
 });

@@ -19,6 +19,13 @@ docs/
 ├── CLI.md                   Complete CLI command and flag reference
 ├── CONFIGURATION.md         Configuration files, environment variables, and pricing
 ├── ARCHITECTURE.md          Core architecture, the 13 components, and lifecycle
+├── diagrams/                Visual system and workflow architecture diagrams
+│   ├── development-workflow.md
+│   └── architecture.md
+├── benchmarks/              Benchmark methodology, empirical results, and trade-offs
+│   ├── methodology.md
+│   ├── results.md
+│   └── limitations.md
 ├── TROUBLESHOOTING.md       Diagnostic workflows, failure recovery, and FAQ
 ├── DISTRIBUTION.md          Release pipelines, npm, binaries, and package managers
 ├── DECISIONS.md             Architectural Decision Records (ADRs)
@@ -68,6 +75,13 @@ docs/
   - Model Provider & Token Cost Accounting (`src/engine/provider.ts`)
   - Repeatable Benchmark Framework (`src/engine/benchmark.ts`)
 - **[Empirical Evidence & Benchmark Data](EVIDENCE.md)**: Head-to-head evaluation results proving why single-agent execution is token-optimal and when independent review is justified.
+- **[System & Workflow Diagrams](diagrams/development-workflow.md)**: Visual architecture and execution lifecycle diagrams.
+  - [Development Workflow](diagrams/development-workflow.md)
+  - [System Architecture](diagrams/architecture.md)
+- **[Benchmark Methodology & Results](benchmarks/methodology.md)**: Full evaluation methodology, empirical findings, and limitations.
+  - [Benchmark Methodology](benchmarks/methodology.md)
+  - [Benchmark Results](benchmarks/results.md)
+  - [Limitations & Trade-offs](benchmarks/limitations.md)
 - **[Architectural Decision Records](DECISIONS.md)**: Immutable record of design choices, rejected alternatives, and verified platform facts.
 
 ---

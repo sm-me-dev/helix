@@ -746,22 +746,27 @@ async function cmdUi(opts) {
 }
 
 async function cmdBench(opts) {
-  const { RepeatableBenchmarkSuite } = await import("../src/engine/benchmark.ts");
+  const { RepeatableBenchmarkSuite, BENCHMARK_TASKS } = await import("../src/engine/benchmark.ts");
   const suite = new RepeatableBenchmarkSuite();
 
   let json = false;
+  let standardJson = false;
+  let list = false;
   let outPath = null;
   let runs = 1;
   const strategies = [];
   const categories = [];
+  const taskIds = [];
 
   const args = opts.benchArgs || [];
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--json") json = true;
+    else if (a === "--standard-json") standardJson = true;
+    else if (a === "--list" || a === "-l") list = true;
     else if (a === "--help" || a === "-h") {
       process.stdout.write(
-        "Usage: helix bench [--strategy s1,s2] [--category c1,c2] [--runs n] [--json] [--out <path>]\n",
+        "Usage: helix bench [--strategy s1,s2] [--category c1,c2] [--task id] [--runs n] [--list] [--json] [--standard-json] [--out <path>]\n",
       );
       return;
     } else if (a === "--out") outPath = args[++i];
@@ -774,19 +779,43 @@ async function cmdBench(opts) {
     else if (a === "--category") categories.push(...(args[++i] || "").split(","));
     else if (a.startsWith("--category="))
       categories.push(...a.slice("--category=".length).split(","));
+    else if (a === "--task") taskIds.push(...(args[++i] || "").split(","));
+    else if (a.startsWith("--task=")) taskIds.push(...a.slice("--task=".length).split(","));
+  }
+
+  if (list) {
+    process.stdout.write("# Helix Benchmark Task Catalog (10 Categories)\n\n");
+    for (const t of BENCHMARK_TASKS) {
+      process.stdout.write(
+        `- **${t.id}** [${t.category}] (${t.tier} tier, ${t.targetFiles.length} target files)\n`,
+      );
+      process.stdout.write(
+        `  ${t.title} — ${t.prompt.replace(/\s+/g, " ").trim().slice(0, 120)}...\n`,
+      );
+    }
+    return;
   }
 
   const report = await suite.runSuite({
     strategies: strategies.length > 0 ? strategies : undefined,
     categories: categories.length > 0 ? categories : undefined,
+    taskIds: taskIds.length > 0 ? taskIds : undefined,
     runsPerTask: runs,
   });
 
   if (outPath) {
-    suite.saveReport(report, outPath);
+    if (standardJson) {
+      const records = suite.toStandardRecords(report);
+      const fs = await import("node:fs");
+      fs.writeFileSync(outPath, JSON.stringify(records, null, 2) + "\n", "utf8");
+    } else {
+      suite.saveReport(report, outPath);
+    }
   }
 
-  if (json) {
+  if (standardJson) {
+    process.stdout.write(JSON.stringify(suite.toStandardRecords(report), null, 2) + "\n");
+  } else if (json) {
     process.stdout.write(JSON.stringify(report, null, 2) + "\n");
   } else {
     process.stdout.write(suite.formatMarkdownReport(report) + "\n");

@@ -1,0 +1,19 @@
+id: task-a-repo-understanding
+category: repository-understanding
+title: Locate and Trace Rate Limiting Implementation
+difficulty: medium
+pinnedCommit: 96453c8
+environment: node22-isolated
+timeoutSec: 300
+tokenBudget: 50000
+description: >
+  In an unfamiliar service codebase, trace the execution path of the rate limiter
+  from incoming HTTP header parsing down to the storage backend. Identify the exact
+  file and line where headers are normalized and report the dependency topology.
+acceptanceCriteria:
+  - Identify that header normalization occurs in src/context.ts
+  - Identify that MemoryStore in src/store.ts is the active storage driver
+  - Trace call chain without modifying production code or leaking tokens
+verificationCommand: node --experimental-strip-types --test tests/context.test.ts tests/rate-limit.test.ts
+requireDiff: false
+expectSummaryFile: docs/TRACE.md

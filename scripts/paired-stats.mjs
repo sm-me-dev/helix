@@ -158,5 +158,17 @@ if (process.argv[1]?.endsWith("paired-stats.mjs")) {
         `${p.pairs} pairs, pass ${p.passArm}/${p.pairs} vs ${p.passBaseline}/${p.pairs}, verdict: ${verdict(p)}`,
     );
   }
-  if (opt("--out", null)) writeFileSync(opt("--out", ""), JSON.stringify(out, null, 2) + "\n");
+  if (opt("--out", null)) {
+    const payload = {
+      meta: {
+        agent: data.meta?.agent ?? "opencode",
+        fixture: data.meta?.fixture ?? "large",
+        date: data.meta?.startedAt ?? new Date().toISOString().slice(0, 10),
+        tasks: data.meta?.tasks ?? [],
+        runs: data.meta?.runs ?? 0,
+      },
+      stats: out,
+    };
+    writeFileSync(opt("--out", ""), JSON.stringify(payload, null, 2) + "\n");
+  }
 }

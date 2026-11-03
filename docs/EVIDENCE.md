@@ -77,7 +77,32 @@ Method: o200k_base BPE via gpt-tokenizer (approximation of frontier tokenizers, 
 ## Measured: Helix against the same agent with no harness
 
 <!-- evidence:paired:start -->
-No paired run has been recorded yet.
+Paired runs, opencode, large fixture, 2026-10-13. Each task and run index executes in every arm back to back; the baseline is the same agent with no pack.
+
+```mermaid
+xychart-beta
+    title "Uncached tokens vs no harness (negative = fewer; point estimate)"
+    x-axis ["helix-min", "helix-nosub", "helix-graph"]
+    y-axis "% change" -29 --> 51
+    bar [-12.7, -11.0, 28.7]
+```
+
+| Arm | Pairs | Uncached tokens vs none | 95% CI | Passed (arm / none) | Passes lost / gained | Verdict |
+| --- | ---: | ---: | --- | ---: | ---: | --- |
+| helix-min | 16 | -12.7% | -23.9% .. -0.3% | 16/16 vs 16/16 | 0 / 0 | saves tokens |
+| helix-nosub | 16 | -11.0% | -21.7% .. +0.6% | 16/16 vs 16/16 | 0 / 0 | no detectable difference |
+| helix-graph | 16 | +28.7% | +13.8% .. +45.5% | 16/16 vs 16/16 | 0 / 0 | costs tokens |
+
+Per task (point estimate and 95% CI; each task has few pairs, so read these as direction, not proof):
+
+| Task | helix-min | helix-nosub | helix-graph |
+| --- | --- | --- | --- |
+| call-chain | -24.8% (-37.3% .. -9.0%), n=6 | -21.2% (-37.7% .. -1.6%), n=6 | +32.2% (+7.4% .. +61.1%), n=6 |
+| cross-module | -8.7% (-31.6% .. +21.9%), n=5 | -13.8% (-25.4% .. -1.2%), n=5 | +21.5% (-5.0% .. +61.6%), n=5 |
+| deep-bug | -0.1% (-10.5% .. +11.6%), n=5 | +6.5% (-7.7% .. +27.0%), n=5 | +32.0% (+15.7% .. +49.9%), n=5 |
+| trace-bug | n/a (n/a .. n/a), n=0 | n/a (n/a .. n/a), n=0 | n/a (n/a .. n/a), n=0 |
+
+Method: uncached tokens (input + output + reasoning + cache writes, cache reads excluded) from the agent's own session transcript; paired log-ratio bootstrap (10,000 resamples, seed 1) for the interval; exact sign test on discordant pass/fail pairs. Pairs where either side hit a provider rate limit or hung with zero tokens are dropped. A verdict of "no detectable difference" means the interval includes zero, not that the arms are equal.
 <!-- evidence:paired:end -->
 
 ## How to reproduce

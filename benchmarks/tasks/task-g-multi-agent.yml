@@ -1,0 +1,20 @@
+id: task-g-multi-agent
+category: multi-agent-workflows
+title: Disjoint Subtasks Concurrent Execution vs Reviewer Gate
+difficulty: high
+pinnedCommit: 96453c8
+environment: node22-isolated
+timeoutSec: 900
+tokenBudget: 150000
+description: >
+  Execute two disjoint subtasks in parallel:
+  Subtask A: Implement invoice currency formatting in src/billing.ts.
+  Subtask B: Implement rate limit header injection in src/rate-limit.ts.
+  Compare single-agent vs parallel-implementation vs implementer-plus-reviewer.
+  Measure coordination overhead, token premium, and merge conflict rate.
+acceptanceCriteria:
+  - Both subtasks implemented without clobbering each other
+  - Independent verification detects any regressions
+  - Diff clean and builds without conflicts
+verificationCommand: node --experimental-strip-types --test tests/billing.test.ts tests/rate-limit.test.ts
+requireDiff: true

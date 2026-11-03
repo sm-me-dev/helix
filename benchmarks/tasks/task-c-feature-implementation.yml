@@ -1,0 +1,19 @@
+id: task-c-feature-implementation
+category: feature-implementation
+title: Tiered Daily Quota Policy Implementation
+difficulty: high
+pinnedCommit: 96453c8
+environment: node22-isolated
+timeoutSec: 900
+tokenBudget: 120000
+description: >
+  Implement daily quota enforcement per client tier in src/quota.ts and wire it to
+  billing context: standard tier gets 1,000 req/day, enterprise tier gets 50,000 req/day.
+  Reject exceeded requests with HTTP 429 quota_exceeded code and header X-Daily-Remaining.
+acceptanceCriteria:
+  - Implement TieredQuotaPolicy class with standard and enterprise tiers
+  - Correct remaining quota headers returned
+  - Preserve backward compatibility for untiered clients
+  - All quota and context tests green
+verificationCommand: node --experimental-strip-types --test tests/quota.test.ts tests/context.test.ts tests/billing.test.ts
+requireDiff: true

@@ -1,0 +1,20 @@
+id: task-e-complex-workflow
+category: complex-workflows
+title: Cross-Module Token Contract Migration with Sequential Steps
+difficulty: high
+pinnedCommit: 96453c8
+environment: node22-isolated
+timeoutSec: 1200
+tokenBudget: 160000
+description: >
+  Execute a 3-stage cryptographic token pipeline across keys, auth, and gateway:
+  Stage 1: Define KeyPair and Signature types in src/keys.ts.
+  Stage 2: Implement verifySignature in src/auth.ts consuming KeyPair.
+  Stage 3: Enforce token verification in src/gateway.ts with bounded retries.
+acceptanceCriteria:
+  - Update all three modules cleanly in dependency order
+  - No broken imports or cyclical dependencies introduced
+  - All cryptographic test fixtures validate successfully
+  - Mechanical gate passes secrets, lint, typecheck, and tests
+verificationCommand: node --experimental-strip-types --test tests/keys.test.ts tests/auth.test.ts tests/gateway.test.ts
+requireDiff: true

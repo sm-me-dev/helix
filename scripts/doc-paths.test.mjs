@@ -23,7 +23,7 @@ const LIVING_DOCS = [
 ];
 
 // `.helix/` is deliberately absent: it names files in the *target* repo's pack.
-const TOP_DIRS = ["src/", "cli/", "scripts/", "evals/", "docs/", "fixtures/"];
+const TOP_DIRS = ["src/", "cli/", "scripts/", "evals/", "docs/", "fixtures/", "benchmarks/"];
 
 /** `a/{b,c}.ts` -> [`a/b.ts`, `a/c.ts`] (one level is all the docs use). */
 function expandBraces(p) {

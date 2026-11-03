@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helix.sm-me.dev/schemas/benchmark-execution-record.json",
+  "title": "HelixBenchmarkExecutionRecord",
+  "description": "Standard execution record schema for Helix head-to-head benchmark runs",
+  "type": "object",
+  "required": [
+    "run_id",
+    "task_id",
+    "mode",
+    "model",
+    "repository_commit",
+    "started_at",
+    "finished_at",
+    "success",
+    "tests_passed",
+    "tests_failed",
+    "input_tokens",
+    "output_tokens",
+    "total_tokens",
+    "duration_seconds",
+    "tool_calls",
+    "retries",
+    "files_changed"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "description": "Unique identifier for this benchmark execution"
+    },
+    "task_id": {
+      "type": "string",
+      "description": "Identifier of the benchmark task"
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["baseline", "helix"],
+      "description": "Execution arm: unharnessed baseline agent or Helix-harnessed agent"
+    },
+    "model": {
+      "type": "string",
+      "description": "Model and provider identifier (e.g., opencode/mock-agent-v1)"
+    },
+    "model_version": {
+      "type": ["string", "null"],
+      "description": "Exact model checkpoint or snapshot identifier if available"
+    },
+    "repository_commit": {
+      "type": "string",
+      "description": "Git commit SHA of the repository snapshot evaluated"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when task execution commenced"
+    },
+    "finished_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp when task execution and grading completed"
+    },
+    "success": {
+      "type": "boolean",
+      "description": "Whether the run satisfied mechanical acceptance criteria and passed tests"
+    },
+    "tests_passed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of passing verification tests"
+    },
+    "tests_failed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of failing verification tests"
+    },
+    "input_tokens": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total prompt/input tokens consumed"
+    },
+    "output_tokens": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total generated/output tokens produced"
+    },
+    "total_tokens": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Sum of input, output, and reasoning tokens"
+    },
+    "estimated_cost_usd": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "description": "Estimated monetary cost in USD based on model pricing table, or null if unmeasured"
+    },
+    "duration_seconds": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Elapsed wall-clock time in seconds"
+    },
+    "tool_calls": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of tool invocations executed"
+    },
+    "retries": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of retry iterations attempted after test or lint failure"
+    },
+    "files_changed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Count of modified, created, or deleted files in the working tree"
+    },
+    "error": {
+      "type": ["string", "null"],
+      "description": "Failure error message or null if run succeeded"
+    }
+  },
+  "additionalProperties": false
+}

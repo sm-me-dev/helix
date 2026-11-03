@@ -1,8 +1,86 @@
 # Helix
 
-Helix is an AI coding harness engineered to maximize coding-agent results while strictly controlling token consumption, execution latency, and coordination overhead.
+**Helix is an open-source harness for AI coding agents that cuts token waste, isolates execution in ephemeral Git worktrees, and guarantees code quality with zero-token mechanical gates.**
 
-[Installation](docs/INSTALL.md) · [Documentation](docs/index.md) · [Quick Start](docs/QUICKSTART.md) · [Contributing](CONTRIBUTING.md)
+[Installation](docs/INSTALL.md) · [Documentation](docs/index.md) · [Quick Start](docs/QUICKSTART.md) · [Benchmarks](benchmarks/README.md) · [Contributing](CONTRIBUTING.md)
+
+---
+
+## How Helix Works
+
+Helix sits between the developer, the underlying AI coding agent (Claude Code, Cursor, OpenCode, Codex), and the project repository to keep coding workflows disciplined, isolated, and verified:
+
+```mermaid
+flowchart TD
+    subgraph Dev["Developer"]
+        D1["Define task or issue"]
+        D2["Review verified diff & merge"]
+    end
+
+    subgraph Project["Project & Knowledge"]
+        P1["Git repository & source"]
+        P2[".helix/knowledge/ project rules"]
+        P3["Isolated Git worktree"]
+    end
+
+    subgraph Helix["Helix Harness"]
+        H1["1. Understand project context"]
+        H2["2. Retrieve domain rules (APKS)"]
+        H3["3. Plan task (Tiers 1-4)"]
+        H4["5. Mechanical gate (secrets, lint, tests)"]
+    end
+
+    subgraph Agent["AI Coding Agent"]
+        A1["4. Implement changes in worktree"]
+        A2{"Review required?"}
+        A3["Diff review (high assurance)"]
+    end
+
+    subgraph Tools["Tools & Tests"]
+        T1["Test suite & compiler"]
+    end
+
+    D1 --> H1
+    P1 --> H1
+    P2 --> H2
+    H1 --> H3
+    H2 --> H3
+    H3 -->|"12-line handoff card"| A1
+    H3 -.->|"spawns"| P3
+    P3 <--> A1
+    A1 --> A2
+    A2 -->|"Security / Complex"| A3
+    A2 -->|"Standard"| H4
+    A3 --> H4
+    H4 --> T1
+    T1 -->|"Pass (0 tokens)"| D2
+    T1 -.->|"Fail: return errors"| A1
+    D2 -->|"Merge"| P1
+```
+
+For detailed architecture and workflow lifecycle diagrams, see [Development Workflow](docs/diagrams/development-workflow.md) and [System Architecture](docs/diagrams/architecture.md).
+
+---
+
+## Does Helix Actually Help? The Evidence
+
+We do not ask developers to trust architectural claims. We evaluate Helix head-to-head against unharnessed baseline agents on identical models, tasks, and commits using paired bootstrap statistics (10,000 resamples):
+
+| Measurement                 | Unharnessed Agent | With Helix (`helix-min`) |                   Measured Difference | Statistical Verdict        |
+| --------------------------- | ----------------: | -----------------------: | ------------------------------------: | -------------------------- |
+| **Task Completion**         |      16/16 (100%) |             16/16 (100%) |                    0 discordant pairs | **Parity maintained**      |
+| **Median Uncached Tokens**  |     22,268 tokens |            19,437 tokens |  **-12.7%** (95% CI: -23.9% .. -0.3%) | **saves tokens**           |
+| **Deep Call Chain Tracing** |     24,638 tokens |            18,521 tokens |  **-24.8%** (95% CI: -37.3% .. -9.0%) | **saves tokens**           |
+| **Zero-Token Verification** |          0 checks |          100% mechanical | **0 model tokens** (15-30s wall time) | **Eliminates regressions** |
+| **Graphify MCP Overhead**   |          Baseline |        With Graphify MCP | **+28.7%** (95% CI: +13.8% .. +45.5%) | **costs tokens**           |
+
+### What the Evidence Teaches Us:
+
+1. **Instructions & Gates Save Tokens:** `helix-min` achieves statistically significant token savings (-12.7% overall, -24.8% on deep call chains) by providing exact test commands in `AGENTS.md` and preventing exploratory wheel-spinning.
+2. **Subagents Do Not Help Routine Tasks:** Single-agent execution is token-optimal for standard bug fixes. Multi-agent swarms add +61% to +140% token overhead without increasing pass rates.
+3. **Graph Intelligence Has a Size Floor:** Graphify MCP adds +28.7% tokens on moderate codebases (~52 files) due to schema and search overhead. Helix defaults to lightweight maps on normal repos.
+
+For complete data and methodology, see [Benchmark Methodology](docs/benchmarks/methodology.md), [Results & Findings](docs/benchmarks/results.md), and [Limitations & Trade-offs](docs/benchmarks/limitations.md).
 
 ---
 
@@ -15,7 +93,19 @@ Helix enforces a disciplined, evidence-based engineering philosophy:
 - **Single-Agent by Default**: Routine tasks run in a single session at minimum token cost (~815 tokens/task).
 - **Mechanical Validation Over Claims**: An agent claiming "all tests pass" is ignored; success is determined solely by zero-token verification gates (`.helix/gate.mjs`).
 - **Worktree Isolation**: Ephemeral Git worktrees prevent workspace corruption and dirty working trees.
-- **Independent Adversarial Review**: For complex or sensitive tasks, an isolated reviewer inspects only the diff and requirements, eliminating 100% of regressions at a modest +61% token premium.
+- **Independent Adversarial Review**: For complex or sensitive tasks, an isolated reviewer inspects only the diff and requirements, eliminating regressions at a modest +61% token premium.
+
+---
+
+## What Helix Improves for Developers
+
+| Technical Capability                                 | Everyday Developer Benefit                                                                        |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| **Targeted Pack Generation (`helix init`)**          | Sets up platform configs and `AGENTS.md` (≤300t) without wading through vendor docs.              |
+| **Zero-Token Verification Gate (`helix gate`)**      | Catches syntax errors, lint failures, and broken tests before code is considered done.            |
+| **Worktree Sandboxing (`helix run`)**                | Executes changes in ephemeral worktrees; aborted or failed tasks never corrupt your working tree. |
+| **Adaptive Project Knowledge (`.helix/knowledge/`)** | Remembers domain boundaries and naming rules without having to re-explain them.                   |
+| **Repeatable Benchmark Suite (`helix bench`)**       | Allows teams to independently measure whether agent configurations actually save tokens.          |
 
 ---
 
@@ -146,6 +236,12 @@ Helix emits configurations only where vendor documentation was verified.
 - **[CLI Reference](docs/CLI.md)**: Comprehensive command, flag, and exit code reference.
 - **[Configuration Reference](docs/CONFIGURATION.md)**: Config file schemas, environment variables, and pricing tables.
 - **[Architecture Guide](docs/ARCHITECTURE.md)**: Engine boundaries, the 13 components, and execution lifecycle.
+- **[Workflow Diagram](docs/diagrams/development-workflow.md)**: Visual end-to-end user journey and execution lifecycle.
+- **[System Architecture Diagram](docs/diagrams/architecture.md)**: Dual-modality architecture and component boundaries.
+- **[Benchmark Suite](benchmarks/README.md)**: Repeatable benchmark runner and task definitions.
+- **[Benchmark Methodology](docs/benchmarks/methodology.md)**: Statistical pairing, bootstrap intervals, and grading rules.
+- **[Benchmark Results](docs/benchmarks/results.md)**: Empirical findings, token deltas, and per-task breakdown.
+- **[Benchmark Limitations](docs/benchmarks/limitations.md)**: Known trade-offs, overheads, and where Helix does not help.
 - **[Troubleshooting & FAQ](docs/TROUBLESHOOTING.md)**: Diagnostics, common failure modes, and answers to common questions.
 - **[Distribution Guide](docs/DISTRIBUTION.md)**: Release channels, npm, Homebrew, and supply-chain security.
 - **[Architectural Decisions](docs/DECISIONS.md)**: Append-only design records and rejected alternatives.

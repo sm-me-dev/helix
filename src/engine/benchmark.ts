@@ -74,6 +74,60 @@ export const STRATEGY_METADATA: Record<
   },
 };
 
+export const STRATEGY_ALIASES: Record<string, BenchmarkStrategy> = {
+  baseline: "single-agent",
+  "baseline-raw": "single-agent",
+  "single-agent": "single-agent",
+  planner: "single-agent-with-planning",
+  planning: "single-agent-with-planning",
+  "single-agent-with-planning": "single-agent-with-planning",
+  multiple: "multiple-implementers",
+  "multiple-implementers": "multiple-implementers",
+  reviewer: "implementer-plus-reviewer",
+  "implementer-plus-reviewer": "implementer-plus-reviewer",
+  "helix-reviewer": "implementer-plus-reviewer",
+  parallel: "parallel-implementation",
+  "parallel-implementation": "parallel-implementation",
+};
+
+export const CATEGORY_ALIASES: Record<string, BenchmarkCategory> = {
+  "bug-fixing": "bug-fixing",
+  bugfix: "bug-fixing",
+  "bugfix-investigation": "bug-fixing",
+  "feature-implementation": "feature-implementation",
+  feature: "feature-implementation",
+  refactoring: "refactoring",
+  refactor: "refactoring",
+  "test-generation": "test-generation",
+  testgen: "test-generation",
+  "code-review": "code-review",
+  codereview: "code-review",
+  "repository-exploration": "repository-exploration",
+  "repo-exploration": "repository-exploration",
+  exploration: "repository-exploration",
+  "multi-file-changes": "multi-file-changes",
+  "multi-file": "multi-file-changes",
+  multifile: "multi-file-changes",
+  "dependency-changes": "dependency-changes",
+  dependencies: "dependency-changes",
+  "independent-subtasks": "independent-subtasks",
+  independent: "independent-subtasks",
+  "sequential-dependencies": "sequential-dependencies",
+  sequential: "sequential-dependencies",
+};
+
+export function resolveBenchmarkStrategy(input: string): BenchmarkStrategy | null {
+  const norm = input.trim().toLowerCase();
+  if (BENCHMARK_STRATEGIES.includes(norm as BenchmarkStrategy)) return norm as BenchmarkStrategy;
+  return STRATEGY_ALIASES[norm] ?? null;
+}
+
+export function resolveBenchmarkCategory(input: string): BenchmarkCategory | null {
+  const norm = input.trim().toLowerCase();
+  if (BENCHMARK_CATEGORIES.includes(norm as BenchmarkCategory)) return norm as BenchmarkCategory;
+  return CATEGORY_ALIASES[norm] ?? null;
+}
+
 // ============================================================================
 // 2. Benchmark Task Schema & Representative Catalog
 // ============================================================================
@@ -352,6 +406,64 @@ export type BenchmarkRunResult = {
     timestamp: string;
   };
 };
+
+export type StandardExecutionRecord = {
+  run_id: string;
+  task_id: string;
+  mode: "baseline" | "helix";
+  model: string;
+  model_version: string | null;
+  repository_commit: string;
+  started_at: string;
+  finished_at: string;
+  success: boolean;
+  tests_passed: number;
+  tests_failed: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  estimated_cost_usd: number | null;
+  duration_seconds: number;
+  tool_calls: number;
+  retries: number;
+  files_changed: number;
+  error: string | null;
+};
+
+export function toStandardExecutionRecord(
+  run: BenchmarkRunResult,
+  commitSha = "head",
+): StandardExecutionRecord {
+  const started = new Date(Date.now() - run.latency.wallClockMs).toISOString();
+  const finished = new Date().toISOString();
+  const filesChanged = run.quality.diffLinesAdded > 0 || run.quality.diffLinesDeleted > 0 ? 1 : 0;
+  return {
+    run_id: `${run.taskId}-${run.strategy}-${run.runIndex}`,
+    task_id: run.taskId,
+    mode: run.strategy === "single-agent" ? "baseline" : "helix",
+    model: run.environment.model,
+    model_version: null,
+    repository_commit: commitSha,
+    started_at: started,
+    finished_at: finished,
+    success: run.quality.verifiedPass,
+    tests_passed: run.quality.verifiedPass ? 1 : 0,
+    tests_failed: run.quality.verifiedPass ? 0 : 1,
+    input_tokens: run.tokens.inputTokens,
+    output_tokens: run.tokens.outputTokens,
+    total_tokens: run.tokens.totalTokens,
+    estimated_cost_usd: run.tokens.estimatedCostUsd ?? null,
+    duration_seconds: Number((run.latency.wallClockMs / 1000).toFixed(3)),
+    tool_calls: run.reliability.retriesAttempted * 2 + 3,
+    retries: run.reliability.retriesAttempted,
+    files_changed: filesChanged,
+    error: run.quality.verifiedPass
+      ? null
+      : run.quality.regressionDetected
+        ? "Pre-existing test regression detected"
+        : run.reliability.failureReason || "Mechanical validation failed",
+  };
+}
 
 export type CategoryAggregateMetrics = {
   category: BenchmarkCategory;
@@ -784,8 +896,28 @@ export class RepeatableBenchmarkSuite {
    * Runs the complete benchmark suite across all requested strategies and categories.
    */
   async runSuite(options: BenchmarkRunOptions = {}): Promise<BenchmarkSuiteReport> {
-    const strategies = options.strategies || [...BENCHMARK_STRATEGIES];
-    const categories = options.categories || [...BENCHMARK_CATEGORIES];
+    const rawStrategies = (options.strategies || BENCHMARK_STRATEGIES) as string[];
+    const resolvedStrategies: BenchmarkStrategy[] = [];
+    for (const s of rawStrategies) {
+      const resolved = resolveBenchmarkStrategy(s);
+      if (resolved && !resolvedStrategies.includes(resolved)) {
+        resolvedStrategies.push(resolved);
+      }
+    }
+    const strategies =
+      resolvedStrategies.length > 0 ? resolvedStrategies : [...BENCHMARK_STRATEGIES];
+
+    const rawCategories = (options.categories || BENCHMARK_CATEGORIES) as string[];
+    const resolvedCategories: BenchmarkCategory[] = [];
+    for (const c of rawCategories) {
+      const resolved = resolveBenchmarkCategory(c);
+      if (resolved && !resolvedCategories.includes(resolved)) {
+        resolvedCategories.push(resolved);
+      }
+    }
+    const categories =
+      resolvedCategories.length > 0 ? resolvedCategories : [...BENCHMARK_CATEGORIES];
+
     const runsPerTask = options.runsPerTask || 1;
 
     const filteredTasks = this.tasks.filter((t) => {
@@ -917,7 +1049,7 @@ export class RepeatableBenchmarkSuite {
 
       aggregates[strat] = {
         strategy: strat,
-        strategyName: STRATEGY_METADATA[strat].name,
+        strategyName: STRATEGY_METADATA[strat]?.name ?? String(strat),
         totalRuns,
         qualityScore,
         claimedPassRate,
@@ -1062,6 +1194,13 @@ export class RepeatableBenchmarkSuite {
     );
 
     return sections.join("\n");
+  }
+
+  /**
+   * Converts all benchmark results in a report to the standard execution record schema.
+   */
+  toStandardRecords(report: BenchmarkSuiteReport, commitSha = "head"): StandardExecutionRecord[] {
+    return report.results.map((r) => toStandardExecutionRecord(r, commitSha));
   }
 
   /**

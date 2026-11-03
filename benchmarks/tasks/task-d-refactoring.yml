@@ -1,0 +1,18 @@
+id: task-d-refactoring
+category: refactoring-maintenance
+title: Consolidate Procedural Limiter into LimiterService
+difficulty: medium
+pinnedCommit: 96453c8
+environment: node22-isolated
+timeoutSec: 600
+tokenBudget: 80000
+description: >
+  Consolidate procedural rate-limiting utility functions scattered across src/context.ts
+  into a cohesive LimiterService class. Export both the class and backwards-compatible
+  shims so downstream consumers remain unbroken.
+acceptanceCriteria:
+  - Create LimiterService encapsulating token bucket algorithm
+  - Retain legacy function signatures with deprecation notices
+  - Ensure zero behavioral regressions or interface breakages
+verificationCommand: node --experimental-strip-types --test tests/context.test.ts tests/rate-limit.test.ts tests/billing.test.ts
+requireDiff: true
