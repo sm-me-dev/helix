@@ -3,10 +3,14 @@ name: Publish npm Package
 on:
   workflow_dispatch:
     inputs:
+      otp:
+        description: "One-Time Password (OTP) from authenticator app (if using token requiring 2FA)"
+        required: false
+        default: ""
       dry_run:
         description: "Dry run publish (do not write to registry)"
         required: false
-        default: "true"
+        default: "false"
 
 permissions:
   contents: read
@@ -38,5 +42,9 @@ jobs:
             npm publish --dry-run
           else
             echo "Publishing with provenance to npm registry..."
-            npm publish --provenance --access public
+            EXTRA_ARGS=""
+            if [ -n "${{ github.event.inputs.otp }}" ]; then
+              EXTRA_ARGS="--otp=${{ github.event.inputs.otp }}"
+            fi
+            npm publish --provenance --access public $EXTRA_ARGS
           fi
