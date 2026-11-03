@@ -1,8 +1,0 @@
-node_modules/**
-graphify-out/cache/**
-docs/DECISIONS.md
-docs/AUDIT-*.md
-docs/NEXT-PROMPT.md
-evals/results/**
-fixtures/captures/**
-fixtures/measurements/**

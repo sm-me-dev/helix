@@ -1,9 +1,0 @@
-id: docs
-title: Implement the quota policy from docs
-prompt: >
-  Enforce the quota policy for API-key clients. The policy lives in the
-  repo docs — read it before writing code, and follow it exactly
-  (limits, window, counter key, atomicity).
-pass: node --experimental-strip-types --test tests/quota.test.ts
-timeoutSec: 600
-requireDiff: true

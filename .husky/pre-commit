@@ -1,6 +1,0 @@
-# Run lint-staged when it is installed; a failing lint-staged must fail the commit.
-if [ -x node_modules/.bin/lint-staged ]; then
-  node_modules/.bin/lint-staged
-else
-  echo "lint-staged not installed yet — run npm install (skipped)"
-fi
