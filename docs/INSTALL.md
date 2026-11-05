@@ -22,13 +22,13 @@ Or execute directly without a permanent installation:
 npx @sm-me-dev/helix --help
 ```
 
-**Requirements**: Node.js >= 22.6, Git >= 2.30.
+**Requirements**: Node.js >= 26.4, Git >= 2.30.
 
 ---
 
 ### 1.2 Universal Standalone Installer (Linux & macOS)
 
-For systems without Node.js installed, the universal installer downloads a self-contained application bundle with an embedded Node runtime:
+For systems without Node.js installed, the universal installer downloads a self-contained application bundle with an embedded Node 26.4 runtime:
 
 ```sh
 curl -fsSL https://sm-me-dev.github.io/helix/install.sh | sh

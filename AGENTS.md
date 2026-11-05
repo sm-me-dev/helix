@@ -3,7 +3,7 @@
 Helix is an AI coding harness. The product is the generated file pack
 (`src/generate.ts` + `src/adapters/`), the CLI (`cli/`) and the evals (`evals/`).
 
-## Gates (run on Node 22 to match CI; Node 24 also accepted)
+## Gates (run on Node 26.4+ to match CI)
 
 ```sh
 npm run lint && npm run typecheck && npm test

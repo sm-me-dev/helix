@@ -150,6 +150,12 @@ describe("plugin agents", () => {
     }
   });
 
+  it("declares the HTTP transport for remote Claude Code MCP servers", () => {
+    for (const server of Object.values(mcp.mcpServers) as Array<Record<string, unknown>>) {
+      if ("url" in server) assert.equal(server.type, "http");
+    }
+  });
+
   it("name MCP tools the way a plugin-bundled server is named: mcp__plugin_<plugin>_<server>__<tool>", () => {
     let seen = 0;
     for (const id of CFG.crew) {

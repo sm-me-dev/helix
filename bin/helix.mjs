@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env -S node --experimental-strip-types --experimental-ffi
 // bin/helix.mjs — Universal entry point for Helix CLI
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";

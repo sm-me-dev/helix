@@ -81,6 +81,9 @@ artifacts/
 # Graphify output: generated, ~6000-line churn per refresh; regenerate with `graphify update .`
 graphify-out/
 
+# Phase report drafts for the architectural remediation (root tmp/ only)
+/tmp/
+
 # Helix implementation work & reports
 .helix-work/
 

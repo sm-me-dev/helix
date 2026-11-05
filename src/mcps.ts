@@ -222,7 +222,7 @@ export function mcpSchemaTokens(
   return { tokens: MCP_BY_ID[id].schemaTokens, measured: false };
 }
 
-/** Portable shape (Claude Code .mcp.json, Cursor .cursor/mcp.json): `mcpServers`, no type field. */
+/** Cursor shape: `mcpServers`, with the portable command/args and URL/header fields. */
 export function portableServers(ids: McpId[]): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const id of ids) {
@@ -252,6 +252,18 @@ export function vscodeServers(ids: McpId[]): Record<string, unknown> {
 
 export function portableMcpJson(ids: McpId[]): string {
   return JSON.stringify({ mcpServers: portableServers(ids) }, null, 2) + "\n";
+}
+
+/** Claude Code now requires an explicit transport for remote URL entries in `.mcp.json`.
+ * Keep stdio entries in the portable command/args shape. */
+export function claudeCodeMcpJson(ids: McpId[]): string {
+  const servers = portableServers(ids);
+  for (const value of Object.values(servers)) {
+    if (value && typeof value === "object" && "url" in value) {
+      Object.assign(value, { type: "http" });
+    }
+  }
+  return JSON.stringify({ mcpServers: servers }, null, 2) + "\n";
 }
 
 export function vscodeMcpJson(ids: McpId[]): string {
@@ -291,7 +303,6 @@ export function codexToml(ids: McpId[]): string {
   return lines.join("\n") + "\n";
 }
 
-
 /** OpenCode shape (opencode.json): local command arrays and remote URLs under mcp. */
 export function openCodeMcpJson(ids: McpId[]): string {
   const out: Record<string, unknown> = {};
@@ -312,9 +323,5 @@ export function openCodeMcpJson(ids: McpId[]): string {
             };
     }
   }
-  return JSON.stringify(
-    { "$schema": "https://opencode.ai/config.json", mcp: out },
-    null,
-    2,
-  ) + "\n";
+  return JSON.stringify({ $schema: "https://opencode.ai/config.json", mcp: out }, null, 2) + "\n";
 }

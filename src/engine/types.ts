@@ -144,6 +144,8 @@ export type EngineExecutionOptions = {
   dryRun?: boolean;
   /** Event listener for real-time observability. */
   onEvent?: (event: ExecutionEvent) => void;
+  /** Stream assistant text from the agent runner to non-terminal clients. */
+  onMessageDelta?: (text: string) => void;
 };
 
 export interface HelixEngine {
@@ -188,6 +190,7 @@ export type AgentSession = {
   systemPrompt: string;
   messages: AgentMessage[];
   timeoutSec: number;
+  onOutputChunk?: (text: string) => void;
 };
 
 export type AgentExecutionOutput = {

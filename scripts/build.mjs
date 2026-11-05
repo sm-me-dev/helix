@@ -55,10 +55,8 @@ function processFile(srcPath, relPath) {
   } else if (srcPath.endsWith(".mjs") || srcPath.endsWith(".js")) {
     let raw = readFileSync(srcPath, "utf8");
     // Standardize shebang for compiled output
-    if (raw.startsWith("#!/usr/bin/env -S node --experimental-strip-types")) {
-      raw =
-        "#!/usr/bin/env node\n" +
-        raw.slice("#!/usr/bin/env -S node --experimental-strip-types\n".length);
+    if (raw.startsWith("#!/usr/bin/env -S node ")) {
+      raw = "#!/usr/bin/env node\n" + raw.slice(raw.indexOf("\n") + 1);
     }
     writeFileSync(destPath, rewriteImports(raw), "utf8");
     if (relPath.endsWith("helix.mjs")) {

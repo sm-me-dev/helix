@@ -105,6 +105,7 @@ export class MockAgentRunner implements AgentRunner {
       const exitCode = action.exitCode ?? 0;
       const stdout = action.stdout || (exitCode === 0 ? "Success" : "");
       const stderr = action.stderr || (exitCode !== 0 ? "Error encountered" : "");
+      if (stdout) session.onOutputChunk?.(stdout);
 
       const assistantMsg: AgentMessage = {
         role: "assistant",
@@ -216,7 +217,9 @@ export class SubprocessAgentRunner implements AgentRunner {
       }, timeoutMs);
 
       proc.stdout?.on("data", (chunk: Buffer) => {
-        stdout += chunk.toString("utf8");
+        const text = chunk.toString("utf8");
+        stdout += text;
+        session.onOutputChunk?.(text);
       });
 
       proc.stderr?.on("data", (chunk: Buffer) => {

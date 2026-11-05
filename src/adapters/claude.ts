@@ -1,4 +1,4 @@
-import { portableMcpJson } from "../mcps.ts";
+import { claudeCodeMcpJson } from "../mcps.ts";
 import { SKILL_BY_ID } from "../skills.ts";
 import type { HarnessConfig } from "../types";
 import {
@@ -98,7 +98,7 @@ export const claudeAdapter: PlatformAdapter = {
       });
     }
     files.push({ path: ".claude/settings.json", language: "json", body: hooksJson(config) });
-    files.push({ path: ".mcp.json", language: "json", body: portableMcpJson(config.mcps) });
+    files.push({ path: ".mcp.json", language: "json", body: claudeCodeMcpJson(config.mcps) });
     if (config.hooksEnabled) {
       files.push(...hookFiles(config));
       // The reviewer's Bash is limited to the gate by this hook; ship it with the reviewer.

@@ -282,7 +282,7 @@ const HTML = `<!DOCTYPE html>
   <header>
     <div class="badge-bar">
       <span class="badge badge-green">v${VERSION} Initial Release</span>
-      <span class="badge">Node.js &gt;= 22.6</span>
+      <span class="badge">Node.js &gt;= 26.4</span>
       <span class="badge">MIT Licensed</span>
       <span class="badge">Zero Clone Required</span>
     </div>
@@ -370,7 +370,7 @@ sudo dnf install https://github.com/sm-me-dev/helix/releases/download/v${VERSION
 
     <section class="card">
       <div class="card-title">📦 Standalone Release Packages (v${VERSION})</div>
-      <p style="color: var(--text-muted); font-size: 0.9rem;">Self-contained portable archives bundled with official Node.js 22 LTS:</p>
+      <p style="color: var(--text-muted); font-size: 0.9rem;">Self-contained portable archives bundled with Node.js 26.4:</p>
       
       <div class="dl-grid">
         <a class="dl-btn" href="https://github.com/sm-me-dev/helix/releases/download/v${VERSION}/helix-v${VERSION}-linux-x64.tar.gz">

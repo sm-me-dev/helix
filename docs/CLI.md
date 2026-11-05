@@ -1,8 +1,9 @@
 # Helix CLI reference
 
 Binary: `cli/helix.mjs` (executable; run as `./cli/helix.mjs` or
-`node cli/helix.mjs`). Requires **Node 22.6+** (runs TypeScript directly via
-type stripping). No dependencies beyond the repo checkout.
+`node cli/helix.mjs`). Requires **Node 26.4+** (runs TypeScript directly via
+type stripping). The full TUI and Web client dependencies are installed with
+the package.
 
 Exit codes everywhere: `0` success · `1` a check failed · `2` usage error.
 
@@ -200,6 +201,33 @@ runs the same CLI commands as child processes in `dir` and shows their exit code
   list, and `init` accepts only a platform list and a crew flag. `gate` runs the repo's own test and
   lint commands, so only point `ui` at a repo you trust.
 - The page loads nothing from the network (CSP `default-src 'none'`). One action runs at a time.
+
+## `helix`, `helix tui`, `helix web`, and `helix serve`
+
+`helix` and `helix tui` launch the OpenTUI terminal client. `helix web`
+serves the React client and opens a browser. Both clients attach to the local
+daemon on `HELIX_HOST:HELIX_PORT` (defaults to `127.0.0.1:3000`) and share
+its session list, event stream, prompts, and approvals. A client starts the
+daemon when none is listening; the other client reuses it.
+
+- The web client serves the built SPA from `dist/web`. In a checkout, run
+  `npm run build` before `helix web`. Published packages include the built
+  SPA.
+- `helix web --no-open` leaves browser launch to the caller. `--host`,
+  `--port`, `HELIX_HOST`, and `HELIX_PORT` select the daemon address.
+- The Web session picker lists sessions from that daemon. `helix web` opens
+  the active session when one exists, otherwise the most recently created one.
+- `helix serve` runs the daemon without launching either UI. The TUI or Web
+  client can attach to it later.
+- The Web diff inspector can discard a retained `helix/<task-id>` branch
+  after confirmation; it leaves the current checkout unchanged.
+
+```sh
+npm run build
+helix tui
+helix web
+helix serve --port 3000
+```
 
 ## Global Options
 

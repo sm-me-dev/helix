@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
@@ -11,9 +12,14 @@ import {
   type OrchestrationStrategy,
   type PlatformId,
   type ProviderId,
+  type RunMetrics,
   type TaskDefinition,
   type TaskResult,
 } from "../src/engine/index.ts";
+import { createExecutionEventMapper } from "../src/daemon/execution-events.ts";
+import type { SessionRuntime } from "../src/daemon/contracts.ts";
+import { loadAiConfig } from "../src/engine/config-loader.ts";
+import { countTokens } from "../src/measure.ts";
 
 const RUN_USAGE = `Usage: helix run [task-prompt-or-file] [options]
 
@@ -51,6 +57,15 @@ Exit codes:
 
 export type RunCliOptions = {
   runArgs?: string[];
+  /** Optional event sink for daemon and non-terminal clients. */
+  onExecutionEvent?: (event: ExecutionEvent) => void;
+  /** Stream assistant text chunks without writing them to the terminal. */
+  onMessageDelta?: (text: string) => void;
+  /** Forward measured engine usage to daemon clients. */
+  onTelemetry?: (metrics: RunMetrics) => void;
+  /** Suppress terminal output when invoked by the daemon runtime. */
+  silent?: boolean;
+  signal?: AbortSignal;
 };
 
 function mapStrategy(val: string): OrchestrationStrategy | "single" {
@@ -63,6 +78,11 @@ function mapStrategy(val: string): OrchestrationStrategy | "single" {
 }
 
 export async function cmdRun(opts: RunCliOptions): Promise<void> {
+  const stdout = opts.silent ? { write: (_text: string) => true } : process.stdout;
+  const stderr = opts.silent ? { write: (_text: string) => true } : process.stderr;
+  const setExitCode = (code: number) => {
+    if (!opts.silent) process.exitCode = code;
+  };
   const args = opts.runArgs || [];
   let taskArg: string | null = null;
   let strategy: "single" | "chain" | "parallel" | "parallel-implementation" | "full-crew" =
@@ -84,7 +104,7 @@ export async function cmdRun(opts: RunCliOptions): Promise<void> {
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "-h" || a === "--help") {
-      process.stdout.write(RUN_USAGE);
+      stdout.write(RUN_USAGE);
       return;
     } else if (a === "--json") {
       jsonOutput = true;
@@ -105,10 +125,10 @@ export async function cmdRun(opts: RunCliOptions): Promise<void> {
       ) {
         strategy = val;
       } else {
-        process.stderr.write(
+        stderr.write(
           `[helix run] Error: Invalid strategy "${val}". Valid options: single, chain, parallel, parallel-implementation, full-crew\n`,
         );
-        process.exitCode = 2;
+        setExitCode(2);
         return;
       }
     } else if (a.startsWith("--strategy=")) {
@@ -122,8 +142,8 @@ export async function cmdRun(opts: RunCliOptions): Promise<void> {
       ) {
         strategy = val as typeof strategy;
       } else {
-        process.stderr.write(`[helix run] Error: Invalid strategy "${val}".\n`);
-        process.exitCode = 2;
+        stderr.write(`[helix run] Error: Invalid strategy "${val}".\n`);
+        setExitCode(2);
         return;
       }
     } else if (a === "--platform") {
@@ -187,10 +207,10 @@ export async function cmdRun(opts: RunCliOptions): Promise<void> {
     } else if (!a.startsWith("-") && taskArg === null) {
       taskArg = a;
     } else {
-      process.stderr.write(
+      stderr.write(
         `[helix run] Error: Unknown argument "${a}". Run "helix run --help" for usage.\n`,
       );
-      process.exitCode = 2;
+      setExitCode(2);
       return;
     }
   }
@@ -205,9 +225,9 @@ export async function cmdRun(opts: RunCliOptions): Promise<void> {
   }
 
   if (!taskArg) {
-    process.stderr.write("[helix run] Error: Missing task prompt or task file.\n\n");
-    process.stdout.write(RUN_USAGE);
-    process.exitCode = 2;
+    stderr.write("[helix run] Error: Missing task prompt or task file.\n\n");
+    stdout.write(RUN_USAGE);
+    setExitCode(2);
     return;
   }
 
@@ -240,10 +260,10 @@ export async function cmdRun(opts: RunCliOptions): Promise<void> {
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        process.stderr.write(
+        stderr.write(
           `[helix run] Error: Failed to parse task JSON at ${resolvedTaskPath}: ${msg}\n`,
         );
-        process.exitCode = 2;
+        setExitCode(2);
         return;
       }
     } else {
@@ -297,27 +317,26 @@ export async function cmdRun(opts: RunCliOptions): Promise<void> {
 
   // Event listener for progress reporting
   const onEvent = (event: ExecutionEvent) => {
+    opts.onExecutionEvent?.(event);
     if (jsonOutput) return;
 
     const time = new Date().toLocaleTimeString();
     switch (event.type) {
       case "task_started":
-        process.stdout.write(
+        stdout.write(
           `\x1b[36m[${time}] [start]\x1b[0m Task started: ${task.id} (${task.title || "untitled"})\n`,
         );
         break;
       case "tier_classified": {
         const tier = (event.payload?.tier as string) || "standard";
         const review = event.payload?.independentReviewRequired ? " [independent-review]" : "";
-        process.stdout.write(
-          `\x1b[35m[${time}] [plan]\x1b[0m Classified as ${tier} tier${review}\n`,
-        );
+        stdout.write(`\x1b[35m[${time}] [plan]\x1b[0m Classified as ${tier} tier${review}\n`);
         break;
       }
       case "worktree_created": {
         const wt = (event.payload?.worktreePath as string) || "isolated";
         const rel = path.relative(workspaceRoot, wt);
-        process.stdout.write(
+        stdout.write(
           `\x1b[34m[${time}] [worktree]\x1b[0m Isolated workspace provisioned: ${rel}\n`,
         );
         break;
@@ -325,51 +344,45 @@ export async function cmdRun(opts: RunCliOptions): Promise<void> {
       case "agent_launched": {
         const role = (event.payload?.role as string) || "agent";
         const retry = event.payload?.retryCount ? ` (retry ${event.payload.retryCount})` : "";
-        process.stdout.write(`\x1b[33m[${time}] [agent]\x1b[0m Executing ${role}${retry}...\n`);
+        stdout.write(`\x1b[33m[${time}] [agent]\x1b[0m Executing ${role}${retry}...\n`);
         break;
       }
       case "agent_completed": {
         const code = event.payload?.exitCode;
         const dur = (event.payload?.durationMs as number) || 0;
-        process.stdout.write(
+        stdout.write(
           `\x1b[33m[${time}] [agent]\x1b[0m Agent completed in ${(dur / 1000).toFixed(1)}s (exit ${code})\n`,
         );
         break;
       }
       case "gate_started":
-        process.stdout.write(
-          `\x1b[34m[${time}] [gate]\x1b[0m Running mechanical verification...\n`,
-        );
+        stdout.write(`\x1b[34m[${time}] [gate]\x1b[0m Running mechanical verification...\n`);
         break;
       case "gate_passed": {
         const checks = event.payload?.checksRun || 0;
-        process.stdout.write(
+        stdout.write(
           `\x1b[32m[${time}] [gate]\x1b[0m Mechanical verification passed (${checks} checks)\n`,
         );
         break;
       }
       case "gate_failed": {
         const stage = (event.payload?.failingStage as string) || "checks";
-        process.stdout.write(
-          `\x1b[31m[${time}] [gate]\x1b[0m Verification failed at stage: ${stage}\n`,
-        );
+        stdout.write(`\x1b[31m[${time}] [gate]\x1b[0m Verification failed at stage: ${stage}\n`);
         break;
       }
       case "retry_scheduled": {
         const count = event.payload?.retryCount || 1;
-        process.stdout.write(
+        stdout.write(
           `\x1b[33m[${time}] [retry]\x1b[0m Scheduling retry attempt ${count} with failure feedback\n`,
         );
         break;
       }
       case "task_completed":
-        process.stdout.write(
-          `\x1b[32m[${time}] [done]\x1b[0m Task execution completed successfully!\n`,
-        );
+        stdout.write(`\x1b[32m[${time}] [done]\x1b[0m Task execution completed successfully!\n`);
         break;
       case "task_failed": {
         const reason = (event.payload?.reason as string) || "Verification or execution failed";
-        process.stdout.write(`\x1b[31m[${time}] [failed]\x1b[0m Task ended: ${reason}\n`);
+        stdout.write(`\x1b[31m[${time}] [failed]\x1b[0m Task ended: ${reason}\n`);
         break;
       }
       default:
@@ -382,25 +395,24 @@ export async function cmdRun(opts: RunCliOptions): Promise<void> {
   const abortHandler = async () => {
     if (interrupted) return;
     interrupted = true;
-    process.stderr.write(
-      "\n[helix run] Received interrupt signal. Aborting task and cleaning up...\n",
-    );
+    stderr.write("\n[helix run] Received interrupt signal. Aborting task and cleaning up...\n");
     await engine.abort(task.id, "Process terminated by SIGINT/SIGTERM");
-    process.exit(130);
+    if (!opts.silent) process.exit(130);
   };
   process.once("SIGINT", abortHandler);
   process.once("SIGTERM", abortHandler);
+  opts.signal?.addEventListener("abort", abortHandler, { once: true });
 
   if (!jsonOutput) {
-    process.stdout.write("\n\x1b[1mHelix AI Coding Harness\x1b[0m\n");
-    process.stdout.write(`Task:        ${task.id}\n`);
-    process.stdout.write(`Strategy:    ${strategy}\n`);
-    process.stdout.write(`Platform:    ${config.defaultPlatform}\n`);
-    process.stdout.write(
+    stdout.write("\n\x1b[1mHelix AI Coding Harness\x1b[0m\n");
+    stdout.write(`Task:        ${task.id}\n`);
+    stdout.write(`Strategy:    ${strategy}\n`);
+    stdout.write(`Platform:    ${config.defaultPlatform}\n`);
+    stdout.write(
       `Isolation:   ${isolatedWorktree ? "Ephemeral Git Worktree" : "Direct in-place"}\n`,
     );
-    if (dryRun) process.stdout.write("Mode:        Dry run (planning only)\n");
-    process.stdout.write("─".repeat(60) + "\n");
+    if (dryRun) stdout.write("Mode:        Dry run (planning only)\n");
+    stdout.write("─".repeat(60) + "\n");
   }
 
   const mapped = mapStrategy(strategy);
@@ -410,19 +422,22 @@ export async function cmdRun(opts: RunCliOptions): Promise<void> {
     isolatedWorktree,
     dryRun,
     onEvent,
+    onMessageDelta: opts.onMessageDelta,
   };
 
   let result: TaskResult;
   try {
     result = await engine.execute(task, executionOptions);
+    opts.onTelemetry?.(result.metrics);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`[helix run] Fatal execution error: ${msg}\n`);
-    process.exitCode = 1;
+    stderr.write(`[helix run] Fatal execution error: ${msg}\n`);
+    setExitCode(1);
     return;
   } finally {
     process.removeListener("SIGINT", abortHandler);
     process.removeListener("SIGTERM", abortHandler);
+    opts.signal?.removeEventListener("abort", abortHandler);
   }
 
   // Save report if requested
@@ -433,88 +448,191 @@ export async function cmdRun(opts: RunCliOptions): Promise<void> {
       fs.writeFileSync(outPath, JSON.stringify(result, null, 2), "utf8");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`[helix run] Warning: Could not write report to ${outPath}: ${msg}\n`);
+      stderr.write(`[helix run] Warning: Could not write report to ${outPath}: ${msg}\n`);
     }
   }
 
   if (jsonOutput) {
-    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    stdout.write(JSON.stringify(result, null, 2) + "\n");
   } else {
-    process.stdout.write("─".repeat(60) + "\n");
+    stdout.write("─".repeat(60) + "\n");
     const statusColor =
       result.status === "succeeded"
         ? "\x1b[32m"
         : result.status === "blocked"
           ? "\x1b[33m"
           : "\x1b[31m";
-    process.stdout.write(`Status:      ${statusColor}${result.status.toUpperCase()}\x1b[0m\n`);
-    process.stdout.write(`Summary:     ${result.summary}\n`);
+    stdout.write(`Status:      ${statusColor}${result.status.toUpperCase()}\x1b[0m\n`);
+    stdout.write(`Summary:     ${result.summary}\n`);
 
     if (result.metrics) {
       const durationSec = (result.metrics.wallClockDurationMs / 1000).toFixed(2);
       const agentSec = (result.metrics.agentDurationMs / 1000).toFixed(2);
       const gateSec = (result.metrics.gateDurationMs / 1000).toFixed(2);
-      process.stdout.write(
-        `Duration:    ${durationSec}s (agent: ${agentSec}s, gate: ${gateSec}s)\n`,
-      );
+      stdout.write(`Duration:    ${durationSec}s (agent: ${agentSec}s, gate: ${gateSec}s)\n`);
 
       const tokens = result.metrics.tokens;
       if (tokens) {
         const costStr =
           tokens.estimatedCostUsd > 0 ? ` ($${tokens.estimatedCostUsd.toFixed(4)} USD)` : "";
-        process.stdout.write(
+        stdout.write(
           `Tokens:      ${tokens.inputTokens.toLocaleString()} in / ${tokens.outputTokens.toLocaleString()} out / ${tokens.totalTokens.toLocaleString()} total${costStr}\n`,
         );
       }
     }
 
     if (result.affectedFiles.length > 0) {
-      process.stdout.write(`Affected:    ${result.affectedFiles.join(", ")}\n`);
+      stdout.write(`Affected:    ${result.affectedFiles.join(", ")}\n`);
     }
 
     if (result.diff) {
-      process.stdout.write("\nModifications:\n");
+      stdout.write("\nModifications:\n");
       const lines = result.diff.split("\n").slice(0, 20);
       for (const line of lines) {
         if (line.startsWith("+") && !line.startsWith("+++")) {
-          process.stdout.write(`\x1b[32m${line}\x1b[0m\n`);
+          stdout.write(`\x1b[32m${line}\x1b[0m\n`);
         } else if (line.startsWith("-") && !line.startsWith("---")) {
-          process.stdout.write(`\x1b[31m${line}\x1b[0m\n`);
+          stdout.write(`\x1b[31m${line}\x1b[0m\n`);
         } else {
-          process.stdout.write(`${line}\n`);
+          stdout.write(`${line}\n`);
         }
       }
       if (result.diff.split("\n").length > 20) {
-        process.stdout.write(`... (+${result.diff.split("\n").length - 20} more lines)\n`);
+        stdout.write(`... (+${result.diff.split("\n").length - 20} more lines)\n`);
       }
     }
 
     if (result.validation?.checks && result.validation.checks.length > 0) {
-      process.stdout.write("\nValidation Checks:\n");
+      stdout.write("\nValidation Checks:\n");
       for (const chk of result.validation.checks) {
         const symbol = chk.passed ? "\x1b[32m✔\x1b[0m" : "\x1b[31m✖\x1b[0m";
-        process.stdout.write(`  ${symbol} [${chk.stage}] ${chk.command} (${chk.durationMs}ms)\n`);
+        stdout.write(`  ${symbol} [${chk.stage}] ${chk.command} (${chk.durationMs}ms)\n`);
         if (!chk.passed && chk.failuresOnly) {
-          process.stdout.write(`    \x1b[31m${chk.failuresOnly.trim()}\x1b[0m\n`);
+          stdout.write(`    \x1b[31m${chk.failuresOnly.trim()}\x1b[0m\n`);
         }
       }
     }
 
     if (result.error) {
-      process.stdout.write(
-        `\n\x1b[31mError (${result.error.code}):\x1b[0m ${result.error.message}\n`,
-      );
+      stdout.write(`\n\x1b[31mError (${result.error.code}):\x1b[0m ${result.error.message}\n`);
     }
 
-    process.stdout.write(`\nArtifact:    .helix-work/reports/run-${result.taskId}.json\n`);
+    stdout.write(`\nArtifact:    .helix-work/reports/run-${result.taskId}.json\n`);
   }
 
   // Set appropriate process exit code
   if (result.status === "succeeded") {
-    process.exitCode = 0;
+    setExitCode(0);
   } else if (result.status === "blocked") {
-    process.exitCode = 3;
+    setExitCode(3);
   } else {
-    process.exitCode = 1;
+    setExitCode(1);
   }
+}
+
+/** In-process runtime used by helixd; progress is forwarded through UICallback. */
+export function createCliSessionRuntime(): SessionRuntime {
+  return {
+    async rollback(_sessionId, taskId) {
+      const branch = "helix/" + taskId;
+      const git = (args: string[]) =>
+        spawnSync("git", args, { cwd: process.cwd(), encoding: "utf8" });
+      const inside = git(["rev-parse", "--is-inside-work-tree"]);
+      if (inside.status !== 0 || inside.stdout.trim() !== "true") {
+        throw new Error("Task rollback requires a Git workspace");
+      }
+      const listed = git(["branch", "--list", "--format=%(refname:short)", branch]);
+      if (listed.status !== 0 || listed.stdout.trim() !== branch) {
+        return { rolledBack: false, message: "No retained Helix task branch exists for " + taskId };
+      }
+      const current = git(["branch", "--show-current"]);
+      if (current.stdout.trim() === branch) {
+        throw new Error("Cannot discard the Helix task branch while it is checked out");
+      }
+      const removed = git(["branch", "-D", "--", branch]);
+      if (removed.status !== 0)
+        throw new Error(removed.stderr.trim() || "Git could not discard " + branch);
+      return {
+        rolledBack: true,
+        message:
+          "Discarded retained task branch " + branch + "; the current checkout was left unchanged",
+      };
+    },
+    providers() {
+      const { config } = loadAiConfig();
+      return [
+        {
+          id: config.providerId,
+          model: config.model,
+          baseUrl: config.baseUrl,
+          configured: Boolean(config.apiKey),
+        },
+      ];
+    },
+    async prompt(_sessionId, prompt, callback, signal) {
+      const mapEvent = createExecutionEventMapper();
+      let failed = false;
+      const startedAt = Date.now();
+      let streamedText = "";
+      const aiConfig = loadAiConfig().config;
+      const modelProvider = createModelProvider(aiConfig.providerId);
+      await cmdRun({
+        runArgs: [prompt, "--json"],
+        silent: true,
+        signal,
+        onMessageDelta(text) {
+          streamedText += text;
+          callback.emit({ type: "message.delta", role: "assistant", delta_text: text });
+          const promptTokens = countTokens(prompt);
+          const completionTokens = countTokens(streamedText);
+          const estimate = modelProvider.calculateCost(aiConfig.model ?? "", {
+            inputTokens: promptTokens,
+            outputTokens: completionTokens,
+            cacheReadTokens: 0,
+            totalTokens: promptTokens + completionTokens,
+          });
+          callback.emit({
+            type: "telemetry.usage",
+            prompt_tokens: promptTokens,
+            completion_tokens: completionTokens,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            context_window_pct: 0,
+            latency_ms: Date.now() - startedAt,
+            cost_usd: estimate.estimatedTotalUsd,
+          });
+        },
+        onTelemetry(metrics) {
+          callback.emit({
+            type: "telemetry.usage",
+            prompt_tokens: metrics.tokens.inputTokens,
+            completion_tokens: metrics.tokens.outputTokens,
+            cache_read_tokens: metrics.tokens.cacheReadTokens,
+            cache_write_tokens: 0,
+            context_window_pct: 0,
+            latency_ms: metrics.agentDurationMs,
+            cost_usd: metrics.tokens.estimatedCostUsd,
+          });
+        },
+        onExecutionEvent(event) {
+          const translated = mapEvent(event);
+          if (translated) callback.emit(translated);
+          if (event.type === "task_completed" && typeof event.payload.diffPatch === "string") {
+            callback.emit({
+              type: "tool.call.result",
+              call_id: event.taskId,
+              status: "succeeded",
+              stdout: "",
+              stderr: "",
+              diff_patch: event.payload.diffPatch,
+              duration_ms: Number(event.payload.durationMs ?? 0),
+            });
+          }
+          if (event.type === "task_failed") failed = true;
+        },
+      });
+      if (signal.aborted) throw new Error("Session was cancelled");
+      if (failed) throw new Error("Helix task failed");
+    },
+  };
 }

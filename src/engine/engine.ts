@@ -348,6 +348,7 @@ export class HelixExecutionEngine implements HelixEngine {
             },
           ],
           timeoutSec: task.constraints.timeoutSec,
+          onOutputChunk: options.onMessageDelta,
         });
 
         obs.recordAgentDuration(agentOutput.durationMs);
@@ -382,6 +383,8 @@ export class HelixExecutionEngine implements HelixEngine {
             exitCode: agentOutput.exitCode,
             durationMs: agentOutput.durationMs,
             interrupted: agentOutput.interrupted,
+            stdout: agentOutput.stdout,
+            stderr: agentOutput.stderr,
           },
         });
 
@@ -515,7 +518,11 @@ export class HelixExecutionEngine implements HelixEngine {
             taskId: task.id,
             type: "task_completed",
             workflowState: "completed",
-            payload: { affectedFiles: diffResult.affectedFiles },
+            payload: {
+              affectedFiles: diffResult.affectedFiles,
+              diffPatch: diffResult.diff,
+              durationMs: agentOutput.durationMs,
+            },
           });
 
           if (isEphemeral) {

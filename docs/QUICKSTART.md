@@ -6,7 +6,7 @@ Helix is an AI coding harness engineered to maximize coding agent success rates 
 
 ## 1. Quick Installation & Setup
 
-Helix requires **Node 22.6+** (uses native TypeScript type-stripping). No build step or global compilation is needed.
+Helix requires **Node 26.4+** (OpenTUI's native FFI runtime and Node's native TypeScript type-stripping). No global compilation is needed.
 
 ### Option A: Direct PATH Link (Recommended)
 
@@ -30,6 +30,17 @@ You can execute Helix directly from the checkout:
 
 ```sh
 node cli/helix.mjs --help
+```
+
+For the full web and terminal clients, install the repository dependencies and
+build the SPA:
+
+```sh
+npm install
+npm run build
+helix tui
+# In another terminal, share the same daemon session:
+helix web
 ```
 
 ---

@@ -9,7 +9,7 @@ This document outlines the distribution strategy, supported package channels, re
 | Distribution Channel                      | Target Platform               | Current Status             | Verification Level                                            |
 | ----------------------------------------- | ----------------------------- | -------------------------- | ------------------------------------------------------------- |
 | **Direct PATH Link (`helix link`)**       | Linux, macOS, WSL             | **Implemented & Verified** | Primary recommended local method; tested end-to-end.          |
-| **Source Checkout (`git clone`)**         | Cross-platform (Node >= 22.6) | **Implemented & Verified** | Clean git checkout + `npm ci`; zero global compile step.      |
+| **Source Checkout (`git clone`)**         | Cross-platform (Node >= 26.4) | **Implemented & Verified** | Clean git checkout + `npm ci`; zero global compile step.      |
 | **npm Registry (`npx helix` / global)**   | Cross-platform                | **Staged for Release**     | `package.json` configured with `bin`, `engines`, and `files`. |
 | **GitHub Releases (Tarball + Checksums)** | Linux, macOS                  | **Automated via CI/CD**    | Artifact packaging on `v*` tags with SHA-256 digests.         |
 | **Homebrew Tap (`brew install helix`)**   | macOS, Linux                  | **Staged Formula**         | Formula template prepared for GitHub Release tarballs.        |
@@ -32,7 +32,7 @@ cd ~/helix && npm ci
 
 **Advantages**:
 
-- Zero build or compilation step needed (Node 22.6+ strips TypeScript types natively).
+- Zero global build or compilation step needed (Node 26.4+ strips TypeScript types natively).
 - Immediate, frictionless updates: running `git pull` instantly updates your CLI.
 - Safe uninstallation: `helix unlink` cleans up the shim and PATH entries.
 
@@ -54,7 +54,7 @@ npm install -g helix
 
 - **Executable**: `cli/helix.mjs` mapped via `"bin": { "helix": "cli/helix.mjs" }`.
 - **Runtime Dependencies**: Strictly bounded to `gpt-tokenizer` (`o200k_base` BPE).
-- **Engine Constraint**: Enforces `"engines": { "node": ">=22.6" }`.
+- **Engine Constraint**: Enforces `"engines": { "node": ">=26.4" }`.
 - **Whitelisted Files**: Only `cli/`, `src/`, `LICENSE`, and `README.md` are published; tests, reports, and scratch files are omitted.
 
 ---
@@ -104,7 +104,7 @@ class Helix < Formula
   sha256 "<INSERT_COMPUTED_SHA256>"
   license "MIT"
 
-  depends_on "node" => "22.6"
+  depends_on "node" => "26.4"
 
   def install
     system "npm", "ci", "--include=dev"
@@ -127,7 +127,7 @@ Distributing Helix as a standalone Docker image was evaluated and **rejected for
 
 1. **Filesystem & Permission Mappings**: Helix relies on Git worktrees (`git worktree add`) and real file modifications in the user's repository. Mounting arbitrary host directories into containers creates severe UID/GID ownership mismatches.
 2. **Local Agent CLI Integration**: Helix interacts with local agent CLIs (`claude`, `opencode`, `cursor`) installed on the user's host machine. Running Helix in a container disconnects it from host-authenticated agent binaries and native tools.
-3. **Recommendation**: Docker is appropriate for headless CI/CD evaluation runners, but local development should use native Node 22.
+3. **Recommendation**: Docker is appropriate for headless CI/CD evaluation runners, but local development should use native Node 26.4 or newer.
 
 ---
 

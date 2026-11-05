@@ -52,19 +52,19 @@ helix run "Your task description" --dry
 
 #### `SyntaxError: Unexpected token ':'` or type-stripping failure
 
-- **Cause**: Node.js version is older than `22.6.0`. Helix uses Node's native TypeScript type-stripping without global compilation.
+- **Cause**: Node.js version is older than `26.4.0`. Helix uses OpenTUI's native FFI interface and Node's native TypeScript type-stripping.
 - **Resolution**:
   Verify your Node version:
   ```sh
   node --version
   ```
-  Install Node 22 LTS or newer using your preferred version manager:
+  Install Node 26.4 or newer using your preferred version manager:
   ```sh
   # Using fnm
-  fnm install 22 && fnm use 22
+  fnm install 26.4 && fnm use 26.4
 
   # Using nvm
-  nvm install 22 && nvm use 22
+  nvm install 26.4 && nvm use 26.4
   ```
 
 ---
