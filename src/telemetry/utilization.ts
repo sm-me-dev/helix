@@ -12,6 +12,111 @@ import type { Tier2EpisodicRecord } from "../knowledge/types.ts";
 
 export { countTokens, TOKENIZER_METHOD };
 
+export interface AdversarialAuditTelemetry {
+  readonly timestamp: string;
+  readonly taskId: string;
+  readonly reviewerModelId: string;
+  readonly blockingFaultsCaught: number;
+  readonly falsePositivesDisprovenByTest: number;
+  readonly tokenCost: { readonly inputTokens: number; readonly outputTokens: number };
+}
+
+export function recordAdversarialAuditInvocation(input: {
+  readonly workspaceRoot: string;
+  readonly taskId: string;
+  readonly reviewerModelId: string;
+  readonly blockingFaultsCaught: number;
+  readonly falsePositivesDisprovenByTest: number;
+  readonly tokenCost: { readonly inputTokens: number; readonly outputTokens: number };
+}): void {
+  const values = [
+    input.blockingFaultsCaught,
+    input.falsePositivesDisprovenByTest,
+    input.tokenCost.inputTokens,
+    input.tokenCost.outputTokens,
+  ];
+  if (
+    !input.taskId ||
+    !input.reviewerModelId ||
+    values.some((value) => !Number.isSafeInteger(value) || value < 0)
+  ) {
+    throw new Error("Adversarial audit telemetry contains invalid values");
+  }
+  const filePath = path.join(
+    path.resolve(input.workspaceRoot),
+    ".helix",
+    "runtime",
+    "telemetry",
+    "adversarial-audits.jsonl",
+  );
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const entry: AdversarialAuditTelemetry = {
+    timestamp: new Date().toISOString(),
+    taskId: input.taskId,
+    reviewerModelId: input.reviewerModelId,
+    blockingFaultsCaught: input.blockingFaultsCaught,
+    falsePositivesDisprovenByTest: input.falsePositivesDisprovenByTest,
+    tokenCost: input.tokenCost,
+  };
+  fs.appendFileSync(filePath, `${JSON.stringify(entry)}\n`, "utf8");
+}
+
+export function loadAdversarialAuditTelemetry(workspaceRoot: string): AdversarialAuditTelemetry[] {
+  const filePath = path.join(
+    path.resolve(workspaceRoot),
+    ".helix",
+    "runtime",
+    "telemetry",
+    "adversarial-audits.jsonl",
+  );
+  let contents: string;
+  try {
+    contents = fs.readFileSync(filePath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
+  return contents
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => {
+      const value: unknown = JSON.parse(line);
+      if (value === null || typeof value !== "object" || Array.isArray(value))
+        throw new Error("Invalid audit telemetry entry");
+      const record = value as Record<string, unknown>;
+      const cost = record.tokenCost;
+      if (cost === null || typeof cost !== "object" || Array.isArray(cost))
+        throw new Error("Invalid audit token telemetry");
+      const tokenCost = cost as Record<string, unknown>;
+      const numeric = [
+        record.blockingFaultsCaught,
+        record.falsePositivesDisprovenByTest,
+        tokenCost.inputTokens,
+        tokenCost.outputTokens,
+      ];
+      if (
+        typeof record.timestamp !== "string" ||
+        typeof record.taskId !== "string" ||
+        typeof record.reviewerModelId !== "string" ||
+        numeric.some(
+          (number) => typeof number !== "number" || !Number.isSafeInteger(number) || number < 0,
+        )
+      )
+        throw new Error("Invalid audit telemetry fields");
+      return {
+        timestamp: record.timestamp,
+        taskId: record.taskId,
+        reviewerModelId: record.reviewerModelId,
+        blockingFaultsCaught: record.blockingFaultsCaught as number,
+        falsePositivesDisprovenByTest: record.falsePositivesDisprovenByTest as number,
+        tokenCost: {
+          inputTokens: tokenCost.inputTokens as number,
+          outputTokens: tokenCost.outputTokens as number,
+        },
+      };
+    });
+}
+
 /** Persist episodic retrieval and gate outcomes alongside quarantine records. */
 export function recordEpisodicRetrieval(
   repository: TieredKnowledgeRepository,

@@ -1720,3 +1720,20 @@ Not changed, on purpose:
   submission checks may separately report missing listing materials. The `cli/plugin.test.mjs`
   assertion now checks load success instead of treating every directory notice as a plugin error.
 - Source: https://code.claude.com/docs/en/plugins-reference (checked 2026-11-05; section “Validate the manifest”).
+
+## 2026-11-05 — Cross-model routing uses current documented model IDs
+
+- Keep the requested Claude and Codex/OpenCode harness separation, but route through currently
+  documented model IDs. The current OpenAI model catalog lists `gpt-6.1-sol`, not
+  `gpt-6.1-codex`; Google lists `gemini-3-pro-preview` as shut down and OpenCode lists
+  `gemini-3.1-pro`. The routing policy uses `gpt-6.1-sol` and `gemini-3.1-pro`, with the model
+  identifiers configurable for installations that expose other models.
+- Claude's current catalog documents `claude-opus-5-5`, `claude-fable-5-1`, `claude-sonnet-5-5`,
+  and `claude-haiku-5-5`; use those current IDs for the default route.
+- Sources: https://developers.openai.com/api/docs/models/all,
+  https://ai.google.dev/gemini-api/docs/deprecations,
+  https://dev.opencode.ai/v2/docs/console/models,
+  https://platform.claude.com/docs/en/models/overview (checked 2026-11-05).
+- Headless CLI invocation sources: https://code.claude.com/docs/en/headless,
+  https://learn.chatgpt.com/docs/codex/cli,
+  https://dev.opencode.ai/v2/docs/cli/commands/ (checked 2026-11-05).

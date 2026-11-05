@@ -1,11 +1,17 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { GATE_SOURCE } from "./gate.ts";
 import { generatePack } from "./generate.ts";
+import { resolveOrthogonalAuditor } from "./engine/provider.ts";
+import {
+  buildFirewalledAuditPayload,
+  parseAdversarialAuditVerdict,
+  validateThenAudit,
+} from "./engine/validator.ts";
 
 // Secrets are assembled at runtime so this file never trips the scanner itself.
 const FAKE_AWS = "AK" + "IA" + "ABCDEFGHIJKLMNOP";
@@ -90,7 +96,7 @@ describe("helix gate", () => {
     assert.match(r.out, /line 499/);
     assert.ok(!r.out.includes("line 400"), "tail must be capped");
     assert.ok(r.out.length < 3500, `output too large: ${r.out.length}`);
-    assert.match(r.out, /gate: FAIL \(1 of 4\)/);
+    assert.match(r.out, /gate: FAIL \(1 of 5\)/);
   });
 
   it("flags secrets by file:line and pattern, never echoing the value", () => {
@@ -232,5 +238,119 @@ describe("helix gate", () => {
     assert.deepEqual(pins, { packageManager: "pnpm", test: "pnpm run test" });
     const agents = plain.find((f) => f.path === "AGENTS.md")?.body ?? "";
     assert.match(agents, /node \.helix\/gate\.mjs/);
+  });
+});
+
+describe("Phase 3 adversarial verification", () => {
+  it("routes Claude and Codex generators to distinct model families", () => {
+    const claudeAuditor = resolveOrthogonalAuditor("claude");
+    const codexAuditor = resolveOrthogonalAuditor({
+      harness: "codex",
+      modelId: "gpt-6.1-sol",
+      baseUrl: "https://openai-compatible.example/v1",
+      token: "not-used-by-routing",
+    });
+    assert.equal(claudeAuditor.harness, "codex");
+    assert.equal(claudeAuditor.modelId, "gpt-6.1-sol");
+    assert.equal(codexAuditor.harness, "claude");
+    assert.equal(codexAuditor.modelId, "claude-fable-5-1");
+  });
+
+  it("rejects any extra context on the auditor payload and forces blocking verdicts to REJECTED", () => {
+    const payload = {
+      taskSpec: "Fix the path check",
+      gitDiff: "diff --git a/a.ts b/a.ts",
+      domainInvariants: ["Writes stay in the worktree"],
+      deterministicGateSummary: "PASS typecheck",
+    };
+    assert.deepEqual(Object.keys(buildFirewalledAuditPayload(payload)).sort(), [
+      "deterministicGateSummary",
+      "domainInvariants",
+      "gitDiff",
+      "taskSpec",
+    ]);
+    assert.throws(
+      () =>
+        buildFirewalledAuditPayload({
+          ...payload,
+          conversationMessages: [{ role: "assistant", content: "reasoning" }],
+        }),
+      /only taskSpec, gitDiff, domainInvariants, and deterministicGateSummary/,
+    );
+    const verdict = parseAdversarialAuditVerdict({
+      status: "VERIFIED",
+      reviewerHarness: "codex",
+      reviewerModelId: "gpt-6.1-sol",
+      findings: [
+        {
+          severity: "BLOCKING_FAULT",
+          file: "a.ts",
+          lineOrAstNode: "line 1",
+          proof: "broken",
+          requiredFix: "repair",
+        },
+      ],
+    });
+    assert.equal(verdict.status, "REJECTED");
+  });
+
+  it("never invokes Stage B when deterministic Stage A fails", async () => {
+    let auditorCalls = 0;
+    const failedStageA = {
+      passed: false,
+      durationMs: 3,
+      checks: [
+        {
+          stage: "tests" as const,
+          passed: false,
+          command: "npm test",
+          exitCode: 1,
+          durationMs: 3,
+          stdout: "test failure",
+          stderr: "",
+          failuresOnly: "test failure",
+        },
+      ],
+      failingStage: "tests" as const,
+    };
+    const result = await validateThenAudit({
+      worktreePath: "/unused",
+      taskSpec: "Fix a failure",
+      domainInvariants: [],
+      generatorProvider: "claude",
+      validator: {
+        validate: async () => failedStageA,
+        extractDiagnostics: () => "tests failed",
+      },
+      invokeAuditor: async () => {
+        auditorCalls++;
+        return { output: "{}" };
+      },
+    });
+    assert.equal(result.status, "DETERMINISTIC_FAILED");
+    assert.equal(result.deterministicFailureDigest, "tests failed");
+    assert.equal(auditorCalls, 0);
+  });
+
+  it("runs scoped Tier 1 scripts during Stage A and checks changed path containment", () => {
+    const dir = repo({
+      "package.json": pkg({ test: OK }),
+      ".helix/knowledge/domains/execution-engine/domain.md":
+        "---\nsource_paths:\n  - src/engine.ts\n---\n# Execution\n",
+      ".helix/knowledge/domains/execution-engine/scripts/verify.mjs": "process.exit(0);\n",
+      "src/engine.ts": "export const value = 1;\n",
+    });
+    writeFileSync(join(dir, "src/engine.ts"), "export const value = 2;\n");
+    const passing = gate(dir);
+    assert.equal(passing.code, 0, passing.out);
+    assert.match(passing.out, /PASS path-containment/);
+    assert.match(passing.out, /PASS domain-script:execution-engine\/verify\.mjs/);
+
+    const outside = join(tmpdir(), `helix-outside-${Date.now()}.ts`);
+    writeFileSync(outside, "export const outside = true;\n");
+    symlinkSync(outside, join(dir, "escape.ts"));
+    const contained = gate(dir);
+    assert.equal(contained.code, 1);
+    assert.match(contained.out, /FAIL path-containment/);
   });
 });

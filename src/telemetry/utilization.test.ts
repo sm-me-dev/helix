@@ -17,10 +17,46 @@ import {
   TOKENIZER_METHOD,
   recordEpisodicGateOutcome,
   recordEpisodicRetrieval,
+  loadAdversarialAuditTelemetry,
+  recordAdversarialAuditInvocation,
 } from "./utilization.ts";
 import { TieredKnowledgeRepository } from "../knowledge/repository.ts";
 
 describe("Telemetry & Harness Utilization (Phase 12 Extension)", () => {
+  it("records adversarial reviewer identity, blocking faults, false positives, and token cost", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "helix-audit-telemetry-"));
+    try {
+      recordAdversarialAuditInvocation({
+        workspaceRoot: root,
+        taskId: "audit-task",
+        reviewerModelId: "gpt-6.1-sol",
+        blockingFaultsCaught: 1,
+        falsePositivesDisprovenByTest: 2,
+        tokenCost: { inputTokens: 1200, outputTokens: 140 },
+      });
+      assert.deepEqual(
+        loadAdversarialAuditTelemetry(root).map((entry) => ({
+          taskId: entry.taskId,
+          reviewerModelId: entry.reviewerModelId,
+          blockingFaultsCaught: entry.blockingFaultsCaught,
+          falsePositivesDisprovenByTest: entry.falsePositivesDisprovenByTest,
+          tokenCost: entry.tokenCost,
+        })),
+        [
+          {
+            taskId: "audit-task",
+            reviewerModelId: "gpt-6.1-sol",
+            blockingFaultsCaught: 1,
+            falsePositivesDisprovenByTest: 2,
+            tokenCost: { inputTokens: 1200, outputTokens: 140 },
+          },
+        ],
+      );
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("tracks episodic retrieval and gate outcomes in the quarantine store", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "helix-episodic-metrics-"));
     const repository = new TieredKnowledgeRepository(root);

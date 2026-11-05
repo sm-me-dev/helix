@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
+import { invokeProviderHeadlessAgent } from "./provider.ts";
 import {
   createAgentRunner,
   createModelProvider,
@@ -16,6 +18,50 @@ import {
 } from "./index.ts";
 
 describe("Phase 08: Integration & Hardening Subsystem Tests", () => {
+  it("invokes a configured headless API with token accounting and canary redaction", async () => {
+    const previousCanary = process.env.ADMIN_TEST_KEY;
+    process.env.ADMIN_TEST_KEY = "integration-canary-secret";
+    const server = createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          choices: [{ message: { content: "reviewed integration-canary-secret" } }],
+          usage: { prompt_tokens: 19, completion_tokens: 5 },
+        }),
+      );
+    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        server.once("error", reject);
+        server.listen(0, "127.0.0.1", resolve);
+      });
+      const address = server.address();
+      assert.ok(address && typeof address !== "string");
+      const result = await invokeProviderHeadlessAgent("codex", {
+        mode: "api",
+        modelId: "test-model",
+        prompt: "Review this isolated payload",
+        timeoutMs: 2_000,
+        maxInputTokens: 100,
+        maxOutputTokens: 100,
+        api: {
+          endpoint: `http://127.0.0.1:${address.port}/v1/chat/completions`,
+          format: "openai-chat-completions",
+          apiKey: "local-test-token",
+        },
+      });
+      assert.equal(result.exitCode, 0);
+      assert.equal(result.tokens.inputTokens, 19);
+      assert.equal(result.tokens.outputTokens, 5);
+      assert.equal(result.stdout, "reviewed [REDACTED_CANARY]");
+      assert.ok(!result.stdout.includes("integration-canary-secret"));
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      if (previousCanary === undefined) delete process.env.ADMIN_TEST_KEY;
+      else process.env.ADMIN_TEST_KEY = previousCanary;
+    }
+  });
+
   describe("1. Configuration Management (loadEngineConfig / saveEngineConfig)", () => {
     it("returns default configuration when no file or env vars present", async () => {
       const config = await loadEngineConfig("/tmp/nonexistent-dir");

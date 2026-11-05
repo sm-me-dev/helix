@@ -433,7 +433,14 @@ export async function cmdRun(opts: RunCliOptions): Promise<void> {
   try {
     process.env.HELIX_EXECUTION_MODE = "run";
     result = await engine.execute(task, executionOptions);
-    if (result.metrics.gateRuns > 1 && result.status === "succeeded") {
+    const blockingFaultsCaught =
+      result.validation.adversarialAudit?.findings.filter(
+        (finding) => finding.severity === "BLOCKING_FAULT",
+      ).length ?? 0;
+    if (
+      (result.metrics.gateRuns > 1 && result.status === "succeeded") ||
+      blockingFaultsCaught > 0
+    ) {
       try {
         const affected = result.affectedFiles[0] ?? task.targetFiles?.[0];
         if (affected) {
@@ -449,7 +456,9 @@ export async function cmdRun(opts: RunCliOptions): Promise<void> {
               persistAutomatedRunLearning(workspaceRoot, {
                 gateAttempts: result.metrics.gateRuns,
                 blockingFaults: 0,
-                helpedPassGate: true,
+                blockingFaultsCaught,
+                helpedPassGate: result.status === "succeeded",
+                presentInFailedRun: result.status !== "succeeded",
                 extractCandidate: () => ({
                   id,
                   domainId: domain.domainId,

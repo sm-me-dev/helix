@@ -716,7 +716,22 @@ export interface ExecutionStateManager {
 // 11. Validation Engine
 // ============================================================================
 
-export type ValidationStage = "secrets" | "lint" | "typecheck" | "tests";
+export type ValidationStage = "secrets" | "lint" | "typecheck" | "tests" | "adversarial";
+
+export interface AdversarialFinding {
+  readonly severity: "BLOCKING_FAULT" | "EDGE_CASE_RISK" | "NIT";
+  readonly file: string;
+  readonly lineOrAstNode: string;
+  readonly proof: string;
+  readonly requiredFix: string;
+}
+
+export interface AdversarialAuditVerdict {
+  readonly status: "VERIFIED" | "REJECTED";
+  readonly reviewerHarness: string;
+  readonly reviewerModelId: string;
+  readonly findings: readonly AdversarialFinding[];
+}
 
 export type ValidationCheckResult = {
   stage: ValidationStage;
@@ -735,6 +750,8 @@ export type ValidationReport = {
   checks: ValidationCheckResult[];
   failingStage?: ValidationStage;
   diagnosticsExcerpt?: string;
+  adversarialAudit?: AdversarialAuditVerdict;
+  auditorTokenCost?: { inputTokens: number; outputTokens: number };
 };
 
 export interface ValidationEngine {

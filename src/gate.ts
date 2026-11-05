@@ -1,6 +1,7 @@
-// Portable verification gate, shipped verbatim as .helix/gate.mjs and run by
-// `helix gate`. One deterministic, agent-agnostic command: secret scan, lint,
-// typecheck, affected tests. Zero model tokens. Dependency-free (node: only).
+// Stage A of the verification pipeline, shipped verbatim as .helix/gate.mjs and
+// run by `helix gate`. It performs secret scan, lint, typecheck, and affected
+// tests with zero model tokens. Stage B lives in engine/validator.ts and may
+// run only after this deterministic gate reports success.
 //
 // Verified 2026-10-09 (tool CLIs, not platform protocol):
 // - Jest: `jest --passWithNoTests --findRelatedTests <files...>` — files must
@@ -14,7 +15,7 @@
 // 2 usage error. Passing steps print one line; failing steps print a capped tail.
 
 export const GATE_SOURCE = `#!/usr/bin/env node
-// Helix gate: deterministic pre-finish check. Zero model tokens.
+// Helix gate Stage A: deterministic pre-finish check. Never invokes an LLM.
 // node .helix/gate.mjs [--all] [--dry] [--json]
 //   (default) changed files only · --all every tracked file and the full suite
 //   --dry print the plan, run nothing · --json machine-readable result
@@ -75,6 +76,103 @@ function changedFiles() {
     files.push(e.slice(3));
   }
   return files;
+}
+
+function pathContainmentFailures(files) {
+  if (!files) return [];
+  const rootReal = fs.realpathSync(root);
+  const failures = [];
+  for (const file of files) {
+    const target = path.resolve(root, file);
+    const relative = path.relative(root, target);
+    if (relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) {
+      failures.push(file + " escapes the repository root");
+      continue;
+    }
+    if (!fs.existsSync(target)) continue;
+    try {
+      const real = fs.realpathSync(target);
+      const realRelative = path.relative(rootReal, real);
+      if (realRelative === ".." || realRelative.startsWith(".." + path.sep) || path.isAbsolute(realRelative)) {
+        failures.push(file + " resolves outside the repository root");
+      }
+    } catch (e) {
+      failures.push(file + " could not be resolved safely");
+    }
+  }
+  return failures;
+}
+
+function normalizeRouteGlob(glob) {
+  const normalized = glob.replace(/\\\\/g, "/").replace(/^\\.\\//, "").replace(/\\/$/, "");
+  return !/[*?{}]/.test(normalized) && !/\\.[a-z0-9]+$/i.test(normalized) ? normalized + "/**" : normalized;
+}
+
+function pathMatchesGlob(file, glob) {
+  const target = file.replace(/\\\\/g, "/");
+  const memo = new Map();
+  function match(fileIndex, globIndex) {
+    const key = fileIndex + ":" + globIndex;
+    if (memo.has(key)) return memo.get(key);
+    let result;
+    if (globIndex === glob.length) result = fileIndex === target.length;
+    else if (glob[globIndex] === "*" && glob[globIndex + 1] === "*") {
+      result = match(fileIndex, globIndex + 2) || (fileIndex < target.length && match(fileIndex + 1, globIndex));
+    } else if (glob[globIndex] === "*") {
+      result = match(fileIndex, globIndex + 1) || (fileIndex < target.length && target[fileIndex] !== "/" && match(fileIndex + 1, globIndex));
+    } else if (glob[globIndex] === "?") {
+      result = fileIndex < target.length && target[fileIndex] !== "/" && match(fileIndex + 1, globIndex + 1);
+    } else {
+      result = fileIndex < target.length && target[fileIndex] === glob[globIndex] && match(fileIndex + 1, globIndex + 1);
+    }
+    memo.set(key, result);
+    return result;
+  }
+  return match(0, 0);
+}
+
+function touchedDomainScripts(files) {
+  if (!files || files.length === 0) return [];
+  const domainRoot = path.join(root, ".helix", "knowledge", "domains");
+  if (!fs.existsSync(domainRoot)) return [];
+  const normalizedFiles = files.map((file) => file.replace(/\\\\/g, "/"));
+  const scripts = [];
+  for (const entry of fs.readdirSync(domainRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const domainDir = path.join(domainRoot, entry.name);
+    const domainPrefix = ".helix/knowledge/domains/" + entry.name + "/";
+    const metadata = readText(path.join(domainDir, "domain.md")) || readText(path.join(domainDir, "SKILL.md")) || "";
+    let readingGlobs = false;
+    const globs = [];
+    for (const line of metadata.split(/\\r?\\n/)) {
+      if (/^\\s*(source_paths|path_globs|pathGlobs):\\s*$/.test(line)) {
+        readingGlobs = true;
+        continue;
+      }
+      if (readingGlobs && /^\\s*-\\s+/.test(line)) {
+        const value = line.replace(/^\\s*-\\s+/, "").trim().replace(/^['"]|['"]$/g, "");
+        if (value) globs.push(normalizeRouteGlob(value));
+        continue;
+      }
+      if (readingGlobs && line.trim() && !/^\\s/.test(line)) readingGlobs = false;
+    }
+    const isTouched = normalizedFiles.some((file) =>
+      file.startsWith(domainPrefix) || globs.some((glob) => pathMatchesGlob(file, glob)),
+    );
+    if (!isTouched) continue;
+    const scriptRoot = path.join(domainDir, "scripts");
+    if (!fs.existsSync(scriptRoot)) continue;
+    for (const script of fs.readdirSync(scriptRoot).filter((name) => name.endsWith(".mjs")).sort()) {
+      const scriptPath = path.join(scriptRoot, script);
+      if (fs.statSync(scriptPath).isFile()) {
+        scripts.push({
+          name: "domain-script:" + entry.name + "/" + script,
+          argv: [process.execPath, path.relative(root, scriptPath)],
+        });
+      }
+    }
+  }
+  return scripts;
 }
 
 const cfg = readJson(path.join(root, ".helix", "gate.json")) || {};
@@ -203,6 +301,8 @@ if (!DRY && files !== null && files.length === 0) {
 
 const steps = [];
 steps.push(files === null ? { name: "secrets", skip: "not a git repo" } : { name: "secrets", scan: true });
+steps.push(files === null ? { name: "path-containment", skip: "not a git repo" } : { name: "path-containment", containment: true });
+steps.push(...touchedDomainScripts(files));
 const lint = pick("lint", ["lint"], "lint");
 steps.push(lint ? { name: "lint", cmd: lint } : { name: "lint", skip: "none detected" });
 const tc = typecheckCmd();
@@ -227,6 +327,11 @@ for (const s of steps) {
     s.status = hits.length ? "fail" : "pass";
     s.code = hits.length ? 1 : 0;
     if (hits.length) s.tail = hits.slice(0, TAIL_LINES).join("\\n");
+  } else if (s.containment) {
+    const failures = pathContainmentFailures(files);
+    s.status = failures.length ? "fail" : "pass";
+    s.code = failures.length ? 1 : 0;
+    if (failures.length) s.tail = failures.slice(0, TAIL_LINES).join("\\n");
   } else {
     exec(s);
   }

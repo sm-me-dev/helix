@@ -80,7 +80,8 @@ export function persistAutomatedRunLearning(
   dir: string,
   input: Omit<AutomatedRunLearningInput, "insertQuarantined">,
 ): number {
-  if (input.gateAttempts <= 1 && input.blockingFaults === 0) return 0;
+  if (input.gateAttempts <= 1 && input.blockingFaults + (input.blockingFaultsCaught ?? 0) === 0)
+    return 0;
   const repository = new TieredKnowledgeRepository(dir);
   try {
     return learnAfterRun({
