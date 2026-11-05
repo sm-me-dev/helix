@@ -15,6 +15,7 @@ import {
   closeSync,
   constants,
   fstatSync,
+  fchmodSync,
   ftruncateSync,
   lstatSync,
   mkdirSync,
@@ -25,6 +26,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+  assertCanonicalKnowledgeWriteAllowed,
+  type CanonicalPromotionGrant,
+} from "../src/engine/security.ts";
 import { assertSafePackPath, packPathSegments } from "./lib.ts";
 
 export class UnsafeDestinationError extends Error {
@@ -191,8 +196,16 @@ export function readContained(rootReal: string, packPath: string): string | null
  * empty file at an attacker-chosen spot (see the header); it can no longer
  * clobber existing outside content that was swapped in after the check.
  */
-export function writeContained(rootReal: string, packPath: string, body: string): void {
+export function writeContained(
+  rootReal: string,
+  packPath: string,
+  body: string,
+  grant?: CanonicalPromotionGrant,
+  mode?: number,
+): void {
+  assertCanonicalKnowledgeWriteAllowed(resolve(rootReal, packPath), grant);
   const full = resolveContained(rootReal, packPath);
+  assertCanonicalKnowledgeWriteAllowed(full, grant);
   ensureDirs(rootReal, dirname(full), packPath);
   let fd: number;
   try {
@@ -205,6 +218,7 @@ export function writeContained(rootReal: string, packPath: string, body: string)
     verifyOpened(rootReal, full, fd, packPath);
     ftruncateSync(fd, 0);
     writeFileSync(fd, body);
+    if (mode !== undefined) fchmodSync(fd, mode);
   } finally {
     closeSync(fd);
   }

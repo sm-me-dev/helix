@@ -7,8 +7,32 @@ import os from "node:os";
 import path from "node:path";
 import v8 from "node:v8";
 import { countTokens, TOKENIZER_METHOD } from "../measure.ts";
+import type { TieredKnowledgeRepository } from "../knowledge/repository.ts";
+import type { Tier2EpisodicRecord } from "../knowledge/types.ts";
 
 export { countTokens, TOKENIZER_METHOD };
+
+/** Persist episodic retrieval and gate outcomes alongside quarantine records. */
+export function recordEpisodicRetrieval(
+  repository: TieredKnowledgeRepository,
+  recordId: string,
+): void {
+  repository.incrementEpisodicTelemetry(recordId, "retrieved");
+}
+
+export function recordEpisodicGateOutcome(
+  repository: TieredKnowledgeRepository,
+  recordId: string,
+  outcome: "helped" | "failed",
+): void {
+  repository.incrementEpisodicTelemetry(recordId, outcome);
+}
+
+export function loadEpisodicUtilizationMetrics(
+  repository: TieredKnowledgeRepository,
+): Tier2EpisodicRecord[] {
+  return repository.listEpisodicRecords();
+}
 
 export type TaskTokenEfficiencyPoint = {
   timestamp: string;

@@ -1,18 +1,23 @@
 // helix knowledge — Adaptive Project Knowledge System (APKS) CLI
 import { resolve } from "node:path";
-import { DomainDiscovery } from "../src/knowledge/discovery.ts";
+import {
+  compileTier0DomainRoutes,
+  DomainDiscovery,
+  syncCanonicalSkillStore,
+} from "../src/knowledge/discovery.ts";
 import { KnowledgeExporter } from "../src/knowledge/export.ts";
 import { SQLiteKnowledgeIndex } from "../src/knowledge/index.ts";
 import {
   DomainRestructurer,
   KnowledgeAuditor,
   KnowledgeValidator,
+  compactKnowledgeBase,
 } from "../src/knowledge/maintenance.ts";
-import { KnowledgeRepository } from "../src/knowledge/repository.ts";
+import { KnowledgeRepository, TieredKnowledgeRepository } from "../src/knowledge/repository.ts";
 import { AdaptiveKnowledgeRetriever } from "../src/knowledge/retriever.ts";
 
 function dirOf(args: string[]): string {
-  const valueFlags = new Set(["targets", "role", "budget", "limit", "out"]);
+  const valueFlags = new Set(["targets", "role", "budget", "limit", "out", "paired-results"]);
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a.startsWith("-")) {
@@ -49,6 +54,7 @@ export function knowledgeUsage(): string {
   helix knowledge retrieve <prompt> [dir] [--targets f] test dynamic task-aware knowledge retrieval
   helix knowledge validate [dir] [--json]               verify integrity, source links & detect stale items
   helix knowledge audit [dir] [--json]                  generate comprehensive knowledge health report
+  helix knowledge compact [dir] [--paired-results file] compact quarantine and promote validated rules
   helix knowledge restructure [dir] [--json]            evaluate domain complexity & restructuring signals
   helix knowledge export <domain> [dir] [--out dir]     export domain knowledge as portable SKILL.md
 `;
@@ -65,6 +71,27 @@ export async function cmdKnowledge(argv: string[]): Promise<number> {
   const jsonMode = has(rest, "json");
 
   switch (sub) {
+    case "compact": {
+      const dir = dirOf(rest);
+      const repository = new TieredKnowledgeRepository(dir);
+      try {
+        const routes = compileTier0DomainRoutes(dir);
+        syncCanonicalSkillStore(routes, repository, dir);
+        const result = compactKnowledgeBase(repository, {
+          workspaceRoot: dir,
+          allowCanonicalPromotion: true,
+          pairedStatsResultsPath: flag(rest, "paired-results") ?? undefined,
+        });
+        process.stdout.write(
+          jsonMode
+            ? `${JSON.stringify(result, null, 2)}\n`
+            : `Compacted knowledge: ${result.validated} validated, ${result.pruned} pruned, ${result.promoted} promoted.\n`,
+        );
+        return 0;
+      } finally {
+        repository.close();
+      }
+    }
     case "status": {
       const dir = dirOf(rest);
       const repo = new KnowledgeRepository(dir);

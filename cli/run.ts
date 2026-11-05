@@ -20,6 +20,9 @@ import { createExecutionEventMapper } from "../src/daemon/execution-events.ts";
 import type { SessionRuntime } from "../src/daemon/contracts.ts";
 import { loadAiConfig } from "../src/engine/config-loader.ts";
 import { countTokens } from "../src/measure.ts";
+import { computeContentHash } from "../src/knowledge/repository.ts";
+import { matchDomainsForFilePath } from "../src/knowledge/discovery.ts";
+import { persistAutomatedRunLearning } from "./learn.ts";
 
 const RUN_USAGE = `Usage: helix run [task-prompt-or-file] [options]
 
@@ -426,8 +429,45 @@ export async function cmdRun(opts: RunCliOptions): Promise<void> {
   };
 
   let result: TaskResult;
+  const previousExecutionMode = process.env.HELIX_EXECUTION_MODE;
   try {
+    process.env.HELIX_EXECUTION_MODE = "run";
     result = await engine.execute(task, executionOptions);
+    if (result.metrics.gateRuns > 1 && result.status === "succeeded") {
+      try {
+        const affected = result.affectedFiles[0] ?? task.targetFiles?.[0];
+        if (affected) {
+          const filePath = path.isAbsolute(affected)
+            ? path.relative(workspaceRoot, affected).replace(/\\/g, "/")
+            : affected.replace(/\\/g, "/");
+          const domain = matchDomainsForFilePath(filePath, workspaceRoot)[0];
+          if (domain) {
+            const stage = result.validation.failingStage ?? "mechanical verification";
+            const changeEvidence = extractChangedLinesForFile(result.diff, filePath);
+            if (changeEvidence.length > 0) {
+              const id = `run-${computeContentHash(`${task.id}:${filePath}:${stage}:${result.diff}`).slice(0, 20)}`;
+              persistAutomatedRunLearning(workspaceRoot, {
+                gateAttempts: result.metrics.gateRuns,
+                blockingFaults: 0,
+                helpedPassGate: true,
+                extractCandidate: () => ({
+                  id,
+                  domainId: domain.domainId,
+                  triggerSummary: `A ${stage} gate retry occurred in ${filePath}`,
+                  resolutionRule: `Verified change after retry:\n\`\`\`\n${changeEvidence.join("\n")}\n\`\`\``,
+                  fileGlob: domain.pathGlobs[0],
+                  sourceTaskId: task.id,
+                  createdAtIso: new Date().toISOString(),
+                }),
+              });
+            }
+          }
+        }
+      } catch (learningError) {
+        const msg = learningError instanceof Error ? learningError.message : String(learningError);
+        stderr.write(`[helix run] Quarantine learning failed: ${msg}\n`);
+      }
+    }
     opts.onTelemetry?.(result.metrics);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -435,6 +475,8 @@ export async function cmdRun(opts: RunCliOptions): Promise<void> {
     setExitCode(1);
     return;
   } finally {
+    if (previousExecutionMode === undefined) delete process.env.HELIX_EXECUTION_MODE;
+    else process.env.HELIX_EXECUTION_MODE = previousExecutionMode;
     process.removeListener("SIGINT", abortHandler);
     process.removeListener("SIGTERM", abortHandler);
     opts.signal?.removeEventListener("abort", abortHandler);
@@ -528,6 +570,24 @@ export async function cmdRun(opts: RunCliOptions): Promise<void> {
   } else {
     setExitCode(1);
   }
+}
+
+function extractChangedLinesForFile(diff: string, filePath: string): string[] {
+  const additions: string[] = [];
+  const deletions: string[] = [];
+  let currentFile = "";
+  for (const line of diff.split(/\r?\n/)) {
+    if (line.startsWith("+++ ")) {
+      currentFile = line.slice(4).replace(/^b\//, "").replace(/\\/g, "/");
+      continue;
+    }
+    if (line.startsWith("--- ")) continue;
+    if (currentFile !== filePath) continue;
+    if (line.startsWith("+") && !line.startsWith("+++")) additions.push(line.slice(1));
+    else if (line.startsWith("-") && !line.startsWith("---")) deletions.push(line.slice(1));
+  }
+  const evidence = additions.length > 0 ? additions : deletions.map((line) => `removed: ${line}`);
+  return evidence.filter((line) => line.trim().length > 0).slice(0, 5);
 }
 
 /** In-process runtime used by helixd; progress is forwarded through UICallback. */

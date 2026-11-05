@@ -22,6 +22,7 @@ import {
   writeContained,
 } from "./safe-write.ts";
 import { SYMLINK_SKIP, linkDir, linkFile } from "./symlink-helper.mjs";
+import { SecurityViolationError } from "../src/engine/security.ts";
 
 /** root = target dir (realpath'd); outside = sibling holding a secret that must stay untouched. */
 function fixture() {
@@ -144,6 +145,30 @@ describe("preflightPack", () => {
 });
 
 describe("writeContained", () => {
+  it("blocks Tier 1 knowledge writes during simulated helix run", () => {
+    const { root } = fixture();
+    const oldMode = process.env.HELIX_EXECUTION_MODE;
+    try {
+      process.env.HELIX_EXECUTION_MODE = "run";
+      for (const packPath of [
+        ".helix/knowledge/domains/execution-engine/domain.md",
+        ".helix/knowledge/project.md",
+      ]) {
+        assert.throws(
+          () => writeContained(root, packPath, "changed"),
+          (error) =>
+            error instanceof SecurityViolationError &&
+            error.message.includes("TIER1_CANONICAL_SKILL_IMMUTABLE_AT_RUNTIME"),
+          packPath,
+        );
+      }
+      assert.deepEqual(snapshot(root), {});
+    } finally {
+      if (oldMode === undefined) delete process.env.HELIX_EXECUTION_MODE;
+      else process.env.HELIX_EXECUTION_MODE = oldMode;
+    }
+  });
+
   it("rejects traversal and absolute paths without creating or modifying anything outside", () => {
     const { root, outside, base } = fixture();
     const before = snapshot(base);

@@ -3,13 +3,20 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { KnowledgeSecurityGuard } from "./security.ts";
+import Database from "better-sqlite3";
+import * as sqliteVec from "sqlite-vec";
+import { countTokens } from "../measure.ts";
+import { KnowledgeSecurityGuard, validateCandidateEpisodicRecord } from "./security.ts";
 import type {
+  AstGrepMatcherRule,
   DomainRecord,
   DomainRelationship,
+  EpisodicStatus,
   KnowledgeItem,
   KnowledgeSource,
   KnowledgeType,
+  Tier0DomainRoute,
+  Tier2EpisodicRecord,
   VerificationStatus,
 } from "./types.ts";
 
@@ -182,6 +189,12 @@ export class KnowledgeRepository {
 
     for (const d of dirs) {
       if (!fs.existsSync(d)) {
+        if (
+          d === path.join(this.knowledgeDir, "domains") ||
+          d.startsWith(path.join(this.knowledgeDir, "domains") + path.sep)
+        ) {
+          this.security.assertSafeKnowledgeWrite(path.join(d, ".write-guard"));
+        }
         fs.mkdirSync(d, { recursive: true });
       }
     }
@@ -296,8 +309,6 @@ export class KnowledgeRepository {
   }
 
   saveItem(item: KnowledgeItem): string {
-    this.ensureDirectories();
-
     let targetDir: string;
     if (item.type === "decision") {
       targetDir = path.join(this.knowledgeDir, "decisions");
@@ -315,6 +326,7 @@ export class KnowledgeRepository {
     const targetFile = path.join(targetDir, fileName);
 
     this.security.assertSafeKnowledgeWrite(targetFile);
+    this.ensureDirectories();
 
     const frontmatter: Record<string, unknown> = {
       id: item.id,
@@ -411,6 +423,9 @@ export class KnowledgeRepository {
   }
 
   saveDomain(domain: DomainRecord): string {
+    this.security.assertSafeKnowledgeWrite(
+      path.join(this.knowledgeDir, "domains", domain.id, "domain.md"),
+    );
     this.ensureDirectories();
     const domainDir = path.join(this.knowledgeDir, "domains", domain.id);
     if (!fs.existsSync(domainDir)) {
@@ -491,6 +506,7 @@ export class KnowledgeRepository {
   }
 
   saveProjectOverview(content: string, metadata: Record<string, unknown> = {}): void {
+    this.security.assertSafeKnowledgeWrite(path.join(this.knowledgeDir, "project.md"));
     this.ensureDirectories();
     const projectFile = path.join(this.knowledgeDir, "project.md");
     this.security.assertSafeKnowledgeWrite(projectFile);
@@ -517,4 +533,308 @@ export class KnowledgeRepository {
     };
     fs.appendFileSync(changelogFile, JSON.stringify(record) + "\n", "utf8");
   }
+}
+
+interface EpisodicRow {
+  id: string;
+  domain_id: string;
+  trigger_summary: string;
+  resolution_rule: string;
+  file_glob: string | null;
+  ast_grep_rule_json: string | null;
+  status: EpisodicStatus;
+  source_task_id: string;
+  times_retrieved: number;
+  times_helped_pass_gate: number;
+  times_present_in_failed_run: number;
+  created_at: string;
+}
+
+/** SQLite-backed Tier 0/Tier 2 store. Markdown remains the canonical Tier 1 source. */
+export class TieredKnowledgeRepository {
+  readonly databasePath: string;
+  readonly db: Database.Database;
+
+  constructor(workspaceRoot: string = process.cwd(), databasePath?: string) {
+    const knowledgeRoot = path.join(path.resolve(workspaceRoot), ".helix", "knowledge");
+    fs.mkdirSync(knowledgeRoot, { recursive: true });
+    this.databasePath = databasePath ?? path.join(knowledgeRoot, "helix-memory.db");
+    fs.mkdirSync(path.dirname(this.databasePath), { recursive: true });
+    this.db = new Database(this.databasePath);
+    this.db.pragma("journal_mode = WAL");
+    this.db.pragma("foreign_keys = ON");
+    sqliteVec.load(this.db);
+    this.initializeSchema();
+  }
+
+  private initializeSchema(): void {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS canonical_skills (
+        domain_id TEXT PRIMARY KEY,
+        description TEXT NOT NULL,
+        path_globs_json TEXT NOT NULL,
+        body_markdown TEXT NOT NULL,
+        token_cost INTEGER NOT NULL CHECK (token_cost <= 600),
+        content_sha256 TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS episodic_quarantine (
+        id TEXT PRIMARY KEY,
+        domain_id TEXT NOT NULL,
+        trigger_summary TEXT NOT NULL,
+        resolution_rule TEXT NOT NULL,
+        file_glob TEXT,
+        ast_grep_rule_json TEXT,
+        status TEXT NOT NULL CHECK (status IN ('QUARANTINED','VALIDATED','PROMOTED','PRUNED')),
+        source_task_id TEXT NOT NULL,
+        times_retrieved INTEGER NOT NULL DEFAULT 0,
+        times_helped_pass_gate INTEGER NOT NULL DEFAULT 0,
+        times_present_in_failed_run INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE VIRTUAL TABLE IF NOT EXISTS episodic_fts USING fts5(
+        id UNINDEXED, domain_id, trigger_summary, resolution_rule,
+        content='episodic_quarantine', content_rowid='rowid',
+        tokenize='porter unicode61'
+      );
+
+      CREATE TRIGGER IF NOT EXISTS episodic_quarantine_ai
+      AFTER INSERT ON episodic_quarantine BEGIN
+        INSERT INTO episodic_fts(rowid, id, domain_id, trigger_summary, resolution_rule)
+        VALUES (new.rowid, new.id, new.domain_id, new.trigger_summary, new.resolution_rule);
+      END;
+      CREATE TRIGGER IF NOT EXISTS episodic_quarantine_au
+      AFTER UPDATE ON episodic_quarantine BEGIN
+        INSERT INTO episodic_fts(episodic_fts, rowid, id, domain_id, trigger_summary, resolution_rule)
+        VALUES ('delete', old.rowid, old.id, old.domain_id, old.trigger_summary, old.resolution_rule);
+        INSERT INTO episodic_fts(rowid, id, domain_id, trigger_summary, resolution_rule)
+        VALUES (new.rowid, new.id, new.domain_id, new.trigger_summary, new.resolution_rule);
+      END;
+      CREATE TRIGGER IF NOT EXISTS episodic_quarantine_ad
+      AFTER DELETE ON episodic_quarantine BEGIN
+        INSERT INTO episodic_fts(episodic_fts, rowid, id, domain_id, trigger_summary, resolution_rule)
+        VALUES ('delete', old.rowid, old.id, old.domain_id, old.trigger_summary, old.resolution_rule);
+      END;
+
+      CREATE VIRTUAL TABLE IF NOT EXISTS episodic_vec USING vec0(
+        episodic_id TEXT PRIMARY KEY,
+        domain_partition TEXT PARTITION KEY,
+        embedding float[384] distance_metric=cosine
+      );
+    `);
+  }
+
+  upsertCanonicalSkill(route: Tier0DomainRoute, bodyMarkdown: string): void {
+    const measuredTokens = countTokens(bodyMarkdown);
+    if (route.description.length > 120) {
+      throw new Error(`Canonical skill ${route.domainId} description exceeds 120 characters`);
+    }
+    if (measuredTokens > 600 || route.skillTokenCost > 600) {
+      throw new Error(`Canonical skill ${route.domainId} exceeds the 600-token limit`);
+    }
+    const contentSha256 = computeContentHash(bodyMarkdown);
+    if (route.skillTokenCost !== measuredTokens || route.canonicalHash !== contentSha256) {
+      throw new Error(
+        `Canonical skill ${route.domainId} route metadata does not match its content`,
+      );
+    }
+    this.db
+      .prepare(
+        `INSERT INTO canonical_skills
+        (domain_id, description, path_globs_json, body_markdown, token_cost, content_sha256, updated_at)
+        VALUES (@domainId, @description, @pathGlobs, @bodyMarkdown, @tokenCost, @hash, @updatedAt)
+        ON CONFLICT(domain_id) DO UPDATE SET
+          description=excluded.description, path_globs_json=excluded.path_globs_json,
+          body_markdown=excluded.body_markdown, token_cost=excluded.token_cost,
+          content_sha256=excluded.content_sha256, updated_at=excluded.updated_at`,
+      )
+      .run({
+        domainId: route.domainId,
+        description: route.description,
+        pathGlobs: JSON.stringify(route.pathGlobs),
+        bodyMarkdown,
+        tokenCost: measuredTokens,
+        hash: contentSha256,
+        updatedAt: new Date().toISOString(),
+      });
+  }
+
+  getCanonicalSkill(domainId: string): { route: Tier0DomainRoute; bodyMarkdown: string } | null {
+    const row = this.db
+      .prepare(
+        `SELECT domain_id, description, path_globs_json, body_markdown, token_cost, content_sha256
+        FROM canonical_skills WHERE domain_id = ?`,
+      )
+      .get(domainId) as
+      | {
+          domain_id: string;
+          description: string;
+          path_globs_json: string;
+          body_markdown: string;
+          token_cost: number;
+          content_sha256: string;
+        }
+      | undefined;
+    if (!row) return null;
+    return {
+      route: {
+        domainId: row.domain_id,
+        description: row.description,
+        pathGlobs: JSON.parse(row.path_globs_json) as string[],
+        skillTokenCost: row.token_cost,
+        canonicalHash: row.content_sha256,
+      },
+      bodyMarkdown: row.body_markdown,
+    };
+  }
+
+  insertEpisodicRecord(record: Tier2EpisodicRecord): Tier2EpisodicRecord {
+    const clean = validateCandidateEpisodicRecord(record);
+    const row = this.db.prepare(`INSERT INTO episodic_quarantine
+      (id, domain_id, trigger_summary, resolution_rule, file_glob, ast_grep_rule_json, status,
+       source_task_id, times_retrieved, times_helped_pass_gate, times_present_in_failed_run, created_at)
+      VALUES (@id, @domainId, @trigger, @resolution, @fileGlob, @astRule, @status,
+       @sourceTaskId, @retrieved, @helped, @failed, @createdAt)
+      ON CONFLICT(id) DO UPDATE SET
+       domain_id=excluded.domain_id, trigger_summary=excluded.trigger_summary,
+       resolution_rule=excluded.resolution_rule, file_glob=excluded.file_glob,
+       ast_grep_rule_json=excluded.ast_grep_rule_json, status=excluded.status,
+       source_task_id=excluded.source_task_id, times_retrieved=excluded.times_retrieved,
+       times_helped_pass_gate=excluded.times_helped_pass_gate,
+       times_present_in_failed_run=excluded.times_present_in_failed_run, created_at=excluded.created_at`);
+    const persist = this.db.transaction(() => {
+      row.run({
+        id: clean.id,
+        domainId: clean.domainId,
+        trigger: clean.triggerSummary,
+        resolution: clean.resolutionRule,
+        fileGlob: clean.fileGlob ?? null,
+        astRule: clean.astGrepRule ? JSON.stringify(clean.astGrepRule) : null,
+        status: clean.status,
+        sourceTaskId: clean.sourceTaskId,
+        retrieved: clean.timesRetrieved,
+        helped: clean.timesHelpedPassGate,
+        failed: clean.timesPresentInFailedRun,
+        createdAt: clean.createdAtIso,
+      });
+      this.db.prepare("DELETE FROM episodic_vec WHERE episodic_id = ?").run(clean.id);
+      this.db
+        .prepare(
+          "INSERT INTO episodic_vec(episodic_id, domain_partition, embedding) VALUES (?, ?, ?)",
+        )
+        .run(
+          clean.id,
+          clean.domainId,
+          new Float32Array(
+            createLocalEmbedding(`${clean.triggerSummary}\n${clean.resolutionRule}`),
+          ),
+        );
+    });
+    persist();
+    return clean;
+  }
+
+  getEpisodicRecord(id: string): Tier2EpisodicRecord | null {
+    const row = this.db.prepare("SELECT * FROM episodic_quarantine WHERE id = ?").get(id) as
+      EpisodicRow | undefined;
+    return row ? mapEpisodicRow(row) : null;
+  }
+
+  listEpisodicRecords(status?: EpisodicStatus): Tier2EpisodicRecord[] {
+    const rows = status
+      ? (this.db
+          .prepare("SELECT * FROM episodic_quarantine WHERE status = ? ORDER BY created_at, id")
+          .all(status) as EpisodicRow[])
+      : (this.db
+          .prepare("SELECT * FROM episodic_quarantine ORDER BY created_at, id")
+          .all() as EpisodicRow[]);
+    return rows.map(mapEpisodicRow);
+  }
+
+  updateEpisodicStatus(id: string, status: EpisodicStatus): void {
+    this.db.prepare("UPDATE episodic_quarantine SET status = ? WHERE id = ?").run(status, id);
+  }
+
+  incrementEpisodicTelemetry(id: string, outcome: "retrieved" | "helped" | "failed"): void {
+    const column =
+      outcome === "retrieved"
+        ? "times_retrieved"
+        : outcome === "helped"
+          ? "times_helped_pass_gate"
+          : "times_present_in_failed_run";
+    this.db
+      .prepare(`UPDATE episodic_quarantine SET ${column} = ${column} + 1 WHERE id = ?`)
+      .run(id);
+  }
+
+  searchEpisodicFts(query: string, limit = 20): Array<{ id: string; rank: number }> {
+    if (!query.trim()) return [];
+    const terms = query.match(/[\p{L}\p{N}_]+/gu) ?? [];
+    if (terms.length === 0) return [];
+    const expression = terms.map((term) => `"${term.replace(/"/g, '""')}"`).join(" OR ");
+    return this.db
+      .prepare(
+        `SELECT q.id AS id, bm25(episodic_fts) AS rank
+        FROM episodic_fts JOIN episodic_quarantine q ON q.rowid = episodic_fts.rowid
+        WHERE episodic_fts MATCH ? AND q.status IN ('VALIDATED','PROMOTED')
+        ORDER BY rank LIMIT ?`,
+      )
+      .all(expression, limit) as Array<{ id: string; rank: number }>;
+  }
+
+  searchEpisodicVector(query: string, limit = 20): Array<{ id: string; distance: number }> {
+    const vector = new Float32Array(createLocalEmbedding(query));
+    return this.db
+      .prepare(
+        `SELECT v.episodic_id AS id, v.distance AS distance
+        FROM episodic_vec v JOIN episodic_quarantine q ON q.id = v.episodic_id
+        WHERE v.embedding MATCH ? AND k = ? AND q.status IN ('VALIDATED','PROMOTED')
+        ORDER BY v.distance`,
+      )
+      .all(vector, limit) as Array<{ id: string; distance: number }>;
+  }
+
+  close(): void {
+    this.db.close();
+  }
+}
+
+function mapEpisodicRow(row: EpisodicRow): Tier2EpisodicRecord {
+  return {
+    id: row.id,
+    domainId: row.domain_id,
+    triggerSummary: row.trigger_summary,
+    resolutionRule: row.resolution_rule,
+    ...(row.file_glob ? { fileGlob: row.file_glob } : {}),
+    ...(row.ast_grep_rule_json
+      ? { astGrepRule: JSON.parse(row.ast_grep_rule_json) as AstGrepMatcherRule }
+      : {}),
+    status: row.status,
+    sourceTaskId: row.source_task_id,
+    timesRetrieved: row.times_retrieved,
+    timesHelpedPassGate: row.times_helped_pass_gate,
+    timesPresentInFailedRun: row.times_present_in_failed_run,
+    createdAtIso: row.created_at,
+  };
+}
+
+/** Deterministic, offline trigram feature hashing into a normalized 384-vector. */
+export function createLocalEmbedding(text: string): number[] {
+  const vector = new Float32Array(384);
+  const normalized = `  ${text.toLocaleLowerCase("en-US").replace(/\s+/g, " ")}  `;
+  for (let i = 0; i + 3 <= normalized.length; i++) {
+    const gram = normalized.slice(i, i + 3);
+    const digest = crypto.createHash("sha256").update(gram, "utf8").digest();
+    const slot = digest.readUInt32LE(0) % vector.length;
+    vector[slot] += (digest[4] & 1) === 0 ? 1 : -1;
+  }
+  let magnitude = 0;
+  for (const value of vector) magnitude += value * value;
+  magnitude = Math.sqrt(magnitude);
+  if (magnitude > 0) {
+    for (let i = 0; i < vector.length; i++) vector[i] /= magnitude;
+  }
+  return Array.from(vector);
 }

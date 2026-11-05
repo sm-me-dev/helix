@@ -90,3 +90,6 @@ graphify-out/
 # Helix cache (SQLite indexes, ephemeral caches)
 .helix/cache/
 
+# Local quarantine memory database (canonical Markdown stays versioned)
+.helix/knowledge/helix-memory.db*
+

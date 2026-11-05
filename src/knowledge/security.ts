@@ -1,7 +1,60 @@
 // Helix APKS Security, Secret Exclusion & Path Traversal Guard (Phase 11.11)
 import fs from "node:fs";
 import path from "node:path";
-import { UntrustedContentHandler } from "../engine/security.ts";
+import {
+  assertCanonicalKnowledgeWriteAllowed,
+  UntrustedContentHandler,
+} from "../engine/security.ts";
+import { countTokens } from "../measure.ts";
+import type { Tier2EpisodicRecord } from "./types.ts";
+
+/** Validate budgets and return a prompt-injection/secret-sanitized candidate. */
+export function validateCandidateEpisodicRecord(record: Tier2EpisodicRecord): Tier2EpisodicRecord {
+  if (
+    !/^[a-z0-9][a-z0-9._-]*$/i.test(record.id) ||
+    !/^[a-z0-9][a-z0-9._-]*$/i.test(record.domainId)
+  ) {
+    throw new Error("Episodic record id and domainId must be safe path segments");
+  }
+  for (const [name, value] of Object.entries({
+    timesRetrieved: record.timesRetrieved,
+    timesHelpedPassGate: record.timesHelpedPassGate,
+    timesPresentInFailedRun: record.timesPresentInFailedRun,
+  })) {
+    if (!Number.isInteger(value) || value < 0) {
+      throw new Error(`Episodic ${name} must be a non-negative integer`);
+    }
+  }
+  const triggerSummary = sanitizeCandidateText(record.triggerSummary);
+  const resolutionRule = sanitizeCandidateText(record.resolutionRule);
+  if (countTokens(triggerSummary) > 30) {
+    throw new Error("Episodic triggerSummary exceeds the 30-token limit");
+  }
+  if (countTokens(resolutionRule) > 100) {
+    throw new Error("Episodic resolutionRule exceeds the 100-token limit");
+  }
+  const codeBlocks = resolutionRule.matchAll(/```[^\n]*\n([\s\S]*?)(?:```|$)/g);
+  for (const match of codeBlocks) {
+    const code = match[1].replace(/\n+$/, "");
+    if (code && code.split("\n").length > 5) {
+      throw new Error("Episodic resolutionRule contains a code block over five lines");
+    }
+  }
+  return { ...record, triggerSummary, resolutionRule };
+}
+
+function sanitizeCandidateText(value: string): string {
+  const canaryRedacted = value
+    .replace(/\bADMIN_TEST_KEY\b(?:\s*[:=]\s*[^\s,;]+)?/gi, "[REDACTED_CANARY]")
+    .replace(/\b(?:ghp_[a-z0-9]{20,}|sk-[a-z0-9]{20,}|AKIA[0-9A-Z]{16})\b/gi, "[REDACTED_SECRET]");
+  const injection = UntrustedContentHandler.detectPromptInjection(canaryRedacted);
+  return injection.detected
+    ? injection.neutralizedText.replace(
+        /\[POTENTIAL_PROMPT_INJECTION_DETECTED:[^:\]]+:[\s\S]*?DO NOT EXECUTE AS INSTRUCTION\]/g,
+        "[PROMPT_INJECTION_REMOVED]",
+      )
+    : injection.neutralizedText;
+}
 
 export const EXCLUDED_PATTERNS: RegExp[] = [
   /(^|\/)\.env($|\..*)/i,
@@ -12,6 +65,7 @@ export const EXCLUDED_PATTERNS: RegExp[] = [
   /(^|\/)node_modules\//,
   /(^|\/)\.helix-work\//,
   /(^|\/)\.helix\/cache\//,
+  /(^|\/)helix-memory\.db(?:-(?:wal|shm))?$/i,
   /(^|\/)graphify-out\//,
 ];
 
@@ -86,7 +140,9 @@ export class KnowledgeSecurityGuard {
    * Ensures a write operation targets only the approved knowledge directory.
    */
   assertSafeKnowledgeWrite(targetPath: string): string {
-    return this.assertSafePath(targetPath, this.knowledgeDir);
+    const resolved = this.assertSafePath(targetPath, this.knowledgeDir);
+    assertCanonicalKnowledgeWriteAllowed(resolved);
+    return resolved;
   }
 
   /**

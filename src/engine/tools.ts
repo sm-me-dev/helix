@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   CommandSecurityInspector,
+  assertCanonicalKnowledgeWriteAllowed,
   DangerousCommandError,
   isForbidden,
   isTamperProtected,
@@ -397,6 +398,13 @@ export class DefaultToolExecutor implements ToolExecutor {
     }
 
     const safePath = resolveSafePath(root, filePath, context?.forbiddenPaths);
+    assertCanonicalKnowledgeWriteAllowed(safePath);
+    const safeParent = path.dirname(safePath);
+    if (fs.existsSync(safeParent)) {
+      assertCanonicalKnowledgeWriteAllowed(
+        path.join(fs.realpathSync(safeParent), path.basename(safePath)),
+      );
+    }
 
     try {
       const dir = path.dirname(safePath);

@@ -1,9 +1,126 @@
 // Helix Project Discovery and Domain Decomposition (Phase 11.1)
 import fs from "node:fs";
 import path from "node:path";
-import { KnowledgeRepository } from "./repository.ts";
+import { countTokens } from "../measure.ts";
+import { matchEpisodicRulesForSource as matchStoredEpisodicRules } from "./retriever.ts";
+import {
+  computeContentHash,
+  KnowledgeRepository,
+  parseFrontmatter,
+  TieredKnowledgeRepository,
+} from "./repository.ts";
 import { KnowledgeSecurityGuard } from "./security.ts";
-import type { DomainRecord, DomainRelationship } from "./types.ts";
+import { matchPathGlob } from "./glob.ts";
+import type {
+  DomainRecord,
+  DomainRelationship,
+  Tier0DomainRoute,
+  Tier2EpisodicRecord,
+} from "./types.ts";
+
+/** Compile deterministic, bounded Tier 0 routes from existing domain metadata. */
+export function compileTier0DomainRoutes(
+  workspaceRoot: string = process.cwd(),
+): Tier0DomainRoute[] {
+  const root = path.join(path.resolve(workspaceRoot), ".helix", "knowledge", "domains");
+  if (!fs.existsSync(root)) return [];
+  const routes: Tier0DomainRoute[] = [];
+  for (const entry of fs
+    .readdirSync(root, { withFileTypes: true })
+    .filter((item) => item.isDirectory())
+    .sort((a, b) => a.name.localeCompare(b.name))) {
+    const skillPath = path.join(root, entry.name, "SKILL.md");
+    const domainPath = path.join(root, entry.name, "domain.md");
+    const sourcePath = fs.existsSync(skillPath) ? skillPath : domainPath;
+    if (!fs.existsSync(sourcePath)) continue;
+    const raw = fs.readFileSync(sourcePath, "utf8");
+    const parsed = parseFrontmatter(raw);
+    const bodyMarkdown = raw;
+    const tokenCost = countTokens(bodyMarkdown);
+    if (tokenCost > 600) {
+      throw new Error(`Canonical skill ${entry.name} is ${tokenCost} tokens; maximum is 600`);
+    }
+    const descriptionValue = parsed.frontmatter.description;
+    const description =
+      (typeof descriptionValue === "string" && descriptionValue.trim()) ||
+      bodyMarkdown
+        .split(/\r?\n/)
+        .find((line) => line.trim() && !line.trim().startsWith("#"))
+        ?.trim() ||
+      entry.name;
+    const explicitGlobs = parsed.frontmatter.path_globs ?? parsed.frontmatter.pathGlobs;
+    const rawGlobs = explicitGlobs ?? parsed.frontmatter.source_paths;
+    const pathGlobs = Array.isArray(rawGlobs)
+      ? rawGlobs.map(String).map((glob) => {
+          const normalized = glob.replace(/\\/g, "/").replace(/\/$/, "");
+          return explicitGlobs || /[*?{}]/.test(normalized) || /\.[a-z0-9]+$/i.test(normalized)
+            ? normalized
+            : `${normalized}/**`;
+        })
+      : [];
+    routes.push({
+      domainId: entry.name,
+      description: description.slice(0, 120),
+      pathGlobs,
+      skillTokenCost: tokenCost,
+      canonicalHash: computeContentHash(bodyMarkdown),
+    });
+  }
+  return routes;
+}
+
+export function compileTier0DomainCatalog(routes: readonly Tier0DomainRoute[]): string {
+  let rows = routes.map((route) => ({ id: route.domainId, description: route.description }));
+  const render = (): string => rows.map((route) => `${route.id}: ${route.description}`).join("\n");
+  while (countTokens(render()) >= 350 && rows.some((row) => row.description.length > 12)) {
+    rows = rows.map((row) => ({
+      ...row,
+      description: row.description.slice(0, Math.max(12, row.description.length - 8)),
+    }));
+  }
+  const catalog = render();
+  if (countTokens(catalog) >= 350) {
+    throw new Error("Tier 0 domain catalog cannot fit below the 350-token limit");
+  }
+  return catalog;
+}
+
+export function syncCanonicalSkillStore(
+  routes: readonly Tier0DomainRoute[],
+  repository: TieredKnowledgeRepository,
+  workspaceRoot: string = process.cwd(),
+): void {
+  const domainRoot = path.join(path.resolve(workspaceRoot), ".helix", "knowledge", "domains");
+  for (const route of routes) {
+    const skillPath = path.join(domainRoot, route.domainId, "SKILL.md");
+    const domainPath = path.join(domainRoot, route.domainId, "domain.md");
+    const sourcePath = fs.existsSync(skillPath) ? skillPath : domainPath;
+    repository.upsertCanonicalSkill(route, fs.readFileSync(sourcePath, "utf8"));
+  }
+}
+
+export function matchDomainsForFilePath(
+  filePath: string,
+  workspaceRoot: string = process.cwd(),
+): Tier0DomainRoute[] {
+  return compileTier0DomainRoutes(workspaceRoot).filter((route) =>
+    route.pathGlobs.some((glob) => matchPathGlob(filePath, glob)),
+  );
+}
+
+export function matchEpisodicRulesForSource(
+  filePath: string,
+  sourceCode: string,
+  repository?: TieredKnowledgeRepository,
+): Tier2EpisodicRecord[] {
+  const ownsRepository = repository === undefined;
+  const store = repository ?? new TieredKnowledgeRepository();
+  try {
+    return matchStoredEpisodicRules(store, filePath, sourceCode);
+  } finally {
+    if (ownsRepository) store.close();
+  }
+}
 
 export interface ProjectDiscoverySummary {
   projectName: string;

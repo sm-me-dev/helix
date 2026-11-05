@@ -9,14 +9,47 @@ import {
   collectHarnessUtilization,
   computeResourceSaturation,
   inspectWorktreeConcurrency,
+  loadEpisodicUtilizationMetrics,
   loadRunHistory,
   renderAsciiBar,
   renderAsciiTokenEfficiencyChart,
   renderAsciiUtilizationDashboard,
   TOKENIZER_METHOD,
+  recordEpisodicGateOutcome,
+  recordEpisodicRetrieval,
 } from "./utilization.ts";
+import { TieredKnowledgeRepository } from "../knowledge/repository.ts";
 
 describe("Telemetry & Harness Utilization (Phase 12 Extension)", () => {
+  it("tracks episodic retrieval and gate outcomes in the quarantine store", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "helix-episodic-metrics-"));
+    const repository = new TieredKnowledgeRepository(root);
+    try {
+      repository.insertEpisodicRecord({
+        id: "metric-rule",
+        domainId: "execution-engine",
+        triggerSummary: "A gate retry exposed a path boundary",
+        resolutionRule: "Keep writes inside the active worktree.",
+        status: "QUARANTINED",
+        sourceTaskId: "task-metrics",
+        timesRetrieved: 0,
+        timesHelpedPassGate: 0,
+        timesPresentInFailedRun: 0,
+        createdAtIso: new Date(0).toISOString(),
+      });
+      recordEpisodicRetrieval(repository, "metric-rule");
+      recordEpisodicGateOutcome(repository, "metric-rule", "helped");
+      recordEpisodicGateOutcome(repository, "metric-rule", "failed");
+      const metrics = loadEpisodicUtilizationMetrics(repository)[0];
+      assert.equal(metrics.timesRetrieved, 1);
+      assert.equal(metrics.timesHelpedPassGate, 1);
+      assert.equal(metrics.timesPresentInFailedRun, 1);
+    } finally {
+      repository.close();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   describe("Token Efficiency Calculations", () => {
     it("calculates token efficiency percentage and net savings delta", () => {
       const res = calculateTokenEfficiency(1000, 3000);
