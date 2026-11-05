@@ -202,6 +202,9 @@ export class SubprocessAgentRunner implements AgentRunner {
         const payload = JSON.stringify({
           systemPrompt: session.systemPrompt,
           messages: session.messages,
+          toolAllowlist: session.toolAllowlist,
+          maxTurns: session.maxTurns,
+          readOnly: session.readOnly,
         });
         proc.stdin.write(payload);
         proc.stdin.end();

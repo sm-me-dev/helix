@@ -7,6 +7,7 @@ import { describe, it } from "node:test";
 import { DefaultContextManager, DEFAULT_CONTEXT_BUDGET } from "./context.ts";
 import { HelixExecutionEngine } from "./engine.ts";
 import { MockAgentRunner } from "./runner.ts";
+import { runDisposableScout } from "./scout.ts";
 import { FileExecutionStateManager } from "./state.ts";
 import { DefaultTaskPlanner, normalizeTaskDefinition } from "./task.ts";
 import { DefaultToolExecutor, ToolSecurityError } from "./tools.ts";
@@ -27,6 +28,28 @@ function cleanupDir(dir: string): void {
 }
 
 describe("Phase 03: Helix Core Execution Engine", () => {
+  it("runs a disposable scout with a read-only tool allowlist and returns only bounded JSON synthesis", async () => {
+    const runner = new MockAgentRunner("claude-code", [
+      {
+        stdout: JSON.stringify({
+          files: ["src/entry.ts:12"],
+          symbols: ["start()"],
+          entryPoints: [],
+          negativeFindings: [],
+        }),
+      },
+    ]);
+    const synthesis = await runDisposableScout(runner, {
+      taskId: "scout-test",
+      workdir: process.cwd(),
+      query: "Find the execution entry point",
+    });
+    assert.deepEqual(synthesis.files, ["src/entry.ts:12"]);
+    assert.equal(runner.calls[0].readOnly, true);
+    assert.equal(runner.calls[0].maxTurns, 8);
+    assert.deepEqual(runner.calls[0].toolAllowlist, ["Read", "Grep", "Glob", "ast_search"]);
+  });
+
   describe("1. Task Input Validation & Representation", () => {
     it("normalizes and validates a valid task definition with defaults", () => {
       const tmp = createTempDir();

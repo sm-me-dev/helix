@@ -190,6 +190,10 @@ export type AgentSession = {
   systemPrompt: string;
   messages: AgentMessage[];
   timeoutSec: number;
+  /** Optional hard tool surface and turn ceiling for disposable execution modes. */
+  toolAllowlist?: readonly string[];
+  maxTurns?: number;
+  readOnly?: boolean;
   onOutputChunk?: (text: string) => void;
 };
 
@@ -386,6 +390,10 @@ export type ToolExecutionContext = {
   networkPolicy?: NetworkPolicy;
   validateArguments?: boolean;
   redactSecrets?: boolean;
+  progressiveState?: {
+    visibleToolNames: Set<string>;
+    approvedWriteScopes: Set<string>;
+  };
   auditLogger?: SecurityAuditLoggerInterface;
 };
 

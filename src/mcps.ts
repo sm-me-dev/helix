@@ -5,6 +5,41 @@ export type McpStdio = { kind: "stdio"; command: string; args: string[] };
 export type McpRemote = { kind: "remote"; url: string; headers?: Record<string, string> };
 export type McpServerConfig = McpStdio | McpRemote;
 
+/** A tools/list result keeps the server's real JSON schema for progressive discovery. */
+export type McpDiscoveredToolSchema = {
+  readonly name: string;
+  readonly description: string;
+  readonly inputSchema: Readonly<Record<string, unknown>>;
+};
+
+/** Rank schemas returned by connected MCP servers; the catalog's tool names are not schemas. */
+export function searchMcpToolSchemas(
+  intentQuery: string,
+  schemas: readonly McpDiscoveredToolSchema[],
+  limit = 5,
+): McpDiscoveredToolSchema[] {
+  const terms = new Set(
+    intentQuery
+      .toLowerCase()
+      .split(/[^a-z0-9_]+/)
+      .filter(Boolean),
+  );
+  const boundedLimit = Math.max(1, Math.min(10, Math.trunc(limit)));
+  return schemas
+    .map((schema) => ({
+      schema,
+      score: [...terms].reduce(
+        (score, term) =>
+          score + (`${schema.name} ${schema.description}`.toLowerCase().includes(term) ? 1 : 0),
+        0,
+      ),
+    }))
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => b.score - a.score || a.schema.name.localeCompare(b.schema.name))
+    .slice(0, boundedLimit)
+    .map(({ schema }) => schema);
+}
+
 export type Mcp = {
   id: McpId;
   name: string;
