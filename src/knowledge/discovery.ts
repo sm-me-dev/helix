@@ -29,26 +29,32 @@ export function compileTier0DomainRoutes(
     .readdirSync(root, { withFileTypes: true })
     .filter((item) => item.isDirectory())
     .sort((a, b) => a.name.localeCompare(b.name))) {
-    const skillPath = path.join(root, entry.name, "SKILL.md");
     const domainPath = path.join(root, entry.name, "domain.md");
-    const sourcePath = fs.existsSync(skillPath) ? skillPath : domainPath;
-    if (!fs.existsSync(sourcePath)) continue;
-    const raw = fs.readFileSync(sourcePath, "utf8");
+    const skillPath = path.join(root, entry.name, "SKILL.md");
+    if (!fs.existsSync(domainPath) && !fs.existsSync(skillPath)) continue;
+    const metadataSource = fs.existsSync(domainPath) ? domainPath : skillPath;
+    const raw = fs.readFileSync(metadataSource, "utf8");
     const parsed = parseFrontmatter(raw);
-    const bodyMarkdown = raw;
+    const skillSource = fs.readFileSync(
+      fs.existsSync(skillPath) ? skillPath : metadataSource,
+      "utf8",
+    );
+    const bodyMarkdown = parseFrontmatter(skillSource).content;
     const tokenCost = countTokens(bodyMarkdown);
     if (tokenCost > 600) {
       throw new Error(`Canonical skill ${entry.name} is ${tokenCost} tokens; maximum is 600`);
     }
+    const idValue = parsed.frontmatter.id;
+    const domainId = typeof idValue === "string" && idValue.trim() ? idValue.trim() : entry.name;
     const descriptionValue = parsed.frontmatter.description;
-    const description =
-      (typeof descriptionValue === "string" && descriptionValue.trim()) ||
-      bodyMarkdown
-        .split(/\r?\n/)
-        .find((line) => line.trim() && !line.trim().startsWith("#"))
-        ?.trim() ||
-      entry.name;
-    const explicitGlobs = parsed.frontmatter.path_globs ?? parsed.frontmatter.pathGlobs;
+    const description = typeof descriptionValue === "string" ? descriptionValue.trim() : "";
+    if (!description || description.length > 120) {
+      throw new Error(
+        `Domain ${entry.name} must define a description of at most 120 characters in domain.md`,
+      );
+    }
+    const explicitGlobs =
+      parsed.frontmatter.paths ?? parsed.frontmatter.path_globs ?? parsed.frontmatter.pathGlobs;
     const rawGlobs = explicitGlobs ?? parsed.frontmatter.source_paths;
     const pathGlobs = Array.isArray(rawGlobs)
       ? rawGlobs.map(String).map((glob) => {
@@ -59,8 +65,8 @@ export function compileTier0DomainRoutes(
         })
       : [];
     routes.push({
-      domainId: entry.name,
-      description: description.slice(0, 120),
+      domainId,
+      description,
       pathGlobs,
       skillTokenCost: tokenCost,
       canonicalHash: computeContentHash(bodyMarkdown),
@@ -95,7 +101,10 @@ export function syncCanonicalSkillStore(
     const skillPath = path.join(domainRoot, route.domainId, "SKILL.md");
     const domainPath = path.join(domainRoot, route.domainId, "domain.md");
     const sourcePath = fs.existsSync(skillPath) ? skillPath : domainPath;
-    repository.upsertCanonicalSkill(route, fs.readFileSync(sourcePath, "utf8"));
+    repository.upsertCanonicalSkill(
+      route,
+      parseFrontmatter(fs.readFileSync(sourcePath, "utf8")).content,
+    );
   }
 }
 

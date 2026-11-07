@@ -61,6 +61,30 @@ discovery_evidence:
   - Command line interface component cli/ui.ts
 created_at: 2026-11-02
 updated_at: 2026-11-02
+description: CLI & Developer Tooling
+paths:
+  - cli/cli.test.mjs
+  - cli/e2e-workflows.test.mjs
+  - cli/helix.mjs
+  - cli/idempotent-init.test.mjs
+  - cli/knowledge.ts
+  - cli/learn.ts
+  - cli/lib.test.mjs
+  - cli/lib.ts
+  - cli/link.test.mjs
+  - cli/link.ts
+  - cli/plugin.test.mjs
+  - cli/report.test.mjs
+  - cli/report.ts
+  - cli/run.test.mjs
+  - cli/run.ts
+  - cli/safe-write.test.mjs
+  - cli/safe-write.ts
+  - cli/symlink-helper.mjs
+  - cli/test-env.mjs
+  - cli/test-env.test.mjs
+  - cli/ui.test.mjs
+  - cli/ui.ts
 ---
 
 Command-line interface commands (init, doctor, measure, gate, run, bench, knowledge)

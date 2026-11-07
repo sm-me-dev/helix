@@ -37,6 +37,18 @@ discovery_evidence:
   - Knowledge system component src/knowledge/types.ts
 created_at: 2026-11-02
 updated_at: 2026-11-02
+description: Adaptive Project Knowledge System (APKS)
+paths:
+  - src/knowledge/benchmark.ts
+  - src/knowledge/context-adapter.ts
+  - src/knowledge/discovery.ts
+  - src/knowledge/export.ts
+  - src/knowledge/index.ts
+  - src/knowledge/maintenance.ts
+  - src/knowledge/repository.ts
+  - src/knowledge/retriever.ts
+  - src/knowledge/security.ts
+  - src/knowledge/types.ts
 ---
 
 Persistent structured knowledge, FTS5 SQLite index, dynamic retrieval, and adaptive maintenance

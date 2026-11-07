@@ -2,6 +2,15 @@
   "schema": 1,
   "method": "o200k_base BPE via gpt-tokenizer (approximation of frontier tokenizers, not the serving model's own count)",
   "note": "Static sizes only. A plain agent adds 0 tokens, so this is Helix's cost, not a saving. Per-task tokens come from evals/results/*.json. Claude Code defers MCP schemas (verified 2026-10-10); other platforms are assumed to load them.",
+  "progressiveDisclosure": {
+    "measuredAt": "2026-11-07",
+    "coreAndTier0Tokens": 133,
+    "tier0CatalogTokens": 79,
+    "comparisonBaseline": "smallest current always-on pack scenario",
+    "baselineTokens": 784,
+    "reductionPercent": 83,
+    "gate": "bootstrap <600 tokens, Tier 0 <250 tokens, reduction >80%"
+  },
   "packs": [
     {
       "label": "small repo (context7)",

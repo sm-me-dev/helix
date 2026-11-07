@@ -22,6 +22,12 @@ discovery_evidence:
   - Source file src/engine/worktree.ts enforcing isolation and security boundaries
 created_at: 2026-11-02
 updated_at: 2026-11-02
+description: Security & Tool Isolation
+paths:
+  - src/engine/security.test.ts
+  - src/engine/security.ts
+  - src/engine/tools.ts
+  - src/engine/worktree.ts
 ---
 
 Workspace isolation, path containment, ephemeral worktrees, and prompt injection defense

@@ -3,6 +3,7 @@
 // tool isolation, context optimization, mechanical validation, and state management.
 import type { CrewId, PlatformId, RepoFacts } from "../types.ts";
 import type { TaskTier, WorkflowState, WorkflowSelection } from "../workflow.ts";
+import type { Tier0DomainRoute, Tier2EpisodicRecord } from "../knowledge/types.ts";
 
 export type { CrewId, PlatformId, RepoFacts, TaskTier, WorkflowState, WorkflowSelection };
 
@@ -567,6 +568,16 @@ export type SymbolReference = {
 export interface RepositoryRetriever {
   /** Query semantic graph (Graphify) or fallback structural outline. */
   queryStructure(query: string): Promise<SymbolReference[]>;
+  /** V2 Tier 0 routing, Tier 1 canonical skills and Tier 2 episodic retrieval. */
+  retrieveKnowledge?(
+    query: string,
+    targetFiles?: readonly string[],
+    sourceByPath?: Readonly<Record<string, string>>,
+  ): Promise<{
+    tier0: readonly Tier0DomainRoute[];
+    tier1: readonly { domainId: string; bodyMarkdown: string }[];
+    tier2: readonly Tier2EpisodicRecord[];
+  }>;
   /** Retrieve narrow cited line excerpts (strictly avoiding whole-file dumps >200 lines). */
   fetchExcerpts(
     citations: Array<{ path: string; start: number; end: number; reason?: string }>,

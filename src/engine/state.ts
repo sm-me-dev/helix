@@ -850,7 +850,7 @@ export class FileExecutionStateManager implements ExecutionStateManager {
 
     this.snapshot = {
       taskId,
-      workflowState: "classified",
+      workflowState: "INIT",
       tier: initialTier,
       retryCount: 0,
       events: [],

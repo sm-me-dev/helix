@@ -82,6 +82,15 @@ export function validateScoutSynthesis(value: unknown): ScoutSynthesis {
     throw new Error("Scout synthesis must be an object");
   }
   const record = value as Record<string, unknown>;
+  const expectedKeys = ["files", "symbols", "entryPoints", "negativeFindings"];
+  if (
+    Object.keys(record).length !== expectedKeys.length ||
+    expectedKeys.some((key) => !(key in record))
+  ) {
+    throw new Error(
+      "Scout synthesis must contain exactly files, symbols, entryPoints, and negativeFindings",
+    );
+  }
   const files = record.files;
   const symbols = record.symbols;
   const entryPoints = record.entryPoints;

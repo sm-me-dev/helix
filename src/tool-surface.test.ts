@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import { CREW } from "./crew.ts";
 import { MCPS, mcpMeasurementFresh } from "./mcps.ts";
 import measurements from "./mcp-measurements.json" with { type: "json" };
+import { assembleBootstrapSystemPrompt } from "./engine/context.ts";
+import { ProgressiveToolRuntime } from "./engine/tools.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const captureNames = (server: string): Set<string> => {
@@ -22,6 +24,43 @@ for (const f of readdirSync(join(here, "..", "fixtures", "captures"))) {
 }
 
 describe("tool surface matches captures", () => {
+  it("starts with the Helix v2 bootstrap tools and gates MCP calls until tool_search", async () => {
+    const { state, systemPrompt } = assembleBootstrapSystemPrompt({
+      workspaceRoot: process.cwd(),
+      sessionId: "surface-test",
+    });
+    assert.match(systemPrompt, /## Domain routes/);
+    for (const name of ["load_skill", "tool_search", "consult_peer", "spawn_scout"]) {
+      assert.ok(state.visibleToolNames.has(name), `${name} is available at bootstrap`);
+    }
+    let executed = false;
+    const runtime = new ProgressiveToolRuntime({
+      state,
+      schemas: [
+        {
+          name: "query_dependency_graph",
+          description: "Query the project dependency graph",
+          inputSchema: { type: "object" },
+          source: "mcp",
+        },
+      ],
+      mcpExecutor: async () => {
+        executed = true;
+        return { nodes: 2 };
+      },
+    });
+    const blocked = await runtime.invoke("query_dependency_graph", {});
+    assert.equal(blocked.isError, true);
+    assert.equal(JSON.parse(blocked.content).code, "TOOL_NOT_VISIBLE");
+    assert.equal(executed, false);
+    const found = runtime.toolSearch("query project dependency graph");
+    assert.ok(found.some((schema) => schema.name === "query_dependency_graph"));
+    assert.ok(state.visibleToolNames.has("query_dependency_graph"));
+    const result = await runtime.invoke("query_dependency_graph", {});
+    assert.deepEqual(JSON.parse(result.content), { nodes: 2 });
+    assert.equal(executed, true);
+  });
+
   it("every catalog tool exists in its server capture", () => {
     for (const m of MCPS) {
       const cap = CAPTURES[m.id];

@@ -13,6 +13,8 @@ import {
 import {
   computeContentHash,
   KnowledgeRepository,
+  parseFrontmatter,
+  serializeFrontmatter,
   TieredKnowledgeRepository,
 } from "./repository.ts";
 import type {
@@ -40,6 +42,51 @@ export interface CompactKnowledgeResult {
   readonly promoted: number;
   readonly scriptsWritten: string[];
   readonly skillsUpdated: string[];
+}
+
+/** Update Tier 0 routing metadata through the offline canonical-promotion capability. */
+export function updateDomainRoutingMetadata(input: {
+  readonly workspaceRoot?: string;
+  readonly domainId: string;
+  readonly description: string;
+  readonly paths: readonly string[];
+  readonly allowCanonicalPromotion: true;
+}): string {
+  if (!/^[a-z0-9][a-z0-9-]*$/i.test(input.domainId)) throw new Error("Invalid domain id");
+  const description = input.description.trim();
+  if (!description || description.length > 120)
+    throw new Error("Domain description must fit 120 characters");
+  if (!input.paths.length || input.paths.some((pattern) => !pattern.trim()))
+    throw new Error("Domain paths must be non-empty glob patterns");
+  const workspaceRoot = path.resolve(input.workspaceRoot ?? process.cwd());
+  const filePath = path.join(
+    workspaceRoot,
+    ".helix",
+    "knowledge",
+    "domains",
+    input.domainId,
+    "domain.md",
+  );
+  const grant: CanonicalPromotionGrant = {
+    allowCanonicalPromotion: true,
+    token: CANONICAL_PROMOTION_CAPABILITY,
+  };
+  assertCanonicalKnowledgeWriteAllowed(filePath, grant);
+  const original = fs.readFileSync(filePath, "utf8");
+  const parsed = parseFrontmatter(original);
+  const frontmatter = {
+    ...parsed.frontmatter,
+    id: input.domainId,
+    description,
+    paths: [...new Set(input.paths.map((pattern) => pattern.replace(/\\/g, "/")))],
+  };
+  writeContained(
+    fs.realpathSync(workspaceRoot),
+    path.relative(workspaceRoot, filePath),
+    serializeFrontmatter(frontmatter, parsed.content),
+    grant,
+  );
+  return filePath;
 }
 
 /** Offline quarantine maintenance. Canonical edits require the explicit capability grant. */

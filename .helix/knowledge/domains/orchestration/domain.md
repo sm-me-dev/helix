@@ -22,6 +22,11 @@ discovery_evidence:
   - Source file src/engine/runner.ts in engine orchestration subsystem
 created_at: 2026-11-02
 updated_at: 2026-11-02
+description: Agent Orchestration
+paths:
+  - src/engine/orchestrator.test.ts
+  - src/engine/orchestrator.ts
+  - src/engine/runner.ts
 ---
 
 Multi-agent task routing, lifecycle coordination, handoff protocols, and execution state

@@ -40,6 +40,20 @@ discovery_evidence:
   - Platform adapter implementation in src/platforms.ts
 created_at: 2026-11-02
 updated_at: 2026-11-02
+description: Platform Adapters
+paths:
+  - src/adapters/antigravity.ts
+  - src/adapters/claude.ts
+  - src/adapters/codex.ts
+  - src/adapters/copilot.ts
+  - src/adapters/cursor.ts
+  - src/adapters/index.ts
+  - src/adapters/minimal.ts
+  - src/adapters/opencode.ts
+  - src/adapters/parts.ts
+  - src/adapters/types.ts
+  - src/platforms.test.ts
+  - src/platforms.ts
 ---
 
 Target harness adapters for Anthropic Claude, OpenAI Codex, OpenCode, and Antigravity

@@ -26,6 +26,7 @@ export function renderStatic(cost) {
   const caps = [...cost.mcpCaptures].sort((a, b) => b.schemaTokens - a.schemaTokens);
   const capLabels = caps.map((c) => `"${c.server} (${c.toolCount} tools)"`).join(", ");
   const capTop = Math.ceil((caps[0].schemaTokens * 1.15) / 1000) * 1000;
+  const progressive = cost.progressiveDisclosure;
   const est = [
     ...new Set(cost.packs.flatMap((p) => p.mcps.filter((m) => !m.measured).map((m) => m.id))),
   ];
@@ -53,6 +54,19 @@ export function renderStatic(cost) {
     }),
     "",
     `MCP schema weights are measured from live \`tools/list\` captures except ${est.length ? est.join(", ") + " (catalog estimate, unmeasured)" : "none"}. On Claude Code the schemas are deferred by tool search (verified 2026-10-10), so the MCP column does not load there by default; other platforms are assumed to load it.`,
+    "",
+    "### Progressive disclosure bootstrap",
+    "",
+    `The always-on bootstrap is **${progressive.coreAndTier0Tokens} tokens**, including a **${progressive.tier0CatalogTokens}-token Tier 0 route catalog**. Compared with the ${progressive.comparisonBaseline} (**${progressive.baselineTokens} tokens**), that is an **${progressive.reductionPercent}% reduction**. The bootstrap stays below 600 tokens, Tier 0 below 250 tokens, and the reduction above 80%.`,
+    `Measured ${progressive.measuredAt} using ${cost.method}.`,
+    "",
+    "```mermaid",
+    "xychart-beta",
+    '    title "Always-on baseline vs progressive bootstrap"',
+    '    x-axis ["baseline", "bootstrap"]',
+    `    y-axis "tokens" 0 --> ${Math.ceil((progressive.baselineTokens * 1.15) / 100) * 100}`,
+    `    bar [${progressive.baselineTokens}, ${progressive.coreAndTier0Tokens}]`,
+    "```",
     "",
     "### What unmanaged MCP loading would cost",
     "",

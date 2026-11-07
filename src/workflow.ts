@@ -1,8 +1,6 @@
-// Adaptive workflow orchestration: risk-aware tier selection, explicit states,
-// and handoff contracts. Logical responsibilities (manager/scout/architect/
-// builder/reviewer), not necessarily separate model invocations. The main
-// session is the manager: it classifies, owns acceptance criteria, and
-// controls completion. No daemons, no persistent state.
+// Adaptive workflow orchestration: risk-aware tier selection, the Helix v2
+// lifecycle and execution modes, and handoff contracts. Legacy role labels
+// remain for callers; the selected runtime topology is recorded separately.
 //
 // This file is the single source of truth for shared workflow policy: the
 // tier table, the security rule, and the handoff size limit. `selectWorkflow`
@@ -16,9 +14,9 @@
 // host agent. The only mechanical check Helix runs itself is `helix gate`
 // (secrets, lint, typecheck, tests).
 import type { CrewId } from "./types.ts";
+import type { ExecutionModeId } from "./crew.ts";
 
-export type WorkflowState =
-  "classified" | "discovered" | "planned" | "implemented" | "verifying" | "completed" | "blocked";
+export type WorkflowState = "INIT" | "DISCOVER" | "EXECUTE" | "VERIFY" | "COMPLETE" | "BLOCKED";
 
 export type TaskTier = "trivial" | "standard" | "complex";
 
@@ -28,6 +26,8 @@ export type WorkflowSelection = {
   roles: CrewId[];
   /** Allowed state path, including legitimate skips. */
   states: WorkflowState[];
+  /** Helix v2 execution topologies selected for the task. */
+  executionModes: ExecutionModeId[];
   /** Why this tier was chosen (for reports, not prompts). */
   reason: string;
   /**
@@ -58,37 +58,44 @@ export type TaskFacts = {
 
 const TIER_ORDER: TaskTier[] = ["trivial", "standard", "complex"];
 
-const FULL_CHAIN: WorkflowState[] = [
-  "classified",
-  "discovered",
-  "planned",
-  "implemented",
-  "verifying",
-  "completed",
-];
+const FULL_CHAIN: WorkflowState[] = ["INIT", "DISCOVER", "EXECUTE", "VERIFY", "COMPLETE"];
 
 /** Canonical tier table. `when` and `roles` also feed the generated rules. */
 export const TIER_POLICY: Record<
   TaskTier,
-  { when: string; roles: CrewId[]; states: WorkflowState[]; reason: string }
+  {
+    when: string;
+    roles: CrewId[];
+    states: WorkflowState[];
+    executionModes: ExecutionModeId[];
+    reason: string;
+  }
 > = {
   trivial: {
     when: "question, or one clear file",
     roles: [],
-    states: ["classified", "verifying", "completed"],
+    states: FULL_CHAIN,
+    executionModes: ["MODE_1_MASTER_LOOP"],
     reason: "trivial: main session only, gate before finish",
   },
   standard: {
     when: "known files, one module",
     roles: ["builder", "reviewer"],
-    states: ["classified", "implemented", "verifying", "completed"],
+    states: FULL_CHAIN,
+    executionModes: ["MODE_1_MASTER_LOOP", "MODE_3_ADVERSARIAL_AUDITOR"],
     reason: "standard: build plus fresh-window review",
   },
   complex: {
     when: "unknown surface or cross-module",
     roles: ["scout", "architect", "builder", "reviewer"],
     states: FULL_CHAIN,
-    reason: "complex: full discover-plan-build-verify chain",
+    executionModes: [
+      "MODE_1_MASTER_LOOP",
+      "MODE_2_DISPOSABLE_SCOUT",
+      "MODE_3_ADVERSARIAL_AUDITOR",
+      "MODE_4_PEER_TEAM",
+    ],
+    reason: "complex: full discover-execute-verify lifecycle",
   },
 };
 
@@ -102,19 +109,19 @@ export const SECURITY_POLICY = {
   minTier: "standard" as TaskTier,
   roles: ["reviewer"] as CrewId[],
   states: FULL_CHAIN,
+  executionModes: ["MODE_1_MASTER_LOOP", "MODE_3_ADVERSARIAL_AUDITOR"],
 };
 
 /** Maximum lines in a serialized handoff card (see `serializeHandoff`). */
 export const HANDOFF_MAX_LINES = 12;
 
 const TRANSITIONS: Record<WorkflowState, WorkflowState[]> = {
-  classified: ["discovered", "planned", "implemented", "verifying", "completed", "blocked"],
-  discovered: ["planned", "implemented", "verifying", "blocked"],
-  planned: ["implemented", "verifying", "blocked"],
-  implemented: ["verifying", "blocked"],
-  verifying: ["completed", "blocked", "implemented"],
-  blocked: ["classified", "discovered"],
-  completed: [],
+  INIT: ["DISCOVER", "BLOCKED"],
+  DISCOVER: ["EXECUTE", "BLOCKED"],
+  EXECUTE: ["VERIFY", "BLOCKED"],
+  VERIFY: ["COMPLETE", "EXECUTE", "BLOCKED"],
+  COMPLETE: [],
+  BLOCKED: [],
 };
 
 /** True when moving from one state to another is a legitimate path. */
@@ -128,6 +135,7 @@ function baseForTier(tier: TaskTier): WorkflowSelection {
     tier,
     roles: [...p.roles],
     states: [...p.states],
+    executionModes: [...p.executionModes],
     reason: p.reason,
     independentReview: p.roles.includes("reviewer"),
   };
@@ -137,7 +145,8 @@ function blocked(reason: string): WorkflowSelection {
   return {
     tier: "trivial",
     roles: [],
-    states: ["classified", "blocked"],
+    states: ["INIT", "BLOCKED"],
+    executionModes: ["MODE_1_MASTER_LOOP"],
     reason,
     independentReview: false,
   };

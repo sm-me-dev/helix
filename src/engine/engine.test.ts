@@ -7,7 +7,7 @@ import { describe, it } from "node:test";
 import { DefaultContextManager, DEFAULT_CONTEXT_BUDGET } from "./context.ts";
 import { HelixExecutionEngine } from "./engine.ts";
 import { MockAgentRunner } from "./runner.ts";
-import { runDisposableScout } from "./scout.ts";
+import { runDisposableScout, type ScoutTurnRequest } from "./scout.ts";
 import { FileExecutionStateManager } from "./state.ts";
 import { DefaultTaskPlanner, normalizeTaskDefinition } from "./task.ts";
 import { DefaultToolExecutor, ToolSecurityError } from "./tools.ts";
@@ -29,25 +29,107 @@ function cleanupDir(dir: string): void {
 
 describe("Phase 03: Helix Core Execution Engine", () => {
   it("runs a disposable scout with a read-only tool allowlist and returns only bounded JSON synthesis", async () => {
-    const runner = new MockAgentRunner("claude-code", [
-      {
-        stdout: JSON.stringify({
-          files: ["src/entry.ts:12"],
-          symbols: ["start()"],
-          entryPoints: [],
-          negativeFindings: [],
-        }),
+    const calls: ScoutTurnRequest[] = [];
+    let turn = 0;
+    const providerRouter = {
+      async invokeTurn(request: (typeof calls)[number]) {
+        calls.push(request);
+        turn++;
+        if (turn === 1) {
+          return {
+            stopReason: "tool_use" as const,
+            toolCalls: [
+              {
+                id: "read-1",
+                name: "Read",
+                input: { filePath: "src/engine/scout.ts", startLine: 1, endLine: 2 },
+              },
+            ],
+          };
+        }
+        return {
+          stopReason: "end_turn" as const,
+          content: JSON.stringify({
+            files: ["src/engine/scout.ts:1"],
+            symbols: ["runDisposableScout"],
+            entryPoints: [],
+            negativeFindings: [],
+          }),
+        };
       },
+    };
+    const synthesis = await runDisposableScout(
+      {
+        taskId: "scout-test",
+        query: "Find the execution entry point",
+      },
+      providerRouter,
+      process.cwd(),
+    );
+    assert.deepEqual(synthesis.files, ["src/engine/scout.ts:1"]);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0]?.readOnlyToolsOnly, true);
+    assert.equal(calls[0]?.maxTurns, 8);
+    assert.deepEqual(
+      calls[0]?.tools.map((tool) => tool.name),
+      ["Read", "Grep", "Glob", "ast_search"],
+    );
+    assert.ok(
+      calls[1]?.messages.some(
+        (message) => message.role === "tool" && message.content.includes("import fs"),
+      ),
+    );
+    assert.deepEqual(Object.keys(synthesis).sort(), [
+      "entryPoints",
+      "files",
+      "negativeFindings",
+      "symbols",
     ]);
-    const synthesis = await runDisposableScout(runner, {
-      taskId: "scout-test",
-      workdir: process.cwd(),
-      query: "Find the execution entry point",
-    });
-    assert.deepEqual(synthesis.files, ["src/entry.ts:12"]);
-    assert.equal(runner.calls[0].readOnly, true);
-    assert.equal(runner.calls[0].maxTurns, 8);
-    assert.deepEqual(runner.calls[0].toolAllowlist, ["Read", "Grep", "Glob", "ast_search"]);
+  });
+
+  it("rejects forbidden scout calls before executing any call in the batch", async () => {
+    const providerRouter = {
+      async invokeTurn() {
+        return {
+          stopReason: "tool_use" as const,
+          toolCalls: [
+            { id: "write-1", name: "Write", input: { filePath: "forbidden.txt", content: "x" } },
+          ],
+        };
+      },
+    };
+    await assert.rejects(
+      runDisposableScout(
+        { taskId: "scout-blocked", query: "Inspect source" },
+        providerRouter,
+        process.cwd(),
+      ),
+      /forbidden tool 'Write'/,
+    );
+  });
+
+  it("stops the disposable scout at its eight-turn budget", async () => {
+    let calls = 0;
+    const providerRouter = {
+      async invokeTurn() {
+        calls++;
+        return {
+          stopReason: "tool_use" as const,
+          toolCalls: [
+            { id: `glob-${calls}`, name: "Glob", input: { pattern: "src/no-such-file-*" } },
+          ],
+        };
+      },
+    };
+    await assert.rejects(
+      runDisposableScout(
+        { taskId: "scout-turn-limit", query: "Inspect paths" },
+        providerRouter,
+        process.cwd(),
+      ),
+      /8-turn limit/,
+    );
+    assert.equal(calls, 8);
   });
 
   describe("1. Task Input Validation & Representation", () => {
@@ -131,20 +213,20 @@ describe("Phase 03: Helix Core Execution Engine", () => {
         await stateManager.recordEvent({
           taskId: "task-123",
           type: "task_started",
-          workflowState: "classified",
+          workflowState: "INIT",
           payload: { action: "init" },
         });
 
         await stateManager.recordEvent({
           taskId: "task-123",
           type: "agent_launched",
-          workflowState: "implemented",
+          workflowState: "EXECUTE",
           payload: { step: 1 },
         });
 
         const snapshot = stateManager.getSnapshot();
         assert.equal(snapshot.taskId, "task-123");
-        assert.equal(snapshot.workflowState, "implemented");
+        assert.equal(snapshot.workflowState, "EXECUTE");
         assert.equal(snapshot.events.length, 2);
 
         // Test loading from disk
@@ -338,7 +420,7 @@ describe("Phase 03: Helix Core Execution Engine", () => {
         const result = await engine.execute(taskInput, { isolatedWorktree: false });
 
         assert.equal(result.status, "succeeded");
-        assert.equal(result.finalWorkflowState, "completed");
+        assert.equal(result.finalWorkflowState, "COMPLETE");
         assert.ok(result.affectedFiles.includes(targetFile));
         assert.ok(result.diff.includes("+export const version = 2;"));
         assert.equal(result.validation.passed, true);
@@ -348,7 +430,7 @@ describe("Phase 03: Helix Core Execution Engine", () => {
         // Verify state snapshot
         const state = await engine.getState("task-success-e2e");
         assert.ok(state);
-        assert.equal(state.workflowState, "completed");
+        assert.equal(state.workflowState, "COMPLETE");
       } finally {
         cleanupDir(tmp);
       }
@@ -360,7 +442,7 @@ describe("Phase 03: Helix Core Execution Engine", () => {
       const result = await engine.execute({ prompt: "", workspaceRoot: "/non/existent" });
 
       assert.equal(result.status, "failed");
-      assert.equal(result.finalWorkflowState, "blocked");
+      assert.equal(result.finalWorkflowState, "BLOCKED");
       assert.equal(result.error?.code, "INVALID_TASK_INPUT");
     });
 
@@ -434,7 +516,7 @@ describe("Phase 03: Helix Core Execution Engine", () => {
         const result = await engine.execute(taskInput, { isolatedWorktree: false });
 
         assert.equal(result.status, "failed");
-        assert.equal(result.finalWorkflowState, "blocked");
+        assert.equal(result.finalWorkflowState, "BLOCKED");
         assert.equal(result.error?.code, "EXECUTION_FAILED");
         assert.equal(result.metrics.retriesAttempted, 2);
       } finally {
@@ -544,7 +626,7 @@ describe("Phase 03: Helix Core Execution Engine", () => {
         const result = await engine.execute(taskInput, { isolatedWorktree: false });
 
         assert.equal(result.status, "cancelled");
-        assert.equal(result.finalWorkflowState, "blocked");
+        assert.equal(result.finalWorkflowState, "BLOCKED");
         assert.equal(result.error?.code, "TASK_CANCELLED");
       } finally {
         cleanupDir(tmp);

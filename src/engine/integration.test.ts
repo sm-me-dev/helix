@@ -202,7 +202,7 @@ describe("Phase 08: Integration & Hardening Subsystem Tests", () => {
         const result = await engine.execute(task, { isolatedWorktree: false });
 
         assert.equal(result.status, "succeeded");
-        assert.equal(result.finalWorkflowState, "completed");
+        assert.equal(result.finalWorkflowState, "COMPLETE");
         assert.ok(result.diff.includes("+export function status() { return 'online'; }"));
         assert.ok(result.metrics);
         assert.equal(result.metrics.tokens?.inputTokens, 1200);
@@ -235,7 +235,7 @@ describe("Phase 08: Integration & Hardening Subsystem Tests", () => {
         const result = await engine.execute(task, { isolatedWorktree: false });
 
         assert.equal(result.status, "failed");
-        assert.equal(result.finalWorkflowState, "blocked");
+        assert.equal(result.finalWorkflowState, "BLOCKED");
         assert.ok(result.error);
         assert.equal(result.error.code, "EXECUTION_FAILED");
       } finally {

@@ -221,7 +221,7 @@ export class DefaultTaskPlanner implements TaskPlanner {
     const selection = selectWorkflow(facts);
     const tier = task.tierOverride ?? selection.tier;
 
-    const isBlocked = selection.states.includes("blocked");
+    const isBlocked = selection.states.includes("BLOCKED");
     const steps: PlanStep[] = [];
     if (!isBlocked) {
       // In the baseline single-agent execution model, execution is handled

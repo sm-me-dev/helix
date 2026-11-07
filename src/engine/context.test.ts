@@ -17,6 +17,8 @@ import { ProgressiveToolRuntime } from "./tools.ts";
 import { runContextOptimizationExperiment } from "./experiment.ts";
 import { DefaultObservabilityCollector } from "./observability.ts";
 import { DefaultRepositoryRetriever } from "./retrieval.ts";
+import { TieredKnowledgeRepository } from "../knowledge/repository.ts";
+import type { Tier2EpisodicRecord } from "../knowledge/types.ts";
 import { DefaultTaskPlanner, normalizeTaskDefinition } from "./task.ts";
 import { DefaultToolExecutor } from "./tools.ts";
 import { TokenBudgetExceededError } from "./types.ts";
@@ -313,6 +315,47 @@ describe("Phase 05: Context Management & Token Optimization", () => {
         assert.ok(symbols.some((s) => s.name === "AuthService" && s.kind === "class"));
         assert.ok(symbols.some((s) => s.name === "authenticate" && s.kind === "function"));
       } finally {
+        cleanupDir(tmp);
+      }
+    });
+
+    it("delegates Tier 0 routing, Tier 1 canonical skills, and Tier 2 episodes to knowledge modules", async () => {
+      const tmp = createTempDir();
+      let repository: TieredKnowledgeRepository | undefined;
+      try {
+        const domainDir = path.join(tmp, ".helix", "knowledge", "domains", "execution-engine");
+        fs.mkdirSync(path.join(tmp, "src"), { recursive: true });
+        fs.mkdirSync(domainDir, { recursive: true });
+        fs.writeFileSync(path.join(tmp, "src", "runner.ts"), "export const retry = true;\n");
+        fs.writeFileSync(
+          path.join(domainDir, "domain.md"),
+          "---\nid: execution-engine\ndescription: Execution routing and retry rules\npaths:\n  - src/**/*.ts\n---\n# Execution\nPreserve retry invariants.\n",
+        );
+        repository = new TieredKnowledgeRepository(tmp);
+        const episode: Tier2EpisodicRecord = {
+          id: "retry-episode",
+          domainId: "execution-engine",
+          triggerSummary: "Retry failures lose task state",
+          resolutionRule: "Persist the retry state before dispatch.",
+          status: "VALIDATED",
+          sourceTaskId: "task-1",
+          timesRetrieved: 0,
+          timesHelpedPassGate: 1,
+          timesPresentInFailedRun: 0,
+          createdAtIso: new Date(0).toISOString(),
+        };
+        repository.insertEpisodicRecord(episode);
+        repository.close();
+        repository = undefined;
+
+        const result = await new DefaultRepositoryRetriever({
+          workspaceRoot: tmp,
+        }).retrieveKnowledge("retry failures task state", ["src/runner.ts"]);
+        assert.equal(result.tier0[0]?.domainId, "execution-engine");
+        assert.equal(result.tier1[0]?.domainId, "execution-engine");
+        assert.equal(result.tier2[0]?.id, "retry-episode");
+      } finally {
+        repository?.close();
         cleanupDir(tmp);
       }
     });

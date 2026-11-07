@@ -92,6 +92,7 @@ const report = {
   method: TOKENIZER_METHOD,
   note: "Static sizes only. A plain agent adds 0 tokens, so this is Helix's cost, not a saving. Per-task tokens come from evals/results/*.json. Claude Code defers MCP schemas (verified 2026-10-10); other platforms are assumed to load them.",
   progressiveDisclosure: {
+    measuredAt: new Date().toISOString().slice(0, 10),
     coreAndTier0Tokens: progressiveBootstrapTokens,
     tier0CatalogTokens: countTokens(tier0Catalog),
     comparisonBaseline: "smallest current always-on pack scenario",

@@ -36,6 +36,7 @@ import {
   retrieveEpisodicRecords,
 } from "./retriever.ts";
 import { KnowledgeSecurityGuard, validateCandidateEpisodicRecord } from "./security.ts";
+import { matchPathGlob } from "./glob.ts";
 import type { KnowledgeItem, KnowledgeUpdateProposal, Tier2EpisodicRecord } from "./types.ts";
 
 describe("APKS: Project Scanner & Domain Discovery", () => {
@@ -53,6 +54,14 @@ describe("APKS: Project Scanner & Domain Discovery", () => {
 });
 
 describe("Three-tier quarantine knowledge", () => {
+  it("matches nested, single-segment, and brace-expanded POSIX globs", () => {
+    assert.equal(matchPathGlob("src\\a\\b\\entry.ts", "src/**/entry.ts"), true);
+    assert.equal(matchPathGlob("src/a.ts", "src/*.ts"), true);
+    assert.equal(matchPathGlob("src/nested/a.ts", "src/*.ts"), false);
+    assert.equal(matchPathGlob("src/worker.ts", "src/{worker,runner}.ts"), true);
+    assert.equal(matchPathGlob("src/other.ts", "src/{worker,runner}.ts"), false);
+  });
+
   it("compiles a bounded Tier 0 route catalog and matches source paths", () => {
     const routes = compileTier0DomainRoutes(process.cwd());
     const catalog = compileTier0DomainCatalog(routes);

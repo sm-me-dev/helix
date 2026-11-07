@@ -120,7 +120,7 @@ export class HelixExecutionEngine implements HelixEngine {
       return {
         taskId: taskInput?.id || "invalid-task",
         status: "failed",
-        finalWorkflowState: "blocked",
+        finalWorkflowState: "BLOCKED",
         diff: "",
         affectedFiles: [],
         summary: `Task validation failed: ${msg}`,
@@ -154,18 +154,18 @@ export class HelixExecutionEngine implements HelixEngine {
     await stateManager.recordEvent({
       taskId: task.id,
       type: "task_started",
-      workflowState: "classified",
+      workflowState: "INIT",
       payload: { title: task.title, workspaceRoot: task.workspaceRoot },
     });
 
     // 2. Assess and Plan
     const plan = await this.planner.plan(task);
-    const isBlocked = plan.selection.states.includes("blocked");
+    const isBlocked = plan.selection.states.includes("BLOCKED");
     stateManager.setTier(plan.tier);
     await stateManager.recordEvent({
       taskId: task.id,
       type: "tier_classified",
-      workflowState: isBlocked ? "blocked" : "classified",
+      workflowState: isBlocked ? "BLOCKED" : "INIT",
       payload: {
         tier: plan.tier,
         selectionReason: plan.reason,
@@ -177,7 +177,7 @@ export class HelixExecutionEngine implements HelixEngine {
       await stateManager.recordEvent({
         taskId: task.id,
         type: "task_failed",
-        workflowState: "blocked",
+        workflowState: "BLOCKED",
         payload: { reason: plan.reason },
       });
       this.activeRuns.delete(task.id);
@@ -185,7 +185,7 @@ export class HelixExecutionEngine implements HelixEngine {
       return {
         taskId: task.id,
         status: "blocked",
-        finalWorkflowState: "blocked",
+        finalWorkflowState: "BLOCKED",
         diff: "",
         affectedFiles: [],
         summary: `Task blocked by workflow policy: ${plan.reason}`,
@@ -211,7 +211,7 @@ export class HelixExecutionEngine implements HelixEngine {
         return {
           taskId: task.id,
           status: "succeeded",
-          finalWorkflowState: "discovered",
+          finalWorkflowState: "DISCOVER",
           diff: "",
           affectedFiles: [],
           summary: `Dry run completed: multi-agent task planned with ${decomposedPlan.steps.length} steps (${strategy}).`,
@@ -241,7 +241,7 @@ export class HelixExecutionEngine implements HelixEngine {
       await stateManager.recordEvent({
         taskId: task.id,
         type: "worktree_created",
-        workflowState: "discovered",
+        workflowState: "DISCOVER",
         payload: { worktreePath, branch: branchName, isEphemeral },
       });
     }
@@ -256,7 +256,7 @@ export class HelixExecutionEngine implements HelixEngine {
       return {
         taskId: task.id,
         status: "succeeded",
-        finalWorkflowState: "discovered",
+        finalWorkflowState: "DISCOVER",
         diff: "",
         affectedFiles: [],
         summary: "Dry run completed: task planned successfully without launching agent.",
@@ -320,7 +320,7 @@ export class HelixExecutionEngine implements HelixEngine {
         await stateManager.recordEvent({
           taskId: task.id,
           type: "agent_launched",
-          workflowState: "implemented",
+          workflowState: "EXECUTE",
           payload: { sessionId, retryCount, role: "single-agent" },
         });
 
@@ -378,7 +378,7 @@ export class HelixExecutionEngine implements HelixEngine {
         await stateManager.recordEvent({
           taskId: task.id,
           type: "agent_completed",
-          workflowState: "implemented",
+          workflowState: "EXECUTE",
           payload: {
             exitCode: agentOutput.exitCode,
             durationMs: agentOutput.durationMs,
@@ -404,7 +404,7 @@ export class HelixExecutionEngine implements HelixEngine {
             await stateManager.recordEvent({
               taskId: task.id,
               type: "retry_scheduled",
-              workflowState: "implemented",
+              workflowState: "EXECUTE",
               payload: { retryCount, reason: "Agent non-zero exit", errorFeedback },
             });
             continue;
@@ -425,7 +425,7 @@ export class HelixExecutionEngine implements HelixEngine {
               await stateManager.recordEvent({
                 taskId: task.id,
                 type: "retry_scheduled",
-                workflowState: "implemented",
+                workflowState: "EXECUTE",
                 payload: { retryCount, reason: "Question modified files", errorFeedback },
               });
               continue;
@@ -436,7 +436,7 @@ export class HelixExecutionEngine implements HelixEngine {
           await stateManager.recordEvent({
             taskId: task.id,
             type: "task_completed",
-            workflowState: "completed",
+            workflowState: "COMPLETE",
             payload: { isQuestion: true },
           });
 
@@ -452,7 +452,7 @@ export class HelixExecutionEngine implements HelixEngine {
           return {
             taskId: task.id,
             status: "succeeded",
-            finalWorkflowState: "completed",
+            finalWorkflowState: "COMPLETE",
             diff: "",
             affectedFiles: [],
             summary:
@@ -466,7 +466,7 @@ export class HelixExecutionEngine implements HelixEngine {
         await stateManager.recordEvent({
           taskId: task.id,
           type: "gate_started",
-          workflowState: "verifying",
+          workflowState: "VERIFY",
           payload: { worktreePath, passCommand: task.passCommand },
         });
 
@@ -491,13 +491,13 @@ export class HelixExecutionEngine implements HelixEngine {
               await stateManager.recordEvent({
                 taskId: task.id,
                 type: "gate_failed",
-                workflowState: "verifying",
+                workflowState: "VERIFY",
                 payload: { reason: "requireDiff violated" },
               });
               await stateManager.recordEvent({
                 taskId: task.id,
                 type: "retry_scheduled",
-                workflowState: "implemented",
+                workflowState: "EXECUTE",
                 payload: { retryCount, errorFeedback },
               });
               continue;
@@ -510,14 +510,14 @@ export class HelixExecutionEngine implements HelixEngine {
           await stateManager.recordEvent({
             taskId: task.id,
             type: "gate_passed",
-            workflowState: "verifying",
+            workflowState: "VERIFY",
             payload: { checksRun: validationReport.checks.length },
           });
 
           await stateManager.recordEvent({
             taskId: task.id,
             type: "task_completed",
-            workflowState: "completed",
+            workflowState: "COMPLETE",
             payload: {
               affectedFiles: diffResult.affectedFiles,
               diffPatch: diffResult.diff,
@@ -540,7 +540,7 @@ export class HelixExecutionEngine implements HelixEngine {
           return {
             taskId: task.id,
             status: "succeeded",
-            finalWorkflowState: "completed",
+            finalWorkflowState: "COMPLETE",
             diff: diffResult.diff,
             affectedFiles: diffResult.affectedFiles,
             summary: "Task executed successfully and verified by mechanical gate.",
@@ -553,7 +553,7 @@ export class HelixExecutionEngine implements HelixEngine {
         await stateManager.recordEvent({
           taskId: task.id,
           type: "gate_failed",
-          workflowState: "verifying",
+          workflowState: "VERIFY",
           payload: { failingStage: validationReport.failingStage },
         });
 
@@ -565,7 +565,7 @@ export class HelixExecutionEngine implements HelixEngine {
           await stateManager.recordEvent({
             taskId: task.id,
             type: "retry_scheduled",
-            workflowState: "implemented",
+            workflowState: "EXECUTE",
             payload: { retryCount, failingStage: validationReport.failingStage, errorFeedback },
           });
         } else {
@@ -576,7 +576,7 @@ export class HelixExecutionEngine implements HelixEngine {
 
       // If loop exited without returning success:
       const status = aborted ? "cancelled" : "failed";
-      const workflowState: WorkflowState = "blocked";
+      const workflowState: WorkflowState = "BLOCKED";
 
       await stateManager.recordEvent({
         taskId: task.id,

@@ -55,6 +55,19 @@ xychart-beta
 
 MCP schema weights are measured from live `tools/list` captures except context7 (catalog estimate, unmeasured). On Claude Code the schemas are deferred by tool search (verified 2026-10-10), so the MCP column does not load there by default; other platforms are assumed to load it.
 
+### Progressive disclosure bootstrap
+
+The always-on bootstrap is **133 tokens**, including a **79-token Tier 0 route catalog**. Compared with the smallest current always-on pack scenario (**784 tokens**), that is an **83% reduction**. The bootstrap stays below 600 tokens, Tier 0 below 250 tokens, and the reduction above 80%.
+Measured 2026-11-07 using o200k_base BPE via gpt-tokenizer (approximation of frontier tokenizers, not the serving model's own count).
+
+```mermaid
+xychart-beta
+    title "Always-on baseline vs progressive bootstrap"
+    x-axis ["baseline", "bootstrap"]
+    y-axis "tokens" 0 --> 1000
+    bar [784, 133]
+```
+
 ### What unmanaged MCP loading would cost
 
 Real captured schemas, loaded every request with no curation: **19867 tokens** for four servers. Helix ships at most five and defaults to one or two.
