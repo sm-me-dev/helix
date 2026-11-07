@@ -71,15 +71,17 @@ describe("workflow selection", () => {
 });
 
 describe("workflow transitions", () => {
-  it("enforces the five-stage lifecycle and blocks invalid shortcuts", () => {
+  it("allows engine execution paths and blocks terminal shortcuts", () => {
     assert.ok(canTransition("INIT", "DISCOVER"));
+    assert.ok(canTransition("INIT", "EXECUTE"));
     assert.ok(canTransition("DISCOVER", "EXECUTE"));
     assert.ok(canTransition("EXECUTE", "VERIFY"));
+    assert.ok(canTransition("EXECUTE", "COMPLETE"));
     assert.ok(canTransition("VERIFY", "COMPLETE"));
+    assert.ok(canTransition("BLOCKED", "INIT"));
+    assert.ok(canTransition("BLOCKED", "DISCOVER"));
     assert.ok(!canTransition("COMPLETE", "EXECUTE"));
     assert.ok(!canTransition("INIT", "COMPLETE"));
-    assert.ok(!canTransition("INIT", "EXECUTE"));
-    assert.ok(!canTransition("EXECUTE", "COMPLETE"));
   });
 
   it("lets verifying loop back to implemented on failure", () => {

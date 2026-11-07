@@ -156,10 +156,10 @@ function touchedDomainScripts(files) {
       }
       if (readingGlobs && line.trim() && !/^\\s/.test(line)) readingGlobs = false;
     }
-    const isTouched = normalizedFiles.some((file) =>
+    const domainFiles = normalizedFiles.filter((file) =>
       file.startsWith(domainPrefix) || globs.some((glob) => pathMatchesGlob(file, glob)),
     );
-    if (!isTouched) continue;
+    if (domainFiles.length === 0) continue;
     const scriptRoot = path.join(domainDir, "scripts");
     if (!fs.existsSync(scriptRoot)) continue;
     for (const script of fs.readdirSync(scriptRoot).filter((name) => name.endsWith(".mjs")).sort()) {
@@ -167,7 +167,7 @@ function touchedDomainScripts(files) {
       if (fs.statSync(scriptPath).isFile()) {
         scripts.push({
           name: "domain-script:" + entry.name + "/" + script,
-          argv: [process.execPath, path.relative(root, scriptPath)],
+          argv: [process.execPath, path.relative(root, scriptPath), ...domainFiles],
         });
       }
     }

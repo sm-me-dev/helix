@@ -189,23 +189,46 @@ function writeAstVerificationScript(
 function buildAstVerificationScript(rule: AstGrepMatcherRule): string {
   return `#!/usr/bin/env node
 import fs from "node:fs";
+import path from "node:path";
 import { Lang, parse } from "@ast-grep/napi";
 const rule = ${JSON.stringify(rule)};
-const file = process.argv[2];
-if (!file) throw new Error("usage: rule-check.mjs <source-file>");
-const lang = rule.lang === "TypeScript" ? Lang.TypeScript : rule.lang === "Tsx" ? Lang.Tsx : Lang.JavaScript;
-const root = parse(lang, fs.readFileSync(file, "utf8")).root();
-const stack = [root];
-let matched = false;
-while (stack.length) {
-  const node = stack.pop();
-  const ok = (!rule.kind || node.kind() === rule.kind) && (!rule.pattern || node.matches(rule.pattern)) &&
-    (!rule.insideKind || node.ancestors().some((parent) => parent.kind() === rule.insideKind));
-  if (ok) { matched = true; break; }
-  stack.push(...node.children());
+const extensions = new Set([".ts", ".tsx", ".js", ".mjs"]);
+function findSourceFiles(directory) {
+  const files = [];
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      if (entry.name !== ".git" && entry.name !== "node_modules") {
+        files.push(...findSourceFiles(path.join(directory, entry.name)));
+      }
+    } else if (entry.isFile() && extensions.has(path.extname(entry.name))) {
+      files.push(path.join(directory, entry.name));
+    }
+  }
+  return files;
 }
-if (!matched) { console.error("AST invariant failed"); process.exit(1); }
-console.log("AST invariant passed");
+const files = process.argv.slice(2);
+if (files.length === 0) files.push(...findSourceFiles(process.cwd()));
+if (files.length === 0) process.exit(0);
+const lang = rule.lang === "TypeScript" ? Lang.TypeScript : rule.lang === "Tsx" ? Lang.Tsx : Lang.JavaScript;
+let matched = false;
+for (const file of files) {
+  const root = parse(lang, fs.readFileSync(file, "utf8")).root();
+  const stack = [root];
+  while (stack.length) {
+    const node = stack.pop();
+    const ok = (!rule.kind || node.kind() === rule.kind) && (!rule.pattern || node.matches(rule.pattern)) &&
+      (!rule.insideKind || node.ancestors().some((parent) => parent.kind() === rule.insideKind));
+    if (ok) { matched = true; break; }
+    stack.push(...node.children());
+  }
+  if (matched) break;
+}
+const violation = (rule.polarity ?? "forbid") === "forbid" ? matched : !matched;
+if (violation) {
+  console.error("AST invariant failed");
+  process.exit(1);
+}
+console.error("AST invariant passed");
 `;
 }
 

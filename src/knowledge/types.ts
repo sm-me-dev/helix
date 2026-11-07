@@ -27,6 +27,7 @@ export type EpisodicStatus = "QUARANTINED" | "VALIDATED" | "PROMOTED" | "PRUNED"
 
 export interface AstGrepMatcherRule {
   readonly lang: "TypeScript" | "Tsx" | "JavaScript";
+  readonly polarity?: "forbid" | "require";
   readonly pattern?: string;
   readonly kind?: string;
   readonly insideKind?: string;

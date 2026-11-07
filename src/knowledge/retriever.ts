@@ -391,8 +391,8 @@ export function retrieveEpisodicRecords(
   const maxTokens = Math.min(250, Math.max(0, options.maxTokens ?? 250));
   if (limit === 0 || maxTokens === 0 || !query.trim()) return [];
 
-  const fts = repository.searchEpisodicFts(query, 100);
-  const vectors = repository.searchEpisodicVector(query, 100);
+  const fts = repository.searchEpisodicFts(query, 100, options.domainId);
+  const vectors = repository.searchEpisodicVector(query, 100, options.domainId);
   const scores = new Map<string, number>();
   for (const [index, result] of fts.entries()) {
     scores.set(result.id, (scores.get(result.id) ?? 0) + 1 / (60 + index + 1));

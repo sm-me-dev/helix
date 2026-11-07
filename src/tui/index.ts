@@ -186,11 +186,11 @@ function HelixApp({ baseUrl, session, onQuit }: TuiOptions & { onQuit: () => voi
       if (key.name.toLowerCase() === "s") void saveVerifiedModel();
       return;
     }
-    if (setupOpen && /^[1-5]$/.test(key.name)) {
+    if (setupOpen && !draft && /^[1-5]$/.test(key.name)) {
       setPreset(Number(key.name));
       return;
     }
-    if (lastApproval && !setupOpen) {
+    if (lastApproval && !setupOpen && !editingApproval) {
       const decision =
         key.name.toLowerCase() === "y"
           ? "approve"

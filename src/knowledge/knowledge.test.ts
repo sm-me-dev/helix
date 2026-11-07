@@ -231,12 +231,12 @@ describe("Three-tier quarantine knowledge", () => {
       fs.writeFileSync(sourcePath, 'console.log("debug");\n');
       assert.equal(
         spawnSync(process.execPath, [scriptPath, sourcePath], { encoding: "utf8" }).status,
-        0,
+        1,
       );
       fs.writeFileSync(sourcePath, "export const ready = true;\n");
       assert.equal(
         spawnSync(process.execPath, [scriptPath, sourcePath], { encoding: "utf8" }).status,
-        1,
+        0,
       );
     } finally {
       repository.close();

@@ -116,12 +116,12 @@ export const SECURITY_POLICY = {
 export const HANDOFF_MAX_LINES = 12;
 
 const TRANSITIONS: Record<WorkflowState, WorkflowState[]> = {
-  INIT: ["DISCOVER", "BLOCKED"],
+  INIT: ["DISCOVER", "EXECUTE", "BLOCKED"],
   DISCOVER: ["EXECUTE", "BLOCKED"],
-  EXECUTE: ["VERIFY", "BLOCKED"],
+  EXECUTE: ["VERIFY", "COMPLETE", "BLOCKED"],
   VERIFY: ["COMPLETE", "EXECUTE", "BLOCKED"],
   COMPLETE: [],
-  BLOCKED: [],
+  BLOCKED: ["INIT", "DISCOVER"],
 };
 
 /** True when moving from one state to another is a legitimate path. */

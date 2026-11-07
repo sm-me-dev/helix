@@ -769,7 +769,11 @@ export class TieredKnowledgeRepository {
       .run(id);
   }
 
-  searchEpisodicFts(query: string, limit = 20): Array<{ id: string; rank: number }> {
+  searchEpisodicFts(
+    query: string,
+    limit = 20,
+    domainId?: string,
+  ): Array<{ id: string; rank: number }> {
     if (!query.trim()) return [];
     const terms = query.match(/[\p{L}\p{N}_]+/gu) ?? [];
     if (terms.length === 0) return [];
@@ -779,21 +783,35 @@ export class TieredKnowledgeRepository {
         `SELECT q.id AS id, bm25(episodic_fts) AS rank
         FROM episodic_fts JOIN episodic_quarantine q ON q.rowid = episodic_fts.rowid
         WHERE episodic_fts MATCH ? AND q.status IN ('VALIDATED','PROMOTED')
+          ${domainId === undefined ? "" : "AND q.domain_id = ?"}
         ORDER BY rank LIMIT ?`,
       )
-      .all(expression, limit) as Array<{ id: string; rank: number }>;
+      .all(
+        ...(domainId === undefined ? [expression, limit] : [expression, domainId, limit]),
+      ) as Array<{
+      id: string;
+      rank: number;
+    }>;
   }
 
-  searchEpisodicVector(query: string, limit = 20): Array<{ id: string; distance: number }> {
+  searchEpisodicVector(
+    query: string,
+    limit = 20,
+    domainId?: string,
+  ): Array<{ id: string; distance: number }> {
     const vector = new Float32Array(createLocalEmbedding(query));
     return this.db
       .prepare(
         `SELECT v.episodic_id AS id, v.distance AS distance
         FROM episodic_vec v JOIN episodic_quarantine q ON q.id = v.episodic_id
         WHERE v.embedding MATCH ? AND k = ? AND q.status IN ('VALIDATED','PROMOTED')
+          ${domainId === undefined ? "" : "AND v.domain_partition = ?"}
         ORDER BY v.distance`,
       )
-      .all(vector, limit) as Array<{ id: string; distance: number }>;
+      .all(...(domainId === undefined ? [vector, limit] : [vector, limit, domainId])) as Array<{
+      id: string;
+      distance: number;
+    }>;
   }
 
   close(): void {
