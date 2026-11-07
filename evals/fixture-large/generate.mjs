@@ -7,10 +7,30 @@ import { mkdirSync, writeFileSync, readFileSync, readdirSync, statSync } from "n
 import { dirname, join, relative } from "node:path";
 
 const NOUNS = [
-  "ledger", "invoice", "catalog", "shipment", "customer", "warehouse",
-  "pricing", "discount", "payment", "refund", "tax", "currency",
-  "inventory", "supplier", "order", "cart", "coupon", "review",
-  "session", "profile", "audit", "report", "notice", "schedule",
+  "ledger",
+  "invoice",
+  "catalog",
+  "shipment",
+  "customer",
+  "warehouse",
+  "pricing",
+  "discount",
+  "payment",
+  "refund",
+  "tax",
+  "currency",
+  "inventory",
+  "supplier",
+  "order",
+  "cart",
+  "coupon",
+  "review",
+  "session",
+  "profile",
+  "audit",
+  "report",
+  "notice",
+  "schedule",
 ];
 const P = 1000003;
 
@@ -63,7 +83,8 @@ function moduleFiles(model, mod) {
   const files = {};
   const dir = `src/${n}`;
   files[`${dir}/consts.ts`] = `export const MODULUS = ${P};\nexport const NAME = "${n}";\n`;
-  files[`${dir}/types.ts`] = `export interface ${camel(n)}Record {\n  id: number;\n  value: number;\n}\n`;
+  files[`${dir}/types.ts`] =
+    `export interface ${camel(n)}Record {\n  id: number;\n  value: number;\n}\n`;
   files[`${dir}/validate.ts`] =
     `import { MODULUS } from "./consts.ts";\n\nexport function isValid(x: number): boolean {\n  return Number.isInteger(x) && x >= 0 && x < MODULUS;\n}\n`;
   files[`${dir}/format.ts`] =
@@ -80,11 +101,12 @@ function moduleFiles(model, mod) {
     ids.map((i) => `import { rule${i} } from "./rule-${i}.ts";`).join("\n") +
     `\n\nconst chain = [${ids.map((i) => `rule${i}`).join(", ")}];\n\nexport function applyRules(x: number): number {\n  return chain.reduce((v, rule) => rule(v), x);\n}\n`;
   const depImports = mod.deps
-    .map((d) => `import { run as run${camel(model.modules[d].name)} } from "../${model.modules[d].name}/service.ts";`)
+    .map(
+      (d) =>
+        `import { run as run${camel(model.modules[d].name)} } from "../${model.modules[d].name}/service.ts";`,
+    )
     .join("\n");
-  const depSum = mod.deps
-    .map((d) => ` + run${camel(model.modules[d].name)}(x + 1)`)
-    .join("");
+  const depSum = mod.deps.map((d) => ` + run${camel(model.modules[d].name)}(x + 1)`).join("");
   files[`${dir}/service.ts`] =
     `import { applyRules } from "./rules/index.ts";\nimport { isValid } from "./validate.ts";\nimport { MODULUS } from "./consts.ts";\nimport { Store } from "./store.ts";\n${depImports ? depImports + "\n" : ""}\nconst store = new Store();\n\nexport function run(x: number): number {\n  if (!isValid(x)) throw new RangeError(\`invalid input \${x}\`);\n  const total = (applyRules(x)${depSum}) % MODULUS;\n  store.put(x, total);\n  return total;\n}\n\nexport function lastResult(x: number): number | undefined {\n  return store.get(x);\n}\n`;
   files[`${dir}/index.ts`] =
@@ -118,13 +140,23 @@ function docFile(mod) {
 function rootFiles(model) {
   const files = {};
   const mods = model.modules;
-  files["package.json"] = JSON.stringify(
-    { name: "helix-eval-fixture-large", private: true, type: "module",
-      scripts: { test: 'node --experimental-strip-types --test "tests/**/*.test.ts"' } },
-    null, 2) + "\n";
-  files["README.md"] = `# Fixture (large)\n\nSource modules live in \`src/<name>/\`, per-module notes in \`docs/<name>.md\`, tests in \`tests/<name>/\`. Run \`npm test\`.\n`;
+  files["package.json"] =
+    JSON.stringify(
+      {
+        name: "helix-eval-fixture-large",
+        private: true,
+        type: "module",
+        scripts: { test: 'node --experimental-strip-types --test "tests/**/*.test.ts"' },
+      },
+      null,
+      2,
+    ) + "\n";
+  files["README.md"] =
+    `# Fixture (large)\n\nSource modules live in \`src/<name>/\`, per-module notes in \`docs/<name>.md\`, tests in \`tests/<name>/\`. Run \`npm test\`.\n`;
   files["src/index.ts"] =
-    mods.map((m) => `import { run as run${camel(m.name)} } from "./${m.name}/index.ts";`).join("\n") +
+    mods
+      .map((m) => `import { run as run${camel(m.name)} } from "./${m.name}/index.ts";`)
+      .join("\n") +
     `\n\nexport function runAll(x: number): number {\n  return (${mods.map((m) => `run${camel(m.name)}(x)`).join(" + ")}) % ${P};\n}\n`;
   const total = XS.map((x) => [x, mods.reduce((s, m) => s + runRef(model, m.index, x), 0) % P]);
   files["tests/integration.test.ts"] =

@@ -1,208 +1,67 @@
 # Helix
 
-**Helix is an open-source harness for AI coding agents that cuts token waste, isolates execution in ephemeral Git worktrees, and guarantees code quality with zero-token mechanical gates.**
+**Helix is an AI coding harness and execution engine.** It gives coding agents a compact project bootstrap, loads tools and domain knowledge on demand, gates writes and approvals, and supports single-model and cross-model work. A shared `helixd` daemon keeps the CLI, Terminal UI, and Web UI in sync.
 
-[Installation](docs/INSTALL.md) · [Documentation](docs/index.md) · [Quick Start](docs/QUICKSTART.md) · [Benchmarks](benchmarks/README.md) · [Contributing](CONTRIBUTING.md)
+[Install](docs/INSTALL.md) · [Quick Start](docs/QUICKSTART.md) · [CLI](docs/CLI.md) · [Architecture](docs/ARCHITECTURE.md) · [Configuration](docs/CONFIGURATION.md) · [Evidence](docs/EVIDENCE.md)
 
----
+## Helix v2 at a glance
 
-## How Helix Works
+- **Progressive Disclosure:** a bootstrap prompt stays below 600 tokens, including a Tier 0 domain route catalog below 250 tokens. `load_skill` and `tool_search` reveal relevant instructions and tools when needed.
+- **Quarantine-gated knowledge:** canonical domain guidance is read-only; retrieved episodic records remain in a mutable SQLite quarantine until compacted and reviewed.
+- **Heterogeneous model orchestration:** use bounded scouts, a context-firewalled cross-model auditor, or a file-owned peer team when the task benefits from them.
+- **Synchronized interfaces:** `helix serve` runs `helixd`; `helix tui` and `helix web` attach to its event stream and show the same sessions.
 
-Helix sits between the developer, the underlying AI coding agent (Claude Code, Cursor, OpenCode, Codex), and the project repository to keep coding workflows disciplined, isolated, and verified:
+## Progressive Disclosure Master Loop
 
-```mermaid
-flowchart TD
-    subgraph Dev["Developer"]
-        D1["Define task or issue"]
-        D2["Review verified diff & merge"]
-    end
+Helix starts each task with a measured bootstrap prompt under 600 tokens. The embedded Tier 0 catalog of domain IDs, descriptions, and path patterns is under 250 tokens. The agent uses `load_skill` for a selected domain's canonical guidance and `tool_search` to discover additional capabilities only when the task calls for them.
 
-    subgraph Project["Project & Knowledge"]
-        P1["Git repository & source"]
-        P2[".helix/knowledge/ project rules"]
-        P3["Isolated Git worktree"]
-    end
+Two gates constrain execution. The **VisibilityGate** limits which tools are exposed for the current task and phase. The **WriteGate** checks paths, ownership, and approvals before a write is allowed. At the configured 92% context threshold, Helix archives older tool output to `.helix/runtime/<session>/NOTES.md` and replaces it with compact digest pointers. This threshold is an auto-compaction trigger, not a claim of 92% compression. The committed static-cost measurement shows over 80% less upfront context than the smallest measured static instruction pack; see [Evidence](docs/EVIDENCE.md) for method and date.
 
-    subgraph Helix["Helix Harness"]
-        H1["1. Understand project context"]
-        H2["2. Retrieve domain rules (APKS)"]
-        H3["3. Plan task (Tiers 1-4)"]
-        H4["5. Mechanical gate (secrets, lint, tests)"]
-    end
+## Three-tier knowledge system
 
-    subgraph Agent["AI Coding Agent"]
-        A1["4. Implement changes in worktree"]
-        A2{"Review required?"}
-        A3["Diff review (high assurance)"]
-    end
+| Tier                        | Contents                                                                                                                                                | Policy                                                                                            |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| **0 — Routes**              | Deterministic catalog compiled from `.helix/knowledge/domains/*/domain.md` frontmatter: `id`, `description`, and `paths` (with supported path aliases). | Compact routing metadata; no broad rule injection.                                                |
+| **1 — Canonical**           | Read-only `SKILL.md` or `domain.md` files capped at 600 tokens, `references/*.md`, and executable `scripts/*.mjs` AST checks.                           | Loaded on demand; scripts consume no model tokens.                                                |
+| **2 — Episodic quarantine** | `.helix/knowledge/helix-memory.db`, using `better-sqlite3`, WAL, FTS5, and `sqlite-vec` `vec0` with 384-dimensional cosine KNN.                         | Mutable records are untrusted until offline `helix knowledge compact` promotes selected evidence. |
 
-    subgraph Tools["Tools & Tests"]
-        T1["Test suite & compiler"]
-    end
+Tier 2 retrieval fuses full-text and vector rankings with Reciprocal Rank Fusion (RRF), then applies structural checks with `@ast-grep/napi`. The current local vector feature is deterministic trigram hashing; it is not a learned embedding model. Quarantined memories do not become canonical rules automatically.
 
-    D1 --> H1
-    P1 --> H1
-    P2 --> H2
-    H1 --> H3
-    H2 --> H3
-    H3 -->|"12-line handoff card"| A1
-    H3 -.->|"spawns"| P3
-    P3 <--> A1
-    A1 --> A2
-    A2 -->|"Security / Complex"| A3
-    A2 -->|"Standard"| H4
-    A3 --> H4
-    H4 --> T1
-    T1 -->|"Pass (0 tokens)"| D2
-    T1 -.->|"Fail: return errors"| A1
-    D2 -->|"Merge"| P1
-```
+## Four execution topologies
 
-For detailed architecture and workflow lifecycle diagrams, see [Development Workflow](docs/diagrams/development-workflow.md) and [System Architecture](docs/diagrams/architecture.md).
+Helix replaces the old seven-role sequential relay with four bounded topologies:
 
----
+1. **`MODE_1_MASTER_LOOP`** — a single-threaded master loop and the default for routine tasks (about 80% is the design target; actual mode share has not been measured).
+2. **`MODE_2_DISPOSABLE_SCOUT`** — read-only bounded exploration using `Read`, `Grep`, `Glob`, and `ast_search`; at most 8 turns and a JSON synthesis of at most 250 tokens.
+3. **`MODE_3_ADVERSARIAL_AUDITOR`** — a two-stage gate. Stage A runs deterministic checks at zero model-token cost. Only a passing diff proceeds to Stage B, a context-firewalled audit routed to a different model family (Claude and Codex/OpenCode, depending on the generator).
+4. **`MODE_4_PEER_TEAM`** — a shared, file-locked task DAG at `.helix/runtime/teams/{id}/tasks.json`; wildcard-NFA overlap checks protect `ownedPaths`. Teammates submit plans through `approve_teammate_plan` before writing, exchange sanitized messages through `inboxes/`, and can use `consult_peer` or the runtime's `spawnHypothesisTeam` coordination method.
 
-## Does Helix Actually Help? The Evidence
+## CLI
 
-We do not ask developers to trust architectural claims. We evaluate Helix head-to-head against unharnessed baseline agents on identical models, tasks, and commits using paired bootstrap statistics (10,000 resamples):
+| Command                         | Purpose                                                             |
+| ------------------------------- | ------------------------------------------------------------------- |
+| `helix init [dir]`              | Generate the Helix instruction pack and project setup.              |
+| `helix run [task] [--tmux]`     | Execute a task; `--tmux` enables the tmux workflow where available. |
+| `helix serve [dir]`             | Start the `helixd` daemon and its SSE/API endpoints.                |
+| `helix tui [dir]`               | Open the Terminal UI, synchronized through the daemon.              |
+| `helix web [dir]`               | Open the Web UI, synchronized through the daemon.                   |
+| `helix gate [dir]`              | Run deterministic checks against the workspace.                     |
+| `helix knowledge compact [dir]` | Review and compact quarantined episodic knowledge offline.          |
+| `helix doctor [dir]`            | Audit the generated Helix pack and local integration setup.         |
+| `helix measure [dir]`           | Measure generated instruction-pack token costs.                     |
+| `helix bench [dir]`             | Run benchmark scenarios.                                            |
+| `helix eval [dir]`              | Run evaluation suites.                                              |
 
-| Measurement                 | Unharnessed Agent | With Helix (`helix-min`) |                   Measured Difference | Statistical Verdict        |
-| --------------------------- | ----------------: | -----------------------: | ------------------------------------: | -------------------------- |
-| **Task Completion**         |      16/16 (100%) |             16/16 (100%) |                    0 discordant pairs | **Parity maintained**      |
-| **Median Uncached Tokens**  |     22,268 tokens |            19,437 tokens |  **-12.7%** (95% CI: -23.9% .. -0.3%) | **saves tokens**           |
-| **Deep Call Chain Tracing** |     24,638 tokens |            18,521 tokens |  **-24.8%** (95% CI: -37.3% .. -9.0%) | **saves tokens**           |
-| **Zero-Token Verification** |          0 checks |          100% mechanical | **0 model tokens** (15-30s wall time) | **Eliminates regressions** |
-| **Graphify MCP Overhead**   |          Baseline |        With Graphify MCP | **+28.7%** (95% CI: +13.8% .. +45.5%) | **costs tokens**           |
+For flags, provider setup, and additional commands, see the [CLI reference](docs/CLI.md). Helix requires Node.js **26.4 or newer** when installed through npm; standalone distributions bundle Node.
 
-### What the Evidence Teaches Us:
+## Documentation
 
-1. **Instructions & Gates Save Tokens:** `helix-min` achieves statistically significant token savings (-12.7% overall, -24.8% on deep call chains) by providing exact test commands in `AGENTS.md` and preventing exploratory wheel-spinning.
-2. **Subagents Do Not Help Routine Tasks:** Single-agent execution is token-optimal for standard bug fixes. Multi-agent swarms add +61% to +140% token overhead without increasing pass rates.
-3. **Graph Intelligence Has a Size Floor:** Graphify MCP adds +28.7% tokens on moderate codebases (~52 files) due to schema and search overhead. Helix defaults to lightweight maps on normal repos.
+- [Quick Start](docs/QUICKSTART.md) · [Installation](docs/INSTALL.md) · [Updating](docs/UPDATING.md)
+- [Architecture](docs/ARCHITECTURE.md) · [Configuration](docs/CONFIGURATION.md) · [CLI reference](docs/CLI.md)
+- [Evidence and measurements](docs/EVIDENCE.md) · [Benchmarks](docs/benchmarks/README.md) · [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Distribution](docs/DISTRIBUTION.md) · [Platform support](docs/PLATFORM_SUPPORT.md) · [Uninstall](docs/UNINSTALLING.md)
 
-For complete data and methodology, see [Benchmark Methodology](docs/benchmarks/methodology.md), [Results & Findings](docs/benchmarks/results.md), and [Limitations & Trade-offs](docs/benchmarks/limitations.md).
-
----
-
-## Why Helix?
-
-Most AI agent frameworks assume that adding more agents produces better code. In practice, uncoordinated multi-agent swarms multiply token consumption by 3x–4x and increase regression rates through conversational drift.
-
-Helix enforces a disciplined, evidence-based engineering philosophy:
-
-- **Single-Agent by Default**: Routine tasks run in a single session at minimum token cost (~815 tokens/task).
-- **Mechanical Validation Over Claims**: An agent claiming "all tests pass" is ignored; success is determined solely by zero-token verification gates (`.helix/gate.mjs`).
-- **Worktree Isolation**: Ephemeral Git worktrees prevent workspace corruption and dirty working trees.
-- **Independent Adversarial Review**: For complex or sensitive tasks, an isolated reviewer inspects only the diff and requirements, eliminating regressions at a modest +61% token premium.
-
----
-
-## What Helix Improves for Developers
-
-| Technical Capability                                 | Everyday Developer Benefit                                                                        |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| **Targeted Pack Generation (`helix init`)**          | Sets up platform configs and `AGENTS.md` (≤300t) without wading through vendor docs.              |
-| **Zero-Token Verification Gate (`helix gate`)**      | Catches syntax errors, lint failures, and broken tests before code is considered done.            |
-| **Worktree Sandboxing (`helix run`)**                | Executes changes in ephemeral worktrees; aborted or failed tasks never corrupt your working tree. |
-| **Adaptive Project Knowledge (`.helix/knowledge/`)** | Remembers domain boundaries and naming rules without having to re-explain them.                   |
-| **Repeatable Benchmark Suite (`helix bench`)**       | Allows teams to independently measure whether agent configurations actually save tokens.          |
-
----
-
-## Features
-
-- **Harness Pack Generation**: Emits deterministic, minimal instruction packs (`AGENTS.md` ≤ 300 tokens) tailored per platform.
-- **Autonomous Task Execution (`helix run`)**: Drives coding tasks with progressive context assembly, worktree isolation, and bounded retries.
-- **Zero-Token Verification Gate (`helix gate`)**: Mechanically scans secrets, checks linting, runs typecheck, and executes affected tests.
-- **Repeatable Benchmark Suite (`helix bench`)**: Evaluates pass rates, regression tracking, and costs across 10 task categories and 5 execution strategies.
-- **Security & Least-Privilege Sandboxing**: Path jail confinement, secret redaction, untrusted content framing, and role-based permissions.
-- **Observability & Diagnostics**: Real-time event streaming, structured `--json` reports, token counting via `gpt-tokenizer`, and `helix doctor`.
-
----
-
-## Installation
-
-Install Helix without cloning its source repository:
-
-### Global npm (Recommended)
-
-```sh
-npm install -g @sm-me-dev/helix
-```
-
-Or execute directly with zero install:
-
-```sh
-npx @sm-me-dev/helix --help
-```
-
-### Universal Standalone Installer (Linux & macOS)
-
-Downloads a self-contained application bundle with an embedded Node runtime (no system Node installation required):
-
-```sh
-curl -fsSL https://sm-me-dev.github.io/helix/install.sh | sh
-```
-
-### Homebrew (macOS & Linux)
-
-```sh
-brew install sm-me-dev/tap/helix
-```
-
-### Debian / Ubuntu (APT)
-
-```sh
-curl -fsSL https://sm-me-dev.github.io/helix/install-apt.sh | sudo sh
-```
-
-### Windows (PowerShell)
-
-```powershell
-irm https://sm-me-dev.github.io/helix/install.ps1 | iex
-```
-
-### Contributor & Development Installation
-
-For developers working directly on the Helix codebase:
-
-```sh
-git clone https://github.com/sm-me-dev/helix.git ~/helix
-cd ~/helix && npm ci
-./cli/helix.mjs link
-```
-
-For complete distribution details, see [Installation Guide](docs/INSTALL.md) · [Updating](docs/UPDATING.md) · [Uninstalling](docs/UNINSTALLING.md) · [Platform Support](docs/PLATFORM_SUPPORT.md).
-
----
-
-## Quick Start
-
-### 1. Initialize a Harness Pack for Your Repository
-
-```sh
-helix init ~/your-repo --platform claude-code,cursor
-```
-
-### 2. Verify Repository Health
-
-```sh
-helix doctor ~/your-repo
-```
-
-### 3. Execute a Coding Task
-
-```sh
-helix run "Fix division by zero error in src/calc.ts and update test suite"
-```
-
-For advanced workflows, strategy selection, and configuration options, see the [Developer Quickstart Guide](docs/QUICKSTART.md).
-
----
-
-## Platform Matrix
-
-Helix emits configurations only where vendor documentation was verified.
+## Platform capability matrix
 
 <!-- matrix:start -->
 
@@ -226,41 +85,14 @@ Helix emits configurations only where vendor documentation was verified.
 
 <!-- matrix:end -->
 
----
-
-## Documentation
-
-- **[Documentation Index](docs/index.md)**: Master documentation hub.
-- **[Installation Guide](docs/INSTALL.md)**: Prerequisites, shell linking, verification, and uninstallation.
-- **[Quickstart Guide](docs/QUICKSTART.md)**: First task walkthrough and core workflow options.
-- **[CLI Reference](docs/CLI.md)**: Comprehensive command, flag, and exit code reference.
-- **[Configuration Reference](docs/CONFIGURATION.md)**: Config file schemas, environment variables, and pricing tables.
-- **[Architecture Guide](docs/ARCHITECTURE.md)**: Engine boundaries, the 13 components, and execution lifecycle.
-- **[Workflow Diagram](docs/diagrams/development-workflow.md)**: Visual end-to-end user journey and execution lifecycle.
-- **[System Architecture Diagram](docs/diagrams/architecture.md)**: Dual-modality architecture and component boundaries.
-- **[Benchmark Suite](benchmarks/README.md)**: Repeatable benchmark runner and task definitions.
-- **[Benchmark Methodology](docs/benchmarks/methodology.md)**: Statistical pairing, bootstrap intervals, and grading rules.
-- **[Benchmark Results](docs/benchmarks/results.md)**: Empirical findings, token deltas, and per-task breakdown.
-- **[Benchmark Limitations](docs/benchmarks/limitations.md)**: Known trade-offs, overheads, and where Helix does not help.
-- **[Troubleshooting & FAQ](docs/TROUBLESHOOTING.md)**: Diagnostics, common failure modes, and answers to common questions.
-- **[Distribution Guide](docs/DISTRIBUTION.md)**: Release channels, npm, Homebrew, and supply-chain security.
-- **[Architectural Decisions](docs/DECISIONS.md)**: Append-only design records and rejected alternatives.
-- **[Empirical Evidence](docs/EVIDENCE.md)**: Measured benchmark findings and statistical evaluation data.
-
----
-
 ## Development
 
-Helix enforces strict quality gates on every commit:
-
 ```sh
-npm run lint && npm run typecheck && npm test
+npm install
+npm run build
+npm run typecheck
+npm run lint
+npm test
 ```
 
-For developer setup, coding standards, and PR workflows, read the [Contributing Guide](CONTRIBUTING.md).
-
----
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.

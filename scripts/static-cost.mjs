@@ -95,6 +95,7 @@ const report = {
     measuredAt: new Date().toISOString().slice(0, 10),
     coreAndTier0Tokens: progressiveBootstrapTokens,
     tier0CatalogTokens: countTokens(tier0Catalog),
+    contextAutoCompactThresholdPercent: Math.round(bootstrap.state.autoCompactThresholdRatio * 100),
     comparisonBaseline: "smallest current always-on pack scenario",
     baselineTokens: smallestCurrentPack,
     reductionPercent: progressiveReductionPercent,

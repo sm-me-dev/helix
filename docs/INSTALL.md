@@ -45,7 +45,7 @@ curl -fsSL https://sm-me-dev.github.io/helix/install.sh | sh
 
 ```sh
 # Specify explicit release version
-curl -fsSL https://sm-me-dev.github.io/helix/install.sh | sh -s -- --version 0.1.0
+curl -fsSL https://sm-me-dev.github.io/helix/install.sh | sh -s -- --version 0.2.0
 
 # Custom binary and library directories
 curl -fsSL https://sm-me-dev.github.io/helix/install.sh | sh -s -- --dir /opt/helix --bin-dir /usr/local/bin
@@ -80,7 +80,7 @@ curl -fsSL https://sm-me-dev.github.io/helix/install-apt.sh | sudo sh
 Or download the `.deb` package directly from [GitHub Releases](https://github.com/sm-me-dev/helix/releases/latest):
 
 ```sh
-sudo dpkg -i helix_0.1.0_linux_amd64.deb
+sudo dpkg -i helix_0.2.0_linux_amd64.deb
 ```
 
 ---
@@ -90,7 +90,7 @@ sudo dpkg -i helix_0.1.0_linux_amd64.deb
 Download the `.rpm` package from [GitHub Releases](https://github.com/sm-me-dev/helix/releases/latest) and install via `dnf`:
 
 ```sh
-sudo dnf install helix-0.1.0-1.x86_64.rpm
+sudo dnf install helix-0.2.0-1.x86_64.rpm
 ```
 
 ---
@@ -122,25 +122,25 @@ Pre-built self-contained archives are published with every release on [GitHub Re
 
 | Platform    | Architecture                | Release Artifact                   |
 | ----------- | --------------------------- | ---------------------------------- |
-| **Linux**   | x64 (AMD64)                 | `helix-v0.1.0-linux-x64.tar.gz`    |
-| **Linux**   | ARM64 (aarch64)             | `helix-v0.1.0-linux-arm64.tar.gz`  |
-| **macOS**   | Apple Silicon (M1/M2/M3/M4) | `helix-v0.1.0-darwin-arm64.tar.gz` |
-| **macOS**   | Intel (x86_64)              | `helix-v0.1.0-darwin-x64.tar.gz`   |
-| **Windows** | x64 (AMD64)                 | `helix-v0.1.0-windows-x64.zip`     |
+| **Linux**   | x64 (AMD64)                 | `helix-v0.2.0-linux-x64.tar.gz`    |
+| **Linux**   | ARM64 (aarch64)             | `helix-v0.2.0-linux-arm64.tar.gz`  |
+| **macOS**   | Apple Silicon (M1/M2/M3/M4) | `helix-v0.2.0-darwin-arm64.tar.gz` |
+| **macOS**   | Intel (x86_64)              | `helix-v0.2.0-darwin-x64.tar.gz`   |
+| **Windows** | x64 (AMD64)                 | `helix-v0.2.0-windows-x64.zip`     |
 
 ### Manual Verification and Extraction:
 
 ```sh
 # 1. Download release archive and checksums
-curl -LO https://github.com/sm-me-dev/helix/releases/download/v0.1.0/helix-v0.1.0-linux-x64.tar.gz
-curl -LO https://github.com/sm-me-dev/helix/releases/download/v0.1.0/SHA256SUMS.txt
+curl -LO https://github.com/sm-me-dev/helix/releases/download/v0.2.0/helix-v0.2.0-linux-x64.tar.gz
+curl -LO https://github.com/sm-me-dev/helix/releases/download/v0.2.0/SHA256SUMS.txt
 
 # 2. Verify SHA-256 checksum
 sha256sum --check --ignore-missing SHA256SUMS.txt
 
 # 3. Extract and link
 mkdir -p ~/.local/lib/helix ~/.local/bin
-tar -xzf helix-v0.1.0-linux-x64.tar.gz -C ~/.local/lib/helix --strip-components=1
+tar -xzf helix-v0.2.0-linux-x64.tar.gz -C ~/.local/lib/helix --strip-components=1
 ln -sf ~/.local/lib/helix/bin/helix ~/.local/bin/helix
 ```
 

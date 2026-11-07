@@ -1,5 +1,7 @@
 # Helix Benchmark Methodology
 
+> **Scope:** The paired agent runs documented here are a historical 2026-10 experiment on static instruction-pack arms. They do not evaluate the Helix v2 execution modes, quarantine knowledge system, or daemon clients. Treat results and architecture terminology below as historical evidence for those specific arms.
+
 This document details the experimental protocols, grading pipeline, pairing strategy, and statistical foundations used to evaluate Helix against unharnessed AI coding agents.
 
 ---

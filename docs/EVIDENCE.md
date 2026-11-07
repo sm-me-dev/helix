@@ -58,7 +58,8 @@ MCP schema weights are measured from live `tools/list` captures except context7 
 ### Progressive disclosure bootstrap
 
 The always-on bootstrap is **133 tokens**, including a **79-token Tier 0 route catalog**. Compared with the smallest current always-on pack scenario (**784 tokens**), that is an **83% reduction**. The bootstrap stays below 600 tokens, Tier 0 below 250 tokens, and the reduction above 80%.
-Measured 2026-11-07 using o200k_base BPE via gpt-tokenizer (approximation of frontier tokenizers, not the serving model's own count).
+At the configured **undefined% context-budget threshold**, older tool output is archived to the session's `.helix/runtime/<session>/NOTES.md` and replaced inline with a digest pointer. This is a trigger threshold, not a measured compression percentage.
+Token counts measured 2026-11-07 using o200k_base BPE via gpt-tokenizer (approximation of frontier tokenizers, not the serving model's own count).
 
 ```mermaid
 xychart-beta

@@ -1,5 +1,7 @@
 # Helix Benchmark Limitations and Trade-Offs
 
+> **Scope:** The numerical comparisons below describe a historical 2026-10 static-pack experiment, not the Helix v2 runtime architecture. Do not generalize them to the v2 auditor or peer-team topologies.
+
 Helix is engineered to provide measurable improvements, not marketing claims. This document details known limitations, architectural trade-offs, and conditions where Helix does not improve development workflows.
 
 ---

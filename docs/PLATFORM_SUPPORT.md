@@ -1,42 +1,14 @@
-# Platform Support Matrix
+# Platform support
 
-This document outlines the operating systems, architectures, and distribution channels officially supported by Helix.
+Helix supports npm on platforms with Node.js **>= 26.4** and provides standalone release bundles with an embedded Node runtime. The bundle build currently targets Linux x64 and arm64, macOS x64 and arm64, and Windows x64. Check the release page for assets available in a specific release.
 
----
+| Installation                    | Requirements                              |
+| ------------------------------- | ----------------------------------------- |
+| npm package                     | Node.js >= 26.4                           |
+| Source checkout or `helix link` | Node.js >= 26.4 and Git                   |
+| Standalone archive/installer    | Supported release target; Node is bundled |
+| `helix web` from source         | Run `npm run build` first                 |
 
-## 1. Operating System & Architecture Matrix
+Helix uses Git for repository operations and worktree-backed workflows. Platform-specific package-manager availability may differ by release; the package manifests are in `Formula/helix.rb`, `manifests/scoop/helix.json`, and `manifests/winget/sm-me-dev.Helix.yaml`.
 
-| Platform                           | Architecture            | Tier   | Status              | Verification Method                                                                          |
-| ---------------------------------- | ----------------------- | ------ | ------------------- | -------------------------------------------------------------------------------------------- |
-| **Linux (Debian, Ubuntu)**         | `x86_64` (AMD64)        | Tier 1 | **Fully Supported** | Tested in CI (Ubuntu 22/24 runners), Debian package validation, standalone bundle execution. |
-| **Linux (Fedora, RHEL, CentOS)**   | `x86_64` (AMD64)        | Tier 1 | **Fully Supported** | RPM build verification, standalone bundle execution.                                         |
-| **Linux (Debian, Ubuntu, Alpine)** | `aarch64` (ARM64)       | Tier 1 | **Fully Supported** | Native Node 26.4 runtime bundle, dpkg verification.                                          |
-| **macOS (Sonoma, Sequoia)**        | Apple Silicon (`arm64`) | Tier 1 | **Fully Supported** | Homebrew formula testing, standalone bundle testing.                                         |
-| **macOS (Ventura, Sonoma)**        | Intel (`x86_64`)        | Tier 1 | **Fully Supported** | Homebrew formula testing, standalone bundle testing.                                         |
-| **Windows 10/11 (WSL2)**           | `x86_64` (AMD64)        | Tier 1 | **Fully Supported** | Linux bundles and npm packages run identically under WSL2.                                   |
-| **Windows 10/11 (Native)**         | `x86_64` (AMD64)        | Tier 2 | **Supported**       | `helix.cmd` portable launcher and PowerShell installer.                                      |
-| **Windows (ARM64)**                | `arm64`                 | Tier 3 | **Experimental**    | Requires emulation or manual Node installation.                                              |
-
----
-
-## 2. Distribution Channel Matrix
-
-| Distribution Channel                               | Target OS              | Runtime Prerequisite      | Status     | Verification Status                                         |
-| -------------------------------------------------- | ---------------------- | ------------------------- | ---------- | ----------------------------------------------------------- |
-| **npm Global Package**                             | Cross-platform         | Node.js >= 26.4           | **Active** | Verified via clean prefix install and smoke tests.          |
-| **Universal Shell Installer (`install.sh`)**       | Linux, macOS           | None (embedded Node 26.4) | **Active** | Verified in clean isolated environment without system Node. |
-| **Universal PowerShell Installer (`install.ps1`)** | Windows                | None (embedded Node 26.4) | **Active** | Verified script syntax and extraction.                      |
-| **Homebrew Tap (`sm-me-dev/tap/helix`)**           | macOS, Linux           | None (embedded Node 26.4) | **Active** | Verified Formula syntax and test block.                     |
-| **Debian / Ubuntu Package (`.deb`)**               | Linux (Debian, Ubuntu) | None (embedded Node 26.4) | **Active** | Verified via `dpkg-deb` build, info, and contents checks.   |
-| **Fedora / RHEL Package (`.rpm`)**                 | Linux (Fedora, RHEL)   | None (embedded Node 26.4) | **Active** | Verified via `rpmbuild` execution and checksum generation.  |
-| **WinGet Manifest (`sm-me-dev.Helix`)**            | Windows                | None (embedded Node 26.4) | **Staged** | Schema-validated YAML manifest.                             |
-| **Scoop Manifest (`helix.json`)**                  | Windows                | None (embedded Node 26.4) | **Staged** | Validated JSON bucket manifest.                             |
-| **Git PATH Link (`helix link`)**                   | Cross-platform         | Node.js >= 26.4, Git      | **Active** | Verified development workflow.                              |
-
----
-
-## 3. Prerequisite & Dependency Policy
-
-- **No System Node Required for Bundles**: Standalone archives, `.deb`, `.rpm`, Homebrew, and curl installers bundle Node.js 26.4 into `runtime/`. Users do not need to install or configure Node.js.
-- **Git Requirement**: Helix requires Git >= 2.30 for ephemeral worktree management (`git worktree add`).
-- **Graphify Requirement (Optional)**: If `graphify` (`uv tool install graphifyy`) is absent, Helix automatically falls back to its built-in structural outline map with zero performance penalty.
+See [Installation](INSTALL.md) and [Distribution](DISTRIBUTION.md) for current installation steps.

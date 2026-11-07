@@ -17,7 +17,10 @@ describe("parseYaml", () => {
     ]);
     for (const f of files) {
       const task = parseYaml(await readFile(new URL(`./tasks/${f}`, import.meta.url), "utf8"));
-      assert.ok(task.id && task.title && task.prompt && task.pass, `${f} needs id/title/prompt/pass`);
+      assert.ok(
+        task.id && task.title && task.prompt && task.pass,
+        `${f} needs id/title/prompt/pass`,
+      );
       assert.equal(typeof task.timeoutSec, "number", `${f} needs a numeric timeoutSec`);
     }
   });

@@ -1,108 +1,54 @@
-# Helix Configuration Reference
+# Configuration
 
-Helix supports flexible, hierarchical configuration that adapts to individual developer workflows, project-level standards, and automated CI/CD pipelines.
+Helix resolves AI provider settings field by field through six effective levels: five sources followed by built-in defaults. Higher levels override values supplied below them.
 
----
+## Provider precedence
 
-## 1. Configuration Precedence
+1. **Runtime overrides** from the active session or tool runtime.
+2. **CLI flags** supplied for the current command.
+3. **Environment variables**, including `HELIX_AI_*`, `OPENAI_BASE_URL`, and `OPENAI_API_KEY` (legacy `OPENAI_API_BASE` is also recognized).
+4. **Workspace `.helix/config.toml`**, subject to the Trusted Workspace guard.
+5. **Global `~/.config/helix/providers.toml`**.
+6. **Built-in defaults**.
 
-Helix resolves configuration settings in the following strict order of precedence (highest to lowest):
+Values merge per field, so a runtime model override can coexist with a base URL from the global profile. Sensitive workspace settings such as provider URLs, shell hooks, and nonempty MCP server configuration are ignored unless the workspace is explicitly trusted.
 
-1. **Runtime CLI Flags**: Flags passed directly to commands (e.g., `helix run --strategy chain --timeout 300`).
-2. **Project Configuration File**: `.helix/config.json` in your repository root or ascending parent directories.
-3. **Environment Variables**: System environment variables prefixed with `HELIX_` (e.g., `export HELIX_PROVIDER=anthropic`).
-4. **Engine Defaults**: Built-in production defaults defined in `src/engine/config.ts`.
+Example workspace provider configuration:
 
----
-
-## 2. Project Configuration (`.helix/config.json`)
-
-To establish shared project defaults, create a `.helix/config.json` file in your repository root:
-
-```json
-{
-  "defaultPlatform": "claude-code",
-  "defaultSingleAgent": true,
-  "defaultProvider": "anthropic",
-  "defaultModelId": "claude-3-5-sonnet-20241022",
-  "defaultTimeoutSec": 600,
-  "maxRetries": 2,
-  "worktreeDir": ".helix-work/worktrees",
-  "reportDir": ".helix-work/reports"
-}
+```toml
+provider = "local"
+model = "qwen2.5-coder:14b"
+base_url = "http://localhost:11434"
+# api_key may be omitted for a keyless loopback server
 ```
 
-### Configuration Options Schema
+Example global configuration:
 
-| Field                | Type      | Default                        | Description                                                                                                           |
-| -------------------- | --------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| `defaultPlatform`    | `string`  | `"claude-code"`                | Default agent platform: `claude-code`, `opencode`, `codex`, `cursor`, `gemini`, `copilot`, `antigravity`.             |
-| `defaultSingleAgent` | `boolean` | `true`                         | When `true`, tasks execute in a single agent session by default. Orchestrator engages only when explicitly requested. |
-| `defaultProvider`    | `string`  | `"anthropic"`                  | LLM provider for token counting and cost modeling: `anthropic`, `openai`, `google`, `local`.                          |
-| `defaultModelId`     | `string`  | `"claude-3-5-sonnet-20241022"` | Default LLM model identifier.                                                                                         |
-| `defaultTimeoutSec`  | `number`  | `600`                          | Task execution timeout in seconds. Subprocesses exceeding this limit receive `SIGKILL`.                               |
-| `maxRetries`         | `number`  | `2`                            | Maximum mechanical gate validation retries. Clamped to a hard architectural ceiling of `2` to prevent token runaway.  |
-| `worktreeDir`        | `string`  | `".helix-work/worktrees"`      | Base directory where ephemeral Git worktrees are provisioned.                                                         |
-| `reportDir`          | `string`  | `".helix-work/reports"`        | Base directory where execution JSON reports and benchmark results are saved.                                          |
-
----
-
-## 3. Environment Variables Reference
-
-Every engine setting can be configured via environment variables. Environment variables take precedence over `.helix/config.json`.
-
-| Variable               | Matching Config Field | Description                           | Example                                    |
-| ---------------------- | --------------------- | ------------------------------------- | ------------------------------------------ |
-| `HELIX_PLATFORM`       | `defaultPlatform`     | Target agent platform CLI             | `export HELIX_PLATFORM=cursor`             |
-| `HELIX_PROVIDER`       | `defaultProvider`     | LLM provider for token math & pricing | `export HELIX_PROVIDER=openai`             |
-| `HELIX_MODEL`          | `defaultModelId`      | Model identifier string               | `export HELIX_MODEL=gpt-4o`                |
-| `HELIX_TIMEOUT_SEC`    | `defaultTimeoutSec`   | Execution timeout in seconds          | `export HELIX_TIMEOUT_SEC=300`             |
-| `HELIX_MAX_RETRIES`    | `maxRetries`          | Maximum gate retries (0, 1, or 2)     | `export HELIX_MAX_RETRIES=1`               |
-| `HELIX_SINGLE_AGENT`   | `defaultSingleAgent`  | Force single-agent default (`1`/`0`)  | `export HELIX_SINGLE_AGENT=1`              |
-| `HELIX_WORKTREE_DIR`   | `worktreeDir`         | Custom ephemeral worktree path        | `export HELIX_WORKTREE_DIR=/tmp/worktrees` |
-| `HELIX_REPORT_DIR`     | `reportDir`           | Custom execution reports path         | `export HELIX_REPORT_DIR=/tmp/reports`     |
-| `HELIX_SIMULATION`     | N/A                   | Enable deterministic mock agent (CI)  | `export HELIX_SIMULATION=1`                |
-| `HELIX_RUNNER_COMMAND` | N/A                   | Custom subprocess command override    | `export HELIX_RUNNER_COMMAND=my-agent`     |
-
----
-
-## 4. Model Pricing & Token Accounting
-
-Helix includes verified pricing tables in `src/engine/provider.ts` to compute sub-cent execution costs across input, output, and cache-read tokens:
-
-### Anthropic Pricing Table
-
-| Model ID                     | Input ($/M) | Output ($/M) | Cache Read ($/M) |
-| ---------------------------- | ----------- | ------------ | ---------------- |
-| `claude-3-5-sonnet-20241022` | $3.00       | $15.00       | $0.30            |
-| `claude-3-7-sonnet`          | $3.00       | $15.00       | $0.30            |
-| `claude-3-5-haiku`           | $1.00       | $5.00        | $0.10            |
-| `claude-3-opus`              | $15.00      | $75.00       | $1.50            |
-
-### OpenAI Pricing Table
-
-| Model ID      | Input ($/M) | Output ($/M) | Cache Read ($/M) |
-| ------------- | ----------- | ------------ | ---------------- |
-| `gpt-4o`      | $2.50       | $10.00       | $1.25            |
-| `gpt-4o-mini` | $0.15       | $0.60        | $0.075           |
-| `o1`          | $15.00      | $60.00       | $7.50            |
-| `o3-mini`     | $1.10       | $4.40        | $0.55            |
-
-### Google Gemini Pricing Table
-
-| Model ID           | Input ($/M) | Output ($/M) | Cache Read ($/M) |
-| ------------------ | ----------- | ------------ | ---------------- |
-| `gemini-2.5-flash` | $0.15       | $0.60        | $0.0375          |
-| `gemini-2.5-pro`   | $1.25       | $5.00        | $0.3125          |
-
----
-
-## 5. Validating Configuration
-
-You can verify your configuration at any time using `helix doctor`:
-
-```sh
-helix doctor
+```toml
+[providers.local]
+provider = "openai-compatible"
+model = "qwen2.5-coder:14b"
+base_url = "http://127.0.0.1:11434"
 ```
 
-`helix doctor` inspects your configuration files, validates platform schemas, checks hook permissions, verifies tool integrity, and reports any invalid options with actionable fixes.
+Use the provider profile and fields supported by the installed Helix version; do not commit real credentials. Environment variables are useful for CI and short-lived overrides.
+
+## URL normalization and local servers
+
+Helix trims surrounding whitespace, invisible Unicode and trailing slashes, then removes a recognized endpoint suffix when it appears at the end of the configured URL: `/chat/completions`, `/responses`, `/embeddings`, or `/models`. Configure the API base URL, for example `http://localhost:11434/v1`, rather than a full operation URL.
+
+For a keyless loopback endpoint (including localhost, `127.*`, `0.0.0.0`, and `::1`), Helix supplies the synthetic key `sk-helix-local` so OpenAI-compatible clients can initialize. This is a local compatibility value, not a credential. Remote endpoints still require their configured key.
+
+## Provider connectivity check
+
+The provider handshake first sends `GET {base_url}/models`. If that endpoint responds with 404 or 405, Helix retries with a minimal one-token `POST {base_url}/chat/completions` request. A successful response confirms reachability and basic chat compatibility.
+
+This handshake is exposed in provider setup (including the TUI `/doctor` flow and daemon provider verification endpoint). The CLI command `helix doctor [dir]` has a separate purpose: it audits the generated Helix pack and local integrations; it does not itself perform the provider handshake.
+
+## Context and workspace settings
+
+The progressive context system begins below 600 tokens, with a Tier 0 route catalog below 250 tokens. At the configured 92% context threshold, older tool output is archived to `.helix/runtime/<session>/NOTES.md`; 92% is the trigger threshold, not a compression percentage. Workspace trust and provider fields are described in the [configuration implementation](../src/engine/config-loader.ts) and [URL sanitizer](../src/engine/url-sanitizer.ts).
+
+## Runtime requirements
+
+The npm package requires Node.js **>= 26.4**. Standalone archives and installers bundle the supported Node runtime. See [Installation](INSTALL.md) for platform-specific options.

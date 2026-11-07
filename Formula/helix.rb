@@ -3,9 +3,9 @@
 
 # Homebrew formula for Helix
 class Helix < Formula
-  desc "AI coding harness with bounded context, ephemeral worktrees, and mechanical gates"
+  desc "AI coding harness with progressive context, quarantined knowledge, and multi-model execution"
   homepage "https://github.com/sm-me-dev/helix"
-  version "0.1.0"
+  version "0.2.0"
   license "MIT"
 
   on_macos do

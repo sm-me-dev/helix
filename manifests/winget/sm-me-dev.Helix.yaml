@@ -1,13 +1,13 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.6.0.schema.json
 PackageIdentifier: sm-me-dev.Helix
-PackageVersion: 0.1.0
+PackageVersion: 0.2.0
 DefaultLocale: en-US
 Publisher: sm-me-dev
 PackageName: Helix
 PackageUrl: https://github.com/sm-me-dev/helix
 License: MIT
 LicenseUrl: https://github.com/sm-me-dev/helix/blob/main/LICENSE
-ShortDescription: AI coding harness with bounded context, ephemeral worktrees, and mechanical gates
+ShortDescription: Helix v2 AI coding harness with progressive disclosure and multi-model execution
 Moniker: helix
 Tags:
   - ai
@@ -17,7 +17,7 @@ Tags:
 Installers:
   - Architecture: x64
     InstallerType: zip
-    InstallerUrl: https://github.com/sm-me-dev/helix/releases/download/v0.1.0/helix-v0.1.0-windows-x64.zip
+    InstallerUrl: https://github.com/sm-me-dev/helix/releases/download/v0.2.0/helix-v0.2.0-windows-x64.zip
     NestedInstallerType: portable
     NestedInstallerFiles:
       - RelativeFilePath: helix\bin\helix.cmd

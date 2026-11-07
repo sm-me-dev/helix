@@ -1,7 +1,7 @@
 {
   "name": "@sm-me-dev/helix",
-  "version": "0.1.0",
-  "description": "An AI coding harness that earns its tokens through bounded context, ephemeral worktrees, and zero-token mechanical gates",
+  "version": "0.2.0",
+  "description": "Helix v2 AI coding harness and execution engine with progressive disclosure, quarantined project knowledge, multi-model orchestration, and synchronized daemon, terminal, and web clients",
   "license": "MIT",
   "publishConfig": {
     "access": "public"

@@ -149,7 +149,11 @@ for (const id of ids) {
     await mkdir(dumpDir, { recursive: true });
     await writeFile(
       `${dumpDir}/${id}.tools.json`,
-      JSON.stringify({ server: id, capturedAt: today, toolCount: res.tools.length, tools: res.tools }, null, 2) + "\n",
+      JSON.stringify(
+        { server: id, capturedAt: today, toolCount: res.tools.length, tools: res.tools },
+        null,
+        2,
+      ) + "\n",
     );
   }
   doc.servers[id] = {
@@ -163,7 +167,12 @@ for (const id of ids) {
 
 for (const [id, reason] of Object.entries(REMOTE)) {
   if (only && !only.includes(id)) continue;
-  doc.servers[id] = doc.servers[id] ?? { tokens: null, version: null, measuredAt: null, method: "" };
+  doc.servers[id] = doc.servers[id] ?? {
+    tokens: null,
+    version: null,
+    measuredAt: null,
+    method: "",
+  };
   if (doc.servers[id].tokens == null) {
     doc.servers[id].method = `unmeasured: ${reason}`;
   }

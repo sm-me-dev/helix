@@ -1,92 +1,49 @@
-# Helix Development Workflow Diagram
+# Helix v2 development workflow
 
-This document illustrates the end-to-end development workflow when using Helix, showing how a developer interacts with Helix, how Helix guides the underlying AI coding agent, and how validation gates enforce software quality.
-
----
-
-## The Helix Developer Journey
+```mermaid
+stateDiagram-v2
+    [*] --> INIT
+    INIT --> DISCOVER
+    INIT --> EXECUTE: direct / no worktree
+    INIT --> BLOCKED
+    DISCOVER --> EXECUTE
+    DISCOVER --> BLOCKED
+    EXECUTE --> VERIFY
+    EXECUTE --> COMPLETE: question / no diff gate
+    EXECUTE --> BLOCKED
+    VERIFY --> COMPLETE
+    VERIFY --> BLOCKED
+    BLOCKED --> INIT: retry
+    BLOCKED --> DISCOVER: resume
+    COMPLETE --> [*]
+```
 
 ```mermaid
 flowchart TD
-    %% Roles & Boundaries
-    subgraph DevSpace["Developer Space"]
-        Dev["Developer"]
-        TaskDef["1. Define Task / Issue"]
-        Review["8. Final Review & Merge"]
-    end
-
-    subgraph HelixHarness["Helix Harness"]
-        ContextMgr["2. Layered Context & Token Budget"]
-        KnowledgeRetriever["3. APKS Knowledge Retrieval"]
-        TaskPlanner["4. Tier Planning (Tiers 1-4) & Handoff Card"]
-        Gate["7. Mechanical Validation Gate (0 Tokens)"]
-    end
-
-    subgraph ProjectSpace["Project & Persistent Knowledge"]
-        Repo["Git Repository & Source Code"]
-        KnowledgeBase[".helix/knowledge/ Domain Contracts"]
-        Worktree["Ephemeral Isolated Worktree"]
-    end
-
-    subgraph AgentSpace["AI Coding Agent"]
-        Agent["Underlying AI Agent (Claude Code / OpenCode / Cursor)"]
-        Execution["5. Implement Changes in Isolation"]
-        OptionalReviewer{"6. High-Assurance / Security Task?"}
-        ReviewerAgent["Independent Diff Reviewer"]
-    end
-
-    subgraph ToolSpace["Development Tools & Tests"]
-        LintTest["Secrets, Linter, Typecheck, Test Runner"]
-    end
-
-    %% Workflow Connections
-    Dev --> TaskDef
-    TaskDef --> ContextMgr
-    Repo --> ContextMgr
-    KnowledgeBase --> KnowledgeRetriever
-    KnowledgeRetriever --> ContextMgr
-
-    ContextMgr --> TaskPlanner
-    TaskPlanner -->|"12-Line Handoff Card"| Agent
-    TaskPlanner -.->|"Creates Isolated Workspace"| Worktree
-
-    Agent --> Execution
-    Worktree <--> Execution
-
-    Execution --> OptionalReviewer
-    OptionalReviewer -->|"Yes"| ReviewerAgent
-    OptionalReviewer -->|"No"| Gate
-    ReviewerAgent --> Gate
-
-    Gate --> LintTest
-    LintTest -->|"Pass (Green)"| Review
-    LintTest -.->|"Fail (Red: Failures Only)"| Execution
-
-    Review -->|"Approved"| Repo
-
-    %% Styling
-    classDef devStyle fill:#e1f5fe,stroke:#0288d1,stroke-width:2px,color:#01579b;
-    classDef helixStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#4a148c;
-    classDef agentStyle fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#e65100;
-    classDef projStyle fill:#e8f5e9,stroke:#388e3c,stroke-width:2px,color:#1b5e20;
-    classDef toolStyle fill:#eceff1,stroke:#455a64,stroke-width:2px,color:#263238;
-
-    class Dev,TaskDef,Review devStyle;
-    class ContextMgr,KnowledgeRetriever,TaskPlanner,Gate helixStyle;
-    class Agent,Execution,OptionalReviewer,ReviewerAgent agentStyle;
-    class Repo,KnowledgeBase,Worktree projStyle;
-    class LintTest toolStyle;
+    Task[Task request] --> Bootstrap["Bootstrap < 600 tokens\nTier 0 routes < 250 tokens"]
+    Bootstrap --> Select{Select domain and mode}
+    Select --> Skill["load_skill · Tier 1 canonical guidance"]
+    Select --> Scout["Optional read-only scout\n≤ 8 turns · ≤ 250-token JSON"]
+    Skill --> Loop["Master loop · tool_search on demand"]
+    Scout --> Loop
+    Loop --> Visibility[VisibilityGate]
+    Visibility --> Write["WriteGate · path, ownership, approval"]
+    Write --> Verify["Stage A deterministic checks"]
+    Verify -->|pass and audit selected| Audit["Stage B cross-model firewalled audit"]
+    Verify -->|pass| Done[Complete]
+    Audit --> Done
+    Verify -->|fail| Blocked[Blocked / retry]
+    Loop --> Team["Optional peer DAG\nfile locks + ownedPaths"]
+    Team --> Loop
+    Loop --> Compact["At 92% context threshold, archive old outputs to NOTES.md"]
 ```
 
----
+## Stage responsibilities
 
-## Workflow Stages Explained
+1. **INIT:** normalize the task, resolve provider configuration, and select workspace/runtime state.
+2. **DISCOVER:** match Tier 0 domain routes, then load only selected Tier 1 skills and tools.
+3. **EXECUTE:** run the master loop; bounded scouts and peer teams are optional topologies.
+4. **VERIFY:** run deterministic gates first. A selected second-model audit runs only after Stage A passes and receives a context-firewalled summary.
+5. **COMPLETE:** persist the final outcome and expose it to the CLI and daemon clients.
 
-1. **Task Definition:** The developer starts with an existing codebase and assigns a task (e.g. bug fix, feature, refactoring).
-2. **Context Assembly:** Helix inspects the project, selects relevant files without loading the whole repo, and enforces strict token budgets.
-3. **Knowledge Retrieval:** The Adaptive Project Knowledge System (APKS) injects domain contracts and naming rules in under 15ms.
-4. **Task Planning:** Helix classifies the work into Tiers 1–4. Simple tasks stay single-agent; complex tasks receive a concise 12-line handoff card.
-5. **Execution in Isolation:** The coding agent executes changes inside an ephemeral Git worktree, leaving the developer's working tree clean.
-6. **Optional Reviewer:** For security-sensitive or high-risk tasks, an independent reviewer agent audits only the diff.
-7. **Zero-Token Gate:** Helix mechanically verifies secrets, lint, types, and affected tests using 0 model tokens.
-8. **Developer Review:** The developer inspects a verified, clean diff with high confidence and merges.
+Tier 2 episodic records are retrieved as quarantined hints. `helix knowledge compact` reviews and maintains them offline; the runtime does not silently promote them to canonical rules.

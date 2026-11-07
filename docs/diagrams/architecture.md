@@ -1,95 +1,50 @@
-# Helix Architecture Diagrams
-
-This document contains visual diagrams depicting Helix's dual-modality architecture, subsystem boundaries, and component interaction topology.
-
----
-
-## 1. Dual-Modality System Overview
-
-Helix operates across two complementary operating modes:
-
-1. **File Pack Generation**: Inspects an existing repository and emits minimal, platform-tailored configuration packs (`AGENTS.md` ≤ 300 tokens, `.helix/`, skills, MCPs).
-2. **Autonomous Execution Engine**: Drives coding agents with progressive context assembly, worktree isolation, security bounds, and zero-token mechanical gates.
+# Helix v2 system architecture
 
 ```mermaid
-flowchart TD
-    User["Developer / CI Pipeline"] --> CLI["Helix CLI (`helix init · run · bench · gate`)"]
+flowchart TB
+    User[Developer] --> CLI["Helix CLI"]
+    CLI --> Pack["Pack generator"]
+    CLI --> Workflow["5-stage execution workflow"]
 
-    subgraph PackGen["File Pack Generation Subsystem (`src/generate.ts`)"]
-        Detect["Stack Detector (`src/detect.ts`)"]
-        Catalogs["Catalogs (`crew.ts`, `mcps.ts`, `platforms.ts`, `skills.ts`)"]
-        Adapters["Platform Adapters (`src/adapters/`)"]
-        PackOutput["Emitted Pack:\n- `AGENTS.md` (≤300t)\n- `.helix/gate.mjs` (0t)\n- Vendor configs (`opencode.json`, `.cursor/`, etc.)"]
-
-        Detect --> Adapters
-        Catalogs --> Adapters
-        Adapters --> PackOutput
+    subgraph Stages["INIT → DISCOVER → EXECUTE → VERIFY → COMPLETE"]
+        Init[INIT] --> Discover[DISCOVER]
+        Discover --> Execute[EXECUTE]
+        Execute --> Verify[VERIFY]
+        Verify --> Complete[COMPLETE]
     end
+    Workflow --> Init
+    Execute --> Modes["Four execution modes"]
+    Modes --> Master["MODE_1_MASTER_LOOP"]
+    Modes --> Scout["MODE_2_DISPOSABLE_SCOUT"]
+    Modes --> Audit["MODE_3_ADVERSARIAL_AUDITOR"]
+    Modes --> Team["MODE_4_PEER_TEAM"]
 
-    subgraph ExecEngine["Autonomous Execution Engine Subsystem (`src/engine/`)"]
-        direction TB
-        TaskPlan["Task Definition & Heuristic Planner (`task.ts`)"]
-        ContextMgr["Layered Context & Token Budgeting (`context.ts`)"]
-        WorktreeMgr["Ephemeral Git Worktree Isolation (`worktree.ts`)"]
-        Security["Least-Privilege Security Guard (`security.ts`)"]
-        Orchestrator["Agent Orchestrator & 12-Line Handoff Cards (`orchestrator.ts`)"]
-        Gate["Mechanical Validation Engine (`gate.ts`, `validator.ts`)"]
-        APKS["Adaptive Project Knowledge System (`src/knowledge/`)"]
-
-        TaskPlan --> ContextMgr
-        APKS --> ContextMgr
-        ContextMgr --> Orchestrator
-        Orchestrator --> WorktreeMgr
-        Orchestrator --> Security
-        Security --> Gate
+    subgraph Knowledge["Three-tier knowledge"]
+        T0["Tier 0: route catalog"] --> T1["Tier 1: read-only skills, references, AST scripts"]
+        T1 --> T2["Tier 2: episodic quarantine"]
+        T2 --> DB[("SQLite · WAL · FTS5 · sqlite-vec")]
+        DB --> Compact["Offline helix knowledge compact"]
     end
+    Discover --> T0
+    Execute --> T1
+    Execute --> T2
 
-    CLI -->|"helix init"| PackGen
-    CLI -->|"helix run"| ExecEngine
-    CLI -->|"helix gate"| Gate
-    CLI -->|"helix bench"| ExecEngine
+    Execute --> Daemon["helixd · HTTP API + SSE"]
+    Verify --> Daemon
+    Serve["helix serve"] --> Daemon
+    Daemon <--> TUI["helix tui"]
+    Daemon <--> Web["helix web"]
 
-    PackOutput -.->|"Informs"| ExecEngine
-
-    %% Styling
-    classDef cliStyle fill:#e3f2fd,stroke:#1565c0,stroke-width:2px;
-    classDef packStyle fill:#f1f8e9,stroke:#558b2f,stroke-width:2px;
-    classDef execStyle fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px;
-
-    class User,CLI cliStyle;
-    class PackGen,Detect,Catalogs,Adapters,PackOutput packStyle;
-    class ExecEngine,TaskPlan,ContextMgr,WorktreeMgr,Security,Orchestrator,Gate,APKS execStyle;
+    subgraph Gates["Execution controls"]
+        Visibility[VisibilityGate]
+        Write[WriteGate]
+        StageA["Stage A deterministic checks"]
+        StageB["Stage B context-firewalled audit"]
+        StageA --> StageB
+    end
+    Execute --> Visibility
+    Execute --> Write
+    Verify --> StageA
 ```
 
----
-
-## 2. Component Interaction & Security Boundary
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Dev as Developer
-    participant Engine as Helix Orchestrator
-    participant Context as Context Manager
-    participant Worktree as Git Worktree
-    participant Agent as Coding Agent
-    participant Gate as Mechanical Gate
-
-    Dev->>Engine: helix run "Task description"
-    Engine->>Context: Assemble 4-layer context (budget ≤ 3,500t)
-    Context-->>Engine: System prompt + Repo map + Task card
-    Engine->>Worktree: Create isolated branch & worktree
-    Engine->>Agent: Launch agent in isolated worktree
-    Agent->>Worktree: Edit code files & write tests
-    Agent-->>Engine: Execution completed (claim: success)
-    Engine->>Gate: Run zero-token mechanical checks
-    Note over Gate: Secrets scan · Lint · Typecheck · Affected tests
-    alt Tests Pass
-        Gate-->>Engine: Exit 0 (Green)
-        Engine->>Worktree: Merge clean diff to target branch
-        Engine-->>Dev: Verified completion & summary
-    else Tests Fail
-        Gate-->>Engine: Exit 1 (Red: Failure excerpt only)
-        Engine->>Agent: Retry with failure context (budget ≤ 1,400t)
-    end
-```
+The workflow permits direct `INIT → EXECUTE`, question completion from `EXECUTE`, and retry from `BLOCKED` to `INIT` or `DISCOVER`. The diagram shows the primary successful route and the major runtime boundaries.

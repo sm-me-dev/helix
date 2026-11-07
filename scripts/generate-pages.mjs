@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const PKG = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
-const VERSION = PKG.version || "0.1.0";
+const VERSION = PKG.version || "0.2.0";
 const SITE_DIR = join(ROOT, "site");
 
 mkdirSync(SITE_DIR, { recursive: true });
@@ -281,13 +281,13 @@ const HTML = `<!DOCTYPE html>
 <body>
   <header>
     <div class="badge-bar">
-      <span class="badge badge-green">v${VERSION} Initial Release</span>
+      <span class="badge badge-green">Helix v${VERSION}</span>
       <span class="badge">Node.js &gt;= 26.4</span>
       <span class="badge">MIT Licensed</span>
       <span class="badge">Zero Clone Required</span>
     </div>
     <h1>🧬 Helix</h1>
-    <p class="tagline">An AI coding harness that earns its tokens through bounded context, ephemeral worktrees, zero-token mechanical gates, and adaptive project knowledge.</p>
+    <p class="tagline">An AI coding harness and execution engine with progressive disclosure, quarantined project knowledge, heterogeneous model orchestration, and synchronized terminal and web clients.</p>
     <div class="nav-links">
       <a class="nav-link" href="https://github.com/sm-me-dev/helix">GitHub Repository &rarr;</a>
       <a class="nav-link" href="https://github.com/sm-me-dev/helix/tree/main/docs">Documentation Hub &rarr;</a>
@@ -413,20 +413,20 @@ sudo dnf install https://github.com/sm-me-dev/helix/releases/download/v${VERSION
       
       <div class="feature-grid">
         <div class="feature-item">
-          <h3>⚡ Single-Agent Default</h3>
-          <p>More agents don't mean better code. Helix prioritizes a single capable agent in an isolated worktree, introducing specialist subagents only when proven by benchmarks.</p>
+          <h3>⚡ Progressive Disclosure</h3>
+          <p>A measured bootstrap stays below 600 tokens, with a compact domain route catalog. Skills and tools are loaded on demand through the master loop.</p>
         </div>
         <div class="feature-item">
-          <h3>🔒 Zero-Token Verification Gate</h3>
-          <p><code>helix gate</code> mechanically runs secret scanning, ESLint, TypeScript typechecking, and targeted tests without spending LLM tokens on trivial validations.</p>
+          <h3>🔒 VisibilityGate + WriteGate</h3>
+          <p>Tool visibility is scoped to the task, and proposed writes pass path, ownership, and approval checks before execution.</p>
         </div>
         <div class="feature-item">
-          <h3>🧠 Adaptive Project Knowledge (APKS)</h3>
-          <p>Embedded SQLite FTS5 search indexing repository domains, architecture decisions, and workflows, feeding relevant context strictly within tight token budgets (&le;600t).</p>
+          <h3>🧠 Three-Tier Quarantine Knowledge</h3>
+          <p>Deterministic routes lead to read-only canonical skills and references; mutable episodic records stay quarantined in SQLite until reviewed offline.</p>
         </div>
         <div class="feature-item">
-          <h3>🛡️ Path Jail &amp; Least-Privilege Guard</h3>
-          <p>Reviews and edits are path-jailed to task worktrees. Reviewers get read-only sandboxes, while sensitive credentials and secrets are automatically redacted.</p>
+          <h3>🛡️ Heterogeneous Orchestration</h3>
+          <p>Bounded scouts, context-firewalled cross-model audits, and file-owned peer teams are available for work that benefits from coordination.</p>
         </div>
       </div>
     </section>

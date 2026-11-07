@@ -28,7 +28,11 @@ const rec = (o) => JSON.stringify(o);
 /** One API message written as three records (text, tool_use, tool_use), same id and usage. */
 function assistantBlocks(msgId, u, blocks, extra = {}) {
   return blocks.map((content) =>
-    rec({ type: "assistant", message: { id: msgId, role: "assistant", content: [content], usage: u }, ...extra }),
+    rec({
+      type: "assistant",
+      message: { id: msgId, role: "assistant", content: [content], usage: u },
+      ...extra,
+    }),
   );
 }
 
@@ -36,7 +40,10 @@ const toolUse = (id, name, input) => ({ type: "tool_use", id, name, input });
 const toolResult = (id, content, isError = false) =>
   rec({
     type: "user",
-    message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content, is_error: isError }] },
+    message: {
+      role: "user",
+      content: [{ type: "tool_result", tool_use_id: id, content, is_error: isError }],
+    },
   });
 
 function sampleClaude() {
@@ -51,12 +58,18 @@ function sampleClaude() {
     toolResult("t1", "x".repeat(100)),
     toolResult("t2", "x".repeat(OVERSIZED_CHARS + 1)),
     // msg_2: errored call, then identical retry in msg_3
-    ...assistantBlocks("msg_2", usage(120, 30, 1200, 0), [toolUse("t3", "Bash", { command: "npm t" })]),
+    ...assistantBlocks("msg_2", usage(120, 30, 1200, 0), [
+      toolUse("t3", "Bash", { command: "npm t" }),
+    ]),
     toolResult("t3", "boom", true),
-    ...assistantBlocks("msg_3", usage(130, 20, 1300, 0), [toolUse("t4", "Bash", { command: "npm t" })]),
+    ...assistantBlocks("msg_3", usage(130, 20, 1300, 0), [
+      toolUse("t4", "Bash", { command: "npm t" }),
+    ]),
     toolResult("t4", "ok"),
     // subagent message
-    ...assistantBlocks("msg_side", usage(50, 10, 500, 0), [{ type: "text", text: "sub" }], { isSidechain: true }),
+    ...assistantBlocks("msg_side", usage(50, 10, 500, 0), [{ type: "text", text: "sub" }], {
+      isSidechain: true,
+    }),
     "not json at all",
     rec({ type: "future-record-type", message: { weird: true } }),
   ];
@@ -113,7 +126,12 @@ const ocMsg = (id, session_id, tokens, cost) => ({
   session_id,
   data: JSON.stringify({ role: "assistant", tokens, cost, content: CANARY }),
 });
-const tokens = (input, output, reasoning, read, write) => ({ input, output, reasoning, cache: { read, write } });
+const tokens = (input, output, reasoning, read, write) => ({
+  input,
+  output,
+  reasoning,
+  cache: { read, write },
+});
 
 describe("parseOpenCodeRows", () => {
   const sessions = [
@@ -132,7 +150,11 @@ describe("parseOpenCodeRows", () => {
       id: "p0",
       message_id: "m1",
       session_id: "s1",
-      data: JSON.stringify({ type: "step-finish", tokens: { total: 137, input: 10, output: 5 }, cost: 0.01 }),
+      data: JSON.stringify({
+        type: "step-finish",
+        tokens: { total: 137, input: 10, output: 5 },
+        cost: 0.01,
+      }),
     },
     {
       id: "p1",
@@ -208,7 +230,10 @@ describe("sumSessions", () => {
         { id: "s1", parent_id: null },
         { id: "s2", parent_id: "s1" },
       ],
-      [ocMsg("m1", "s1", tokens(10, 5, 2, 100, 20), 0.01), ocMsg("m3", "s2", tokens(7, 3, 0, 70, 0), 0.005)],
+      [
+        ocMsg("m1", "s1", tokens(10, 5, 2, 100, 20), 0.01),
+        ocMsg("m3", "s2", tokens(7, 3, 0, 70, 0), 0.005),
+      ],
       [],
     );
     const t = sumSessions([s1]);
@@ -245,21 +270,39 @@ describe("loadOpenCodeDb", () => {
     db.prepare("INSERT INTO session VALUES (?,?,?,?)").run("c", null, "/other", 4);
     db.prepare("INSERT INTO session VALUES (?,?,?,?)").run("d", null, "/proj", 1);
     const ins = db.prepare("INSERT INTO message VALUES (?,?,?)");
-    ins.run("m1", "a", JSON.stringify({ role: "assistant", tokens: tokens(1, 2, 0, 3, 4), cost: 0.5 }));
-    ins.run("m2", "b", JSON.stringify({ role: "assistant", tokens: tokens(5, 5, 0, 0, 0), cost: 0.1 }));
-    ins.run("m3", "c", JSON.stringify({ role: "assistant", tokens: tokens(9, 9, 0, 9, 9), cost: 9 }));
+    ins.run(
+      "m1",
+      "a",
+      JSON.stringify({ role: "assistant", tokens: tokens(1, 2, 0, 3, 4), cost: 0.5 }),
+    );
+    ins.run(
+      "m2",
+      "b",
+      JSON.stringify({ role: "assistant", tokens: tokens(5, 5, 0, 0, 0), cost: 0.1 }),
+    );
+    ins.run(
+      "m3",
+      "c",
+      JSON.stringify({ role: "assistant", tokens: tokens(9, 9, 0, 9, 9), cost: 9 }),
+    );
     db.close();
 
     const r = await loadOpenCodeDb(path, { directory: "/proj" });
     assert.equal(r.skipped, null);
-    assert.deepEqual(r.sessions.map((s) => s.id), ["a"]);
+    assert.deepEqual(
+      r.sessions.map((s) => s.id),
+      ["a"],
+    );
     const a = r.sessions[0];
     assert.equal(a.main.output, 2);
     assert.equal(sumTotals(a.sidechain), 10);
 
     // limit keeps the most recent root sessions (and their subagent children)
     const limited = await loadOpenCodeDb(path, { directory: "/proj", limit: 1 });
-    assert.deepEqual(limited.sessions.map((s) => s.id), ["a"]);
+    assert.deepEqual(
+      limited.sessions.map((s) => s.id),
+      ["a"],
+    );
     assert.equal(limited.sessions[0].subagentSessions, 1);
 
     const bad = await loadOpenCodeDb(join(dir, "missing.db"));
@@ -300,17 +343,36 @@ describe("loadOpenCodeDb", () => {
       state: { status: "completed", input, output: "ok" },
     });
     const ins = db.prepare("INSERT INTO session_message VALUES (?,?,?,?,?,?,?)");
-    ins.run("m1", "a", "assistant", 1, 1, 2, v2msg(v2tok(10, 5, 2, 100, 20), 0.01, [tool("t1", "read", { filePath: "/p/a.ts" })]));
-    ins.run("m2", "b", "assistant", 1, 1, 3, v2msg(v2tok(7, 3, 0, 70, 0), 0.005, [tool("t2", "shell", { command: "pwd" })]));
+    ins.run(
+      "m1",
+      "a",
+      "assistant",
+      1,
+      1,
+      2,
+      v2msg(v2tok(10, 5, 2, 100, 20), 0.01, [tool("t1", "read", { filePath: "/p/a.ts" })]),
+    );
+    ins.run(
+      "m2",
+      "b",
+      "assistant",
+      1,
+      1,
+      3,
+      v2msg(v2tok(7, 3, 0, 70, 0), 0.005, [tool("t2", "shell", { command: "pwd" })]),
+    );
     ins.run("m3", "c", "assistant", 1, 1, 4, v2msg(v2tok(9, 9, 0, 9, 9), 9, []));
     ins.run("m4", "a", "user", 0, 1, 2, JSON.stringify({ time: {}, text: "hi" }));
     db.close();
 
     const r = await loadOpenCodeDb(path, { directory: "/proj" });
     assert.equal(r.skipped, null);
-    assert.deepEqual(r.sessions.map((s) => s.id), ["a"]);
+    assert.deepEqual(
+      r.sessions.map((s) => s.id),
+      ["a"],
+    );
     const totals = sumSessions(r.sessions);
-    assert.equal(totals.total, (10 + 5 + 2 + 100 + 20) + (7 + 3 + 0 + 70 + 0));
+    assert.equal(totals.total, 10 + 5 + 2 + 100 + 20 + (7 + 3 + 0 + 70 + 0));
     assert.equal(totals.subagent, 7 + 3 + 0 + 70 + 0);
     assert.equal(r.sessions[0].toolCalls.read, 1);
   });

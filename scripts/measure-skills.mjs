@@ -28,7 +28,11 @@ const config = {
 };
 const skills = SKILLS.map((s) => {
   const full = skillFile(s.id);
-  return { id: s.id, index: countTokens(fm(full)), body: countTokens(full) - countTokens(fm(full)) };
+  return {
+    id: s.id,
+    index: countTokens(fm(full)),
+    body: countTokens(full) - countTokens(fm(full)),
+  };
 });
 const crew = CREW.map((c) => {
   const full = agentFile(c.id);
