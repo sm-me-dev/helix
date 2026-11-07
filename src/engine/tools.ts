@@ -24,6 +24,15 @@ import { retrieveEpisodicRecords } from "../knowledge/retriever.ts";
 import { matchPathGlob } from "../knowledge/glob.ts";
 import { compileTier0DomainRoutes, syncCanonicalSkillStore } from "../knowledge/discovery.ts";
 import type { ProgressiveContextState } from "./context.ts";
+import {
+  resolveOrthogonalAuditor,
+  invokeProviderHeadlessAgent,
+  type HeadlessApiConfiguration,
+  type HeadlessProvider,
+  type ModelRoute,
+  type ProviderSelection,
+} from "./provider.ts";
+import type { HelixTeamRuntime, PeerMessageType } from "./state.ts";
 import { searchMcpToolSchemas } from "../mcps.ts";
 import type { McpDiscoveredToolSchema } from "../mcps.ts";
 import type {
@@ -44,6 +53,12 @@ export interface ProgressiveToolCallResult {
   readonly content: string;
   readonly isError?: boolean;
 }
+
+export type ProgressiveRuntimeEvent = {
+  readonly type:
+    "skill_loaded" | "visibility_tools_unlocked" | "peer_consulted" | "team_task_state";
+  readonly payload: Readonly<Record<string, unknown>>;
+};
 
 const NATIVE_PROGRESSIVE_SCHEMAS: readonly ProgressiveToolSchema[] = [
   {
@@ -89,11 +104,98 @@ const NATIVE_PROGRESSIVE_SCHEMAS: readonly ProgressiveToolSchema[] = [
     inputSchema: {
       type: "object",
       properties: {
+        counterpartRole: { type: "string", enum: ["codex", "opencode", "claude"] },
         question: { type: "string" },
-        fileSlices: { type: "array" },
+        fileSlices: {
+          type: "array",
+          maxItems: 8,
+          items: {
+            type: "object",
+            properties: {
+              filePath: { type: "string" },
+              startLine: { type: "integer", minimum: 1 },
+              endLine: { type: "integer", minimum: 1 },
+            },
+            required: ["filePath", "startLine", "endLine"],
+            additionalProperties: false,
+          },
+        },
         proposedApproach: { type: "string" },
       },
       required: ["question", "fileSlices"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "claim_team_task",
+    description: "Claim a dependency-ready team task in read-only plan mode.",
+    source: "native",
+    inputSchema: {
+      type: "object",
+      properties: { task_id: { type: "string" } },
+      required: ["task_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "submit_teammate_plan",
+    description: "Submit an interface contract for lead approval before writing.",
+    source: "native",
+    inputSchema: {
+      type: "object",
+      properties: { task_id: { type: "string" }, interface_contract: { type: "string" } },
+      required: ["task_id", "interface_contract"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "approve_teammate_plan",
+    description: "Approve a teammate's interface contract as team lead.",
+    source: "native",
+    inputSchema: {
+      type: "object",
+      properties: {
+        teammate_id: { type: "string" },
+        task_id: { type: "string" },
+        approved: { type: "boolean" },
+        feedback: { type: "string" },
+      },
+      required: ["teammate_id", "task_id", "approved"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "send_peer_message",
+    description: "Send a sanitized JSON message to a teammate inbox.",
+    source: "native",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target_agent: { type: "string" },
+        message_type: {
+          type: "string",
+          enum: ["plan", "question", "finding", "status", "answer", "broadcast"],
+        },
+        payload: { type: "object" },
+      },
+      required: ["target_agent", "message_type", "payload"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "broadcast_team",
+    description: "Send a sanitized JSON message to every active teammate inbox.",
+    source: "native",
+    inputSchema: {
+      type: "object",
+      properties: {
+        message_type: {
+          type: "string",
+          enum: ["plan", "question", "finding", "status", "answer", "broadcast"],
+        },
+        payload: { type: "object" },
+      },
+      required: ["message_type", "payload"],
       additionalProperties: false,
     },
   },
@@ -169,6 +271,17 @@ function objectInput(input: unknown): Record<string, unknown> {
   return input as Record<string, unknown>;
 }
 
+function isPeerMessageType(value: unknown): value is PeerMessageType {
+  return (
+    value === "plan" ||
+    value === "question" ||
+    value === "finding" ||
+    value === "status" ||
+    value === "answer" ||
+    value === "broadcast"
+  );
+}
+
 function requiredString(input: Record<string, unknown>, key: string): string {
   const value = input[key];
   if (typeof value !== "string" || value.length === 0)
@@ -215,10 +328,13 @@ export class ProgressiveToolRuntime {
   private readonly workspaceRoot: string;
   private readonly state: ProgressiveContextState;
   private readonly executor: DefaultToolExecutor;
+  private readonly teamRuntime?: HelixTeamRuntime;
+  private readonly teammateId?: string;
   private readonly callbacks: {
     spawnScout?: (input: Record<string, unknown>) => Promise<ProgressiveToolCallResult>;
     consultPeer?: (input: Record<string, unknown>) => Promise<ProgressiveToolCallResult>;
     mcpExecutor?: (toolName: string, input: unknown) => Promise<unknown>;
+    onProgress?: (event: ProgressiveRuntimeEvent) => void;
   };
 
   constructor(options: {
@@ -229,14 +345,28 @@ export class ProgressiveToolRuntime {
     spawnScout?: (input: Record<string, unknown>) => Promise<ProgressiveToolCallResult>;
     consultPeer?: (input: Record<string, unknown>) => Promise<ProgressiveToolCallResult>;
     mcpExecutor?: (toolName: string, input: unknown) => Promise<unknown>;
+    teamRuntime?: HelixTeamRuntime;
+    teammateId?: string;
+    peerConsult?: {
+      readonly generatorProvider: ProviderSelection | HeadlessProvider | string;
+      readonly resolveApi: (route: ModelRoute) => HeadlessApiConfiguration | undefined;
+    };
+    onProgress?: (event: ProgressiveRuntimeEvent) => void;
   }) {
     this.workspaceRoot = path.resolve(options.workspaceRoot ?? process.cwd());
     this.state = options.state;
     this.executor = options.executor ?? new DefaultToolExecutor();
+    this.teamRuntime = options.teamRuntime;
+    this.teammateId = options.teammateId;
     this.callbacks = {
       spawnScout: options.spawnScout,
-      consultPeer: options.consultPeer,
+      consultPeer:
+        options.consultPeer ??
+        (options.peerConsult
+          ? createConsultPeerHandler({ workspaceRoot: this.workspaceRoot, ...options.peerConsult })
+          : undefined),
       mcpExecutor: options.mcpExecutor,
+      onProgress: options.onProgress,
     };
     for (const schema of [...NATIVE_PROGRESSIVE_SCHEMAS, ...(options.schemas ?? [])])
       this.registerSchema(schema);
@@ -251,7 +381,15 @@ export class ProgressiveToolRuntime {
 
   approveWriteScope(glob: string): void {
     if (!glob.trim()) throw new Error("Write scope cannot be empty");
+    if (this.teamRuntime && this.teammateId)
+      this.teamRuntime.assertScopeAllowed(this.teammateId, glob);
     this.state.approvedWriteScopes.add(glob);
+  }
+
+  private requireTeamRuntime(): { teamRuntime: HelixTeamRuntime; teammateId: string } {
+    if (!this.teamRuntime || !this.teammateId)
+      throw new Error("Peer team runtime is not configured for this agent");
+    return { teamRuntime: this.teamRuntime, teammateId: this.teammateId };
   }
 
   toolSearch(intentQuery: string, limit = 5): ProgressiveToolSchema[] {
@@ -287,7 +425,13 @@ export class ProgressiveToolRuntime {
       .sort((a, b) => b.score - a.score || a.schema.name.localeCompare(b.schema.name))
       .slice(0, boundedLimit)
       .map(({ schema }) => schema);
+    const newlyVisible = matches.filter((schema) => !this.state.visibleToolNames.has(schema.name));
     for (const schema of matches) this.state.visibleToolNames.add(schema.name);
+    if (newlyVisible.length)
+      this.callbacks.onProgress?.({
+        type: "visibility_tools_unlocked",
+        payload: { count: newlyVisible.length, names: newlyVisible.map((schema) => schema.name) },
+      });
     return matches;
   }
 
@@ -323,6 +467,11 @@ export class ProgressiveToolRuntime {
             requiredString(args, "domain_id"),
             typeof args.reference_file === "string" ? args.reference_file : undefined,
           );
+          if (!result.isError)
+            this.callbacks.onProgress?.({
+              type: "skill_loaded",
+              payload: { domainId: requiredString(args, "domain_id") },
+            });
           break;
         case "Read":
           result = {
@@ -367,7 +516,102 @@ export class ProgressiveToolRuntime {
           result = this.callbacks.consultPeer
             ? await this.callbacks.consultPeer(args)
             : { isError: true, content: "Peer consultation is not configured for this runtime." };
+          if (!result.isError) {
+            try {
+              const peer: unknown = JSON.parse(result.content);
+              if (peer !== null && typeof peer === "object" && !Array.isArray(peer)) {
+                const record = peer as Record<string, unknown>;
+                this.callbacks.onProgress?.({
+                  type: "peer_consulted",
+                  payload: {
+                    reviewerHarness: record.reviewerHarness,
+                    reviewerModelId: record.reviewerModelId,
+                  },
+                });
+              }
+            } catch {
+              /* Custom peer callbacks may return plain text. */
+            }
+          }
           break;
+        case "claim_team_task": {
+          const { teamRuntime, teammateId } = this.requireTeamRuntime();
+          const claimed = teamRuntime.claimTask(requiredString(args, "task_id"), teammateId);
+          result = { content: JSON.stringify(claimed) };
+          this.callbacks.onProgress?.({
+            type: "team_task_state",
+            payload: { taskId: claimed.taskId, from: "pending", to: claimed.status },
+          });
+          break;
+        }
+        case "submit_teammate_plan": {
+          const { teamRuntime, teammateId } = this.requireTeamRuntime();
+          result = {
+            content: JSON.stringify(
+              teamRuntime.submitPlan(
+                teammateId,
+                requiredString(args, "task_id"),
+                requiredString(args, "interface_contract"),
+              ),
+            ),
+          };
+          break;
+        }
+        case "approve_teammate_plan": {
+          const { teamRuntime, teammateId } = this.requireTeamRuntime();
+          if (!teamRuntime.isLead(teammateId))
+            throw new Error("Only the lead agent may approve a teammate plan");
+          const approved = teamRuntime.approve_teammate_plan(teammateId, {
+            teammate_id: requiredString(args, "teammate_id"),
+            task_id: requiredString(args, "task_id"),
+            approved: args.approved === true,
+            ...(typeof args.feedback === "string" ? { feedback: args.feedback } : {}),
+          });
+          result = { content: JSON.stringify(approved) };
+          if (approved.planApprovedByLead)
+            this.callbacks.onProgress?.({
+              type: "team_task_state",
+              payload: {
+                taskId: approved.taskId,
+                from: "awaiting_plan_approval",
+                to: approved.status,
+              },
+            });
+          break;
+        }
+        case "send_peer_message": {
+          const { teamRuntime, teammateId } = this.requireTeamRuntime();
+          if (
+            !isPeerMessageType(args.message_type) ||
+            args.payload === null ||
+            typeof args.payload !== "object" ||
+            Array.isArray(args.payload)
+          )
+            throw new Error("Peer message type or payload is invalid");
+          teamRuntime.send_peer_message(teammateId, {
+            target_agent: requiredString(args, "target_agent"),
+            message_type: args.message_type,
+            payload: args.payload as Record<string, unknown>,
+          });
+          result = { content: "Peer message queued." };
+          break;
+        }
+        case "broadcast_team": {
+          const { teamRuntime, teammateId } = this.requireTeamRuntime();
+          if (
+            !isPeerMessageType(args.message_type) ||
+            args.payload === null ||
+            typeof args.payload !== "object" ||
+            Array.isArray(args.payload)
+          )
+            throw new Error("Peer message type or payload is invalid");
+          teamRuntime.broadcast_team(teammateId, {
+            message_type: args.message_type,
+            payload: args.payload as Record<string, unknown>,
+          });
+          result = { content: "Team broadcast queued." };
+          break;
+        }
         default: {
           const schema = this.schemas.get(name);
           if (!schema || schema.source !== "mcp")
@@ -499,6 +743,10 @@ export class ProgressiveToolRuntime {
     const relative = path
       .relative(this.workspaceRoot, path.resolve(this.workspaceRoot, filePath))
       .replace(/\\/g, "/");
+    if (this.teamRuntime && this.teammateId) {
+      for (const glob of this.teamRuntime.approvedOwnedPaths(this.teammateId))
+        this.state.approvedWriteScopes.add(glob);
+    }
     return [...this.state.approvedWriteScopes].some((glob) => matchPathGlob(relative, glob));
   }
 
@@ -507,6 +755,8 @@ export class ProgressiveToolRuntime {
     content: string,
     context?: ToolExecutionContext,
   ): Promise<ProgressiveToolCallResult> {
+    if (this.teamRuntime && this.teammateId)
+      this.teamRuntime.assertWriteAllowed(this.teammateId, filePath);
     if (!this.hasApprovedScope(filePath))
       return {
         isError: true,
@@ -526,6 +776,8 @@ export class ProgressiveToolRuntime {
     newString: string,
     context?: ToolExecutionContext,
   ): Promise<ProgressiveToolCallResult> {
+    if (this.teamRuntime && this.teammateId)
+      this.teamRuntime.assertWriteAllowed(this.teammateId, filePath);
     if (!this.hasApprovedScope(filePath))
       return {
         isError: true,
@@ -622,6 +874,137 @@ export class ToolVisibilityError extends Error {
       content: JSON.stringify({ code: this.code, message: this.message, tool: this.toolName }),
     };
   }
+}
+
+export interface ConsultPeerInput {
+  readonly counterpartRole?: "codex" | "opencode" | "claude";
+  readonly question: string;
+  readonly fileSlices: readonly {
+    readonly filePath: string;
+    readonly startLine: number;
+    readonly endLine: number;
+  }[];
+  readonly proposedApproach?: string;
+}
+
+export function createConsultPeerHandler(options: {
+  readonly workspaceRoot: string;
+  readonly generatorProvider: ProviderSelection | HeadlessProvider | string;
+  readonly resolveApi: (route: ModelRoute) => HeadlessApiConfiguration | undefined;
+  readonly invoke?: (route: ModelRoute, prompt: string) => Promise<string>;
+}): (input: Record<string, unknown>) => Promise<ProgressiveToolCallResult> {
+  const root = fs.realpathSync(path.resolve(options.workspaceRoot));
+  return async (input) => {
+    if (
+      typeof input.question !== "string" ||
+      !input.question.trim() ||
+      !Array.isArray(input.fileSlices) ||
+      input.fileSlices.length > 8
+    ) {
+      throw new Error("consult_peer requires a question and at most eight fileSlices");
+    }
+    const slices: string[] = [];
+    for (const value of input.fileSlices) {
+      if (value === null || typeof value !== "object" || Array.isArray(value))
+        throw new Error("consult_peer file slice must be an object");
+      const slice = value as Record<string, unknown>;
+      if (
+        typeof slice.filePath !== "string" ||
+        !Number.isSafeInteger(slice.startLine) ||
+        !Number.isSafeInteger(slice.endLine)
+      )
+        throw new Error("consult_peer file slice requires filePath, startLine, and endLine");
+      const startLine = slice.startLine as number;
+      const endLine = slice.endLine as number;
+      if (startLine < 1 || endLine < startLine || endLine - startLine > 100)
+        throw new Error("consult_peer file slices must be between 1 and 101 lines");
+      const absolute = path.resolve(root, slice.filePath);
+      const real = fs.realpathSync(absolute);
+      const relative = path.relative(root, real);
+      if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative))
+        throw new Error("consult_peer file slice escapes the worktree");
+      const lines = fs.readFileSync(real, "utf8").split(/\r?\n/);
+      if (endLine > lines.length)
+        throw new Error(`consult_peer line range exceeds ${slice.filePath}`);
+      const source = lines.slice(startLine - 1, endLine).join("\n");
+      if (source.length === 0 && startLine > lines.length)
+        throw new Error(`consult_peer line range exceeds ${slice.filePath}`);
+      const safeSource = redactSecrets(source).text;
+      const canary = process.env.ADMIN_TEST_KEY;
+      const redacted = canary ? safeSource.split(canary).join("[REDACTED_CANARY]") : safeSource;
+      slices.push(`### ${relative}:${startLine}-${endLine}\n${redacted}`);
+    }
+    const orthogonal = resolveOrthogonalAuditor(options.generatorProvider);
+    let route = orthogonal;
+    if (input.counterpartRole !== undefined) {
+      if (
+        input.counterpartRole !== "claude" &&
+        input.counterpartRole !== "codex" &&
+        input.counterpartRole !== "opencode"
+      )
+        throw new Error("Unsupported consult_peer counterpartRole");
+      const defaults: Readonly<Record<HeadlessProvider, ModelRoute>> = {
+        claude: { ...orthogonal, harness: "claude", modelId: "claude-fable-5-1" },
+        codex: { ...orthogonal, harness: "codex", modelId: "gpt-6.1-sol" },
+        opencode: { ...orthogonal, harness: "opencode", modelId: "gemini-3.1-pro" },
+        copilot: { ...orthogonal, harness: "copilot", modelId: "gpt-6.1-sol" },
+      };
+      route = defaults[input.counterpartRole];
+      const generatorHarness: HeadlessProvider =
+        typeof options.generatorProvider === "string"
+          ? /claude|anthropic/i.test(options.generatorProvider)
+            ? "claude"
+            : /codex|openai|gpt-/i.test(options.generatorProvider)
+              ? "codex"
+              : /copilot/i.test(options.generatorProvider)
+                ? "copilot"
+                : "opencode"
+          : options.generatorProvider.harness;
+      if (route.harness === generatorHarness)
+        throw new Error("consult_peer counterpart must use a distinct harness family");
+    }
+    const prompt = [
+      "You are a read-only engineering peer. Critique the proposed approach for concurrency, security, type, and edge-case hazards.",
+      "Use the exact supplied source slices. Return a concise review of at most 300 tokens; do not propose edits.",
+      `Question: ${input.question}`,
+      typeof input.proposedApproach === "string"
+        ? `Proposed approach: ${input.proposedApproach}`
+        : "",
+      ...slices,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+    const api = options.resolveApi(route);
+    if (!api)
+      throw new Error(
+        "consult_peer requires an explicitly configured API endpoint for a tool-free read-only invocation",
+      );
+    const output = options.invoke
+      ? await options.invoke(route, prompt)
+      : (
+          await invokeProviderHeadlessAgent(route.harness, {
+            mode: "api",
+            modelId: route.modelId,
+            effort: "medium",
+            prompt,
+            timeoutMs: 60_000,
+            maxInputTokens: 30_000,
+            maxOutputTokens: 600,
+            maxTurns: 3,
+            readOnlyToolsOnly: true,
+            api,
+          })
+        ).stdout;
+    if (countTokens(output) > 300)
+      throw new Error("Peer consultation exceeded the 300-token response limit");
+    return {
+      content: JSON.stringify({
+        reviewerHarness: route.harness,
+        reviewerModelId: route.modelId,
+        review: output,
+      }),
+    };
+  };
 }
 
 function assertVisible(context: ToolExecutionContext | undefined, name: string): void {

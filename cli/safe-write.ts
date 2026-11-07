@@ -23,8 +23,10 @@ import {
   readFileSync,
   realpathSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   assertCanonicalKnowledgeWriteAllowed,
@@ -41,6 +43,43 @@ export class UnsafeDestinationError extends Error {
     this.packPath = packPath;
     this.reason = reason;
   }
+}
+
+/** Acquire a cross-process exclusive lock. The lock records enough ownership
+ * data to diagnose abandoned claims and is released only by its creator. */
+export function acquireAtomicLock(lockPath: string): () => void {
+  mkdirSync(dirname(lockPath), { recursive: true });
+  const token = randomUUID();
+  let fd: number;
+  try {
+    fd = openSync(lockPath, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600);
+  } catch (error) {
+    if (errCode(error) === "EEXIST") throw new Error(`Team lock is already held: ${lockPath}`);
+    throw error;
+  }
+  try {
+    writeFileSync(
+      fd,
+      JSON.stringify({ pid: process.pid, timestamp: new Date().toISOString(), token }),
+    );
+  } catch (error) {
+    closeSync(fd);
+    try {
+      unlinkSync(lockPath);
+    } catch {
+      /* Preserve the original write error. */
+    }
+    throw error;
+  }
+  closeSync(fd);
+  return () => {
+    try {
+      const lock = JSON.parse(readFileSync(lockPath, "utf8")) as { token?: unknown };
+      if (lock.token === token) unlinkSync(lockPath);
+    } catch (error) {
+      if (errCode(error) !== "ENOENT") throw error;
+    }
+  };
 }
 
 // Undefined on Windows, where Node does not expose O_NOFOLLOW.

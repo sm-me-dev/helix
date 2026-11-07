@@ -254,6 +254,13 @@ describe("Phase 3 adversarial verification", () => {
     assert.equal(claudeAuditor.modelId, "gpt-6.1-sol");
     assert.equal(codexAuditor.harness, "claude");
     assert.equal(codexAuditor.modelId, "claude-fable-5-1");
+    const customOpenAiModel = resolveOrthogonalAuditor({
+      harness: "claude",
+      modelId: "gpt-6.1-sol",
+      baseUrl: "https://compat.example/v1",
+    });
+    assert.equal(customOpenAiModel.harness, "claude");
+    assert.equal(customOpenAiModel.modelId, "claude-fable-5-1");
   });
 
   it("rejects any extra context on the auditor payload and forces blocking verdicts to REJECTED", () => {

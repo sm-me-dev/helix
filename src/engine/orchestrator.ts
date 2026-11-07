@@ -19,7 +19,12 @@ import {
   WorkspaceConflictError,
   WorkspaceLockManager,
 } from "./security.ts";
-import { FileExecutionStateManager } from "./state.ts";
+import {
+  FileExecutionStateManager,
+  HelixTeamRuntime,
+  type RootCauseProof,
+  type TeamTaskNode,
+} from "./state.ts";
 import { DEFAULT_FORBIDDEN_PATHS } from "./task.ts";
 import {
   type AgentOrchestrator,
@@ -94,6 +99,22 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
     this.validator = deps.validator || new DefaultValidationEngine();
     this.contextManager = deps.contextManager || new DefaultContextManager();
     this.worktreeManager = deps.worktreeManager || new GitWorktreeManager();
+  }
+
+  createTeamRuntime(options: {
+    workspaceRoot: string;
+    teamId: string;
+    tasks?: readonly TeamTaskNode[];
+    onStatus?: ConstructorParameters<typeof HelixTeamRuntime>[0]["onStatus"];
+  }): HelixTeamRuntime {
+    return new HelixTeamRuntime(options);
+  }
+
+  spawnHypothesisTeam(
+    runtime: HelixTeamRuntime,
+    options: Parameters<HelixTeamRuntime["spawnHypothesisTeam"]>[0],
+  ): Promise<RootCauseProof> {
+    return runtime.spawnHypothesisTeam(options);
   }
 
   /**

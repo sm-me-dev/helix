@@ -96,9 +96,10 @@ export function resolveOrthogonalAuditor(
       ? { harness: normalizeHarness(generatorProvider), modelId: generatorProvider }
       : generatorProvider;
   const model = (generator.modelId ?? "").toLowerCase();
-  const openAiFamily = generator.harness === "codex" || /^(gpt-|o\d|openai\/)/.test(model);
-  const claudeFamily = generator.harness === "claude" || /^(claude-|anthropic\/)/.test(model);
-  if (claudeFamily || (!openAiFamily && generator.harness === "opencode")) {
+  const modelIsOpenAi = /^(gpt-|o\d|openai\/)/.test(model);
+  const modelIsClaude = /^(claude-|anthropic\/)/.test(model);
+  const generatorIsClaude = modelIsClaude || (!modelIsOpenAi && generator.harness === "claude");
+  if (generatorIsClaude) {
     return { ...DEFAULT_HELIX_V2_ROUTING.ADVERSARIAL_AUDITOR };
   }
   return {

@@ -193,6 +193,10 @@ export type AgentSession = {
   /** Optional hard tool surface and turn ceiling for disposable execution modes. */
   toolAllowlist?: readonly string[];
   maxTurns?: number;
+  /** Assigned by the team runtime; used by BudgetedTeammateRunner. */
+  teammateId?: string;
+  teamId?: string;
+  maxTokenBudget?: number;
   readOnly?: boolean;
   onOutputChunk?: (text: string) => void;
 };
@@ -679,7 +683,11 @@ export type ExecutionEventType =
   | "review_completed"
   | "conflict_detected"
   | "integration_started"
-  | "integration_completed";
+  | "integration_completed"
+  | "skill_loaded"
+  | "visibility_tools_unlocked"
+  | "peer_consulted"
+  | "team_task_state";
 
 export type ExecutionEvent = {
   eventId: string;

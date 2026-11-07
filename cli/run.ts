@@ -23,6 +23,7 @@ import { countTokens } from "../src/measure.ts";
 import { computeContentHash } from "../src/knowledge/repository.ts";
 import { matchDomainsForFilePath } from "../src/knowledge/discovery.ts";
 import { persistAutomatedRunLearning } from "./learn.ts";
+import { formatTeamProgressEvent, startTmuxTeamMonitor } from "./ui.ts";
 
 const RUN_USAGE = `Usage: helix run [task-prompt-or-file] [options]
 
@@ -47,6 +48,7 @@ Options:
   --target <files>           Expected target files (comma-separated)
   --forbidden <paths>        Forbidden paths that must not be accessed (comma-separated)
   --simulation               Run in simulated mode with deterministic mock agent
+  --tmux                     Open a split pane following the persisted team DAG
   --json                     Output result and metrics as JSON (ideal for CI/scripts)
   --out <path>               Save full execution report JSON to specified file
   -h, --help                 Show this help message
@@ -102,6 +104,7 @@ export async function cmdRun(opts: RunCliOptions): Promise<void> {
   let forbiddenPaths: string[] = [];
   let simulation = false;
   let jsonOutput = false;
+  let tmuxMonitor = false;
   let outPath: string | null = null;
 
   for (let i = 0; i < args.length; i++) {
@@ -117,6 +120,8 @@ export async function cmdRun(opts: RunCliOptions): Promise<void> {
       isolatedWorktree = false;
     } else if (a === "--simulation") {
       simulation = true;
+    } else if (a === "--tmux") {
+      tmuxMonitor = true;
     } else if (a === "--strategy") {
       const val = args[++i];
       if (
@@ -304,6 +309,18 @@ export async function cmdRun(opts: RunCliOptions): Promise<void> {
     });
   }
 
+  if (tmuxMonitor) {
+    try {
+      startTmuxTeamMonitor(workspaceRoot, task.id);
+    } catch (error) {
+      stderr.write(
+        `[helix run] Error: Could not start tmux team monitor: ${error instanceof Error ? error.message : String(error)}\n`,
+      );
+      setExitCode(2);
+      return;
+    }
+  }
+
   // Runner & Provider setup
   const runner = createAgentRunner({
     platform: config.defaultPlatform,
@@ -322,6 +339,12 @@ export async function cmdRun(opts: RunCliOptions): Promise<void> {
   const onEvent = (event: ExecutionEvent) => {
     opts.onExecutionEvent?.(event);
     if (jsonOutput) return;
+
+    const teamMessage = formatTeamProgressEvent(event);
+    if (teamMessage) {
+      stdout.write(`${teamMessage}\n`);
+      return;
+    }
 
     const time = new Date().toLocaleTimeString();
     switch (event.type) {

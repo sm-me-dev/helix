@@ -26,6 +26,7 @@ describe("helix run CLI command", () => {
     assert.match(res.stdout, /--strategy/);
     assert.match(res.stdout, /--dry/);
     assert.match(res.stdout, /--simulation/);
+    assert.match(res.stdout, /--tmux/);
   });
 
   it("prints usage and exits 0 on -h", () => {
