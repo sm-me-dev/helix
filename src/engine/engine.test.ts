@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { describe, it } from "node:test";
 import { DefaultContextManager, DEFAULT_CONTEXT_BUDGET } from "./context.ts";
 import { HelixExecutionEngine } from "./engine.ts";
@@ -11,7 +12,7 @@ import { runDisposableScout, type ScoutTurnRequest } from "./scout.ts";
 import { FileExecutionStateManager } from "./state.ts";
 import { DefaultTaskPlanner, normalizeTaskDefinition } from "./task.ts";
 import { DefaultToolExecutor, ToolSecurityError } from "./tools.ts";
-import type { TaskDefinition, ValidationReport } from "./types.ts";
+import type { TaskDefinition, ValidationEngine, ValidationReport } from "./types.ts";
 import { DefaultValidationEngine } from "./validator.ts";
 import { GitWorktreeManager } from "./worktree.ts";
 
@@ -424,6 +425,7 @@ describe("Phase 03: Helix Core Execution Engine", () => {
         assert.ok(result.affectedFiles.includes(targetFile));
         assert.ok(result.diff.includes("+export const version = 2;"));
         assert.equal(result.validation.passed, true);
+        assert.match(runner.calls[0]?.systemPrompt ?? "", /## Domain routes/u);
         assert.ok(result.metrics.wallClockDurationMs >= 0);
         assert.equal(result.metrics.retriesAttempted, 0);
 
@@ -692,5 +694,79 @@ describe("Phase 03: Helix Core Execution Engine", () => {
         cleanupDir(tmp);
       }
     });
+  });
+
+  it("runs Stage B after Stage A for complex tasks and returns auditor details", async () => {
+    const tmp = createTempDir("helix-stage-b-");
+    try {
+      fs.writeFileSync(path.join(tmp, "app.ts"), "export const version = 1;\n");
+      for (const args of [
+        ["init", "-q"],
+        ["config", "user.email", "helix-test@example.invalid"],
+        ["config", "user.name", "Helix Test"],
+        ["add", "app.ts"],
+        ["commit", "-qm", "initial"],
+      ]) {
+        const git = spawnSync("git", args, { cwd: tmp, encoding: "utf8" });
+        assert.equal(git.status, 0, git.stderr);
+      }
+
+      const runner = new MockAgentRunner("opencode", [
+        {
+          exitCode: 0,
+          fileEdits: { "app.ts": "export const version = 2;\n" },
+        },
+      ]);
+      let auditorCalls = 0;
+      const deterministicValidator: ValidationEngine = {
+        async validate(): Promise<ValidationReport> {
+          return { passed: true, durationMs: 0, checks: [] };
+        },
+        extractDiagnostics(): string {
+          return "";
+        },
+      };
+      const engine = new HelixExecutionEngine({
+        runner,
+        validator: deterministicValidator,
+        adversarialAudit: {
+          generatorProvider: "opencode",
+          async invokeAuditor(payload, route) {
+            auditorCalls++;
+            assert.deepEqual(Object.keys(payload).sort(), [
+              "deterministicGateSummary",
+              "domainInvariants",
+              "gitDiff",
+              "taskSpec",
+            ]);
+            return {
+              output: JSON.stringify({
+                status: "VERIFIED",
+                reviewerHarness: route.harness,
+                reviewerModelId: route.modelId,
+                findings: [],
+              }),
+              inputTokens: 12,
+              outputTokens: 5,
+            };
+          },
+        },
+      });
+      const task = normalizeTaskDefinition({
+        id: "task-stage-b",
+        prompt: "Bump app version to 2",
+        workspaceRoot: tmp,
+        targetFiles: ["app.ts"],
+        tierOverride: "complex",
+        passCommand: "true",
+      });
+      const result = await engine.execute(task, { isolatedWorktree: false });
+      assert.equal(result.status, "succeeded");
+      assert.equal(auditorCalls, 1);
+      assert.equal(result.validation.adversarialAudit?.status, "VERIFIED");
+      assert.deepEqual(result.validation.auditorTokenCost, { inputTokens: 12, outputTokens: 5 });
+    } finally {
+      cleanupDir(tmp);
+    }
   });
 });

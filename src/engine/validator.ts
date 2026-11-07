@@ -1,6 +1,7 @@
 // Helix Validation Engine & Diagnostic Extractor (Phase 03 - ADR-002, ADR-006)
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type {
   AdversarialAuditVerdict,
@@ -60,25 +61,35 @@ export function buildAdversarialAuditPrompt(payload: FirewalledAuditPayload): st
 export function createHeadlessAuditorInvoker(
   resolveApi: (route: ModelRoute) => HeadlessApiConfiguration | undefined,
   timeoutMs = 120_000,
+  allowCliFallback = false,
 ): (payload: FirewalledAuditPayload, route: ModelRoute) => Promise<AuditorInvocationOutput> {
   return async (payload, route) => {
     const api = resolveApi(route);
-    if (!api)
+    if (!api && !allowCliFallback)
       throw new Error(
         "Auditor Stage B requires an explicitly configured API endpoint so no workspace tools or chat history are exposed",
       );
-    const result: HeadlessInvocationResult = await invokeProviderHeadlessAgent(route.harness, {
-      mode: "api",
-      modelId: route.modelId,
-      effort: route.effort,
-      prompt: buildAdversarialAuditPrompt(payload),
-      timeoutMs,
-      maxInputTokens: 200_000,
-      maxOutputTokens: 6_000,
-      maxTurns: route.maxTurns,
-      readOnlyToolsOnly: true,
-      api,
-    });
+    const isolatedWorkdir = api
+      ? undefined
+      : fs.mkdtempSync(path.join(os.tmpdir(), "helix-auditor-"));
+    let result: HeadlessInvocationResult;
+    try {
+      result = await invokeProviderHeadlessAgent(route.harness, {
+        mode: api ? "api" : "cli",
+        modelId: route.modelId,
+        effort: route.effort,
+        prompt: buildAdversarialAuditPrompt(payload),
+        workdir: isolatedWorkdir,
+        timeoutMs,
+        maxInputTokens: 200_000,
+        maxOutputTokens: 6_000,
+        maxTurns: route.maxTurns,
+        readOnlyToolsOnly: true,
+        ...(api ? { api } : {}),
+      });
+    } finally {
+      if (isolatedWorkdir) fs.rmSync(isolatedWorkdir, { recursive: true, force: true });
+    }
     if (result.exitCode !== 0)
       throw new Error(result.error ?? result.stderr ?? "Adversarial Auditor invocation failed");
     return {

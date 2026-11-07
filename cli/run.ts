@@ -7,6 +7,8 @@ import {
   HelixExecutionEngine,
   loadEngineConfig,
   normalizeTaskDefinition,
+  createHeadlessAuditorInvoker,
+  resolveOrthogonalAuditor,
   type EngineExecutionOptions,
   type ExecutionEvent,
   type OrchestrationStrategy,
@@ -16,6 +18,7 @@ import {
   type TaskDefinition,
   type TaskResult,
 } from "../src/engine/index.ts";
+import type { HeadlessApiConfiguration, HeadlessProvider } from "../src/engine/provider.ts";
 import { createExecutionEventMapper } from "../src/daemon/execution-events.ts";
 import type { SessionRuntime } from "../src/daemon/contracts.ts";
 import { loadAiConfig } from "../src/engine/config-loader.ts";
@@ -329,10 +332,60 @@ export async function cmdRun(opts: RunCliOptions): Promise<void> {
 
   const modelProvider = createModelProvider(config.defaultProvider || "anthropic");
 
+  const isSimulation = simulation || process.env.HELIX_SIMULATION === "1";
+  const aiConfig = loadAiConfig({
+    workspaceRoot,
+    cli: { provider: config.defaultProvider, model: config.defaultModelId },
+  }).config;
+  const generatorHarness = headlessHarnessForPlatform(config.defaultPlatform, aiConfig.providerId);
+  const generatorProvider = { harness: generatorHarness, modelId: config.defaultModelId };
+  const auditorRoute = resolveOrthogonalAuditor(generatorProvider);
+  const resolveAuditorApi = (route: typeof auditorRoute): HeadlessApiConfiguration | undefined => {
+    const base = aiConfig.baseUrl?.replace(/\/+$/u, "");
+    if (!base || !aiConfig.apiKey) return undefined;
+    const endpoint = (suffix: string) => {
+      if (base.endsWith(suffix)) return base;
+      const versionedSuffix = `/v1${suffix}`;
+      return base.endsWith("/v1") ? `${base}${suffix}` : `${base}${versionedSuffix}`;
+    };
+    if (route.harness === "claude" && aiConfig.providerId === "anthropic") {
+      return {
+        endpoint: endpoint("/messages"),
+        format: "anthropic-messages",
+        apiKey: aiConfig.apiKey,
+        headers: aiConfig.defaultHeaders,
+      };
+    }
+    if (
+      route.harness === "codex" &&
+      (aiConfig.providerId === "openai" ||
+        aiConfig.providerId === "generic" ||
+        aiConfig.providerId === "local")
+    ) {
+      return {
+        endpoint: endpoint("/chat/completions"),
+        format: "openai-chat-completions",
+        apiKey: aiConfig.apiKey,
+        headers: aiConfig.defaultHeaders,
+      };
+    }
+    return undefined;
+  };
+  const auditApi = resolveAuditorApi(auditorRoute);
+  const auditorAdapterConfigured = isHeadlessExecutableAvailable(auditorRoute.harness);
+  const adversarialAudit =
+    !isSimulation && (auditApi || auditorAdapterConfigured)
+      ? {
+          generatorProvider,
+          invokeAuditor: createHeadlessAuditorInvoker(resolveAuditorApi, 120_000, true),
+        }
+      : undefined;
+
   const engine = new HelixExecutionEngine({
     runner,
     provider: modelProvider,
     config,
+    adversarialAudit,
   });
 
   // Event listener for progress reporting
@@ -668,6 +721,8 @@ export function createCliSessionRuntime(): SessionRuntime {
       let streamedText = "";
       const aiConfig = loadAiConfig().config;
       const modelProvider = createModelProvider(aiConfig.providerId);
+      const promptTokens = countTokens(prompt);
+      let lastUsageEmissionAt = 0;
       await cmdRun({
         runArgs: [prompt, "--json"],
         silent: true,
@@ -675,7 +730,9 @@ export function createCliSessionRuntime(): SessionRuntime {
         onMessageDelta(text) {
           streamedText += text;
           callback.emit({ type: "message.delta", role: "assistant", delta_text: text });
-          const promptTokens = countTokens(prompt);
+          const now = Date.now();
+          if (now - lastUsageEmissionAt < 250) return;
+          lastUsageEmissionAt = now;
           const completionTokens = countTokens(streamedText);
           const estimate = modelProvider.calculateCost(aiConfig.model ?? "", {
             inputTokens: promptTokens,
@@ -727,4 +784,34 @@ export function createCliSessionRuntime(): SessionRuntime {
       if (failed) throw new Error("Helix task failed");
     },
   };
+}
+
+function headlessHarnessForPlatform(platform: PlatformId, provider: ProviderId): HeadlessProvider {
+  if (platform === "claude-code") return "claude";
+  if (platform === "codex") return "codex";
+  if (platform === "opencode") return "opencode";
+  if (platform === "copilot") return "copilot";
+  if (provider === "openai") return "codex";
+  if (provider === "google") return "opencode";
+  return "claude";
+}
+
+function isHeadlessExecutableAvailable(provider: HeadlessProvider): boolean {
+  if (provider === "copilot") return false;
+  const executable = provider === "claude" ? "claude" : provider;
+  const extensions = process.platform === "win32" ? [".exe", ".cmd", ".bat", ""] : [""];
+  return (process.env.PATH ?? "").split(path.delimiter).some((directory) =>
+    extensions.some((extension) => {
+      const candidate = path.join(directory, `${executable}${extension}`);
+      try {
+        fs.accessSync(
+          candidate,
+          process.platform === "win32" ? fs.constants.F_OK : fs.constants.X_OK,
+        );
+        return fs.statSync(candidate).isFile();
+      } catch {
+        return false;
+      }
+    }),
+  );
 }

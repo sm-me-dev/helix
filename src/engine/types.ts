@@ -147,6 +147,8 @@ export type EngineExecutionOptions = {
   onEvent?: (event: ExecutionEvent) => void;
   /** Stream assistant text from the agent runner to non-terminal clients. */
   onMessageDelta?: (text: string) => void;
+  /** Per-task validation override used to layer independent review after Stage A. */
+  validationEngine?: ValidationEngine;
 };
 
 export interface HelixEngine {

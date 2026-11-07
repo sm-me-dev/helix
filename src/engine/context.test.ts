@@ -22,6 +22,7 @@ import type { Tier2EpisodicRecord } from "../knowledge/types.ts";
 import { DefaultTaskPlanner, normalizeTaskDefinition } from "./task.ts";
 import { DefaultToolExecutor } from "./tools.ts";
 import { TokenBudgetExceededError } from "./types.ts";
+import { countTokens } from "../measure.ts";
 
 function createTempDir(): string {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "helix-p05-test-"));
@@ -52,10 +53,7 @@ describe("Phase 05: Context Management & Token Optimization", () => {
           ["load_skill", "tool_search", "spawn_scout", "consult_peer", "Read", "Grep", "Glob"],
         );
         const messages = [
-          "src/a.ts:4",
-          "function ready()",
-          "Error: expected true",
-          "verified invariant",
+          "src/a.ts:4\nfunction ready()\nError: expected true\nverified invariant",
           "symbol export ready",
           "completed tool call",
         ].map((content) => ({
@@ -65,7 +63,24 @@ describe("Phase 05: Context Management & Token Optimization", () => {
         }));
         const compacted = compactContextIfNeeded(messages, state, tmp);
         assert.notEqual(compacted[0].content, messages[0].content);
-        assert.ok(compacted[0].content.includes("NOTES.md"));
+        assert.match(
+          compacted[0].content,
+          /^\[Compacted -> \.helix\/runtime\/bootstrap-test\/NOTES\.md\]/,
+        );
+        const inlineDigest = compacted[0].content.split("Digest: ")[1] ?? "";
+        assert.ok(countTokens(inlineDigest) <= 120);
+        assert.match(inlineDigest, /src\/a\.ts:4/);
+        assert.match(inlineDigest, /Error: expected true/);
+        const firstArchive = fs.readFileSync(
+          path.join(tmp, ".helix/runtime/bootstrap-test/NOTES.md"),
+          "utf8",
+        );
+        const secondCompaction = compactContextIfNeeded(compacted, state, tmp);
+        assert.deepEqual(secondCompaction, compacted);
+        assert.equal(
+          fs.readFileSync(path.join(tmp, ".helix/runtime/bootstrap-test/NOTES.md"), "utf8"),
+          firstArchive,
+        );
         const notes = fs.readFileSync(
           path.join(tmp, ".helix/runtime/bootstrap-test/NOTES.md"),
           "utf8",

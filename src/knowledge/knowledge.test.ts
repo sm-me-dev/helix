@@ -157,7 +157,22 @@ describe("Three-tier quarantine knowledge", () => {
         repository.searchEpisodicFts("later").map((item) => item.id),
         [record.id],
       );
+      repository.insertEpisodicRecord({
+        ...record,
+        id: "unrelated-retry-rule",
+        domainId: "ui-shell",
+        triggerSummary: "Retries exposed a console logging defect",
+      });
+      assert.deepEqual(
+        retrieveEpisodicRecords(repository, "retries console logging defect", {
+          domainId: "execution-engine",
+        }).map((item) => item.id),
+        [record.id],
+      );
       repository.db.prepare("DELETE FROM episodic_quarantine WHERE id = ?").run(record.id);
+      repository.db
+        .prepare("DELETE FROM episodic_quarantine WHERE id = ?")
+        .run("unrelated-retry-rule");
       assert.deepEqual(repository.searchEpisodicFts("later"), []);
     } finally {
       repository.close();

@@ -374,6 +374,7 @@ export class AdaptiveKnowledgeRetriever {
 }
 
 export interface EpisodicRetrievalOptions {
+  readonly domainId?: string;
   readonly filePath?: string;
   readonly sourceCode?: string;
   readonly limit?: number;
@@ -406,6 +407,7 @@ export function retrieveEpisodicRecords(
       const record = repository.getEpisodicRecord(id);
       if (
         !record ||
+        (options.domainId !== undefined && record.domainId !== options.domainId) ||
         (options.filePath && record.fileGlob && !matchPathGlob(options.filePath, record.fileGlob))
       ) {
         return [];

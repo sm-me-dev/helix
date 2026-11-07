@@ -679,6 +679,7 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
     options: EngineExecutionOptions,
     allowParallel: boolean,
   ): Promise<TaskResult> {
+    const validator = options.validationEngine ?? this.validator;
     const obs = new DefaultObservabilityCollector();
     const securityAuditLogger = new SecurityAuditLogger(task.id);
     const stateManager = new FileExecutionStateManager(task.id, plan.tier, {
@@ -923,7 +924,7 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
 
       const validationReport: ValidationReport = task.isQuestion
         ? { passed: true, durationMs: 0, checks: [] }
-        : await this.validator.validate(integrationWorktree, task.passCommand);
+        : await validator.validate(integrationWorktree, task.passCommand);
 
       obs.recordGateRun(validationReport.durationMs, validationReport.passed);
 
@@ -935,7 +936,7 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
           payload: { failingStage: validationReport.failingStage },
         });
         throw new Error(
-          `Gate validation failed: ${this.validator.extractDiagnostics(validationReport)}`,
+          `Gate validation failed: ${validator.extractDiagnostics(validationReport)}`,
         );
       }
 

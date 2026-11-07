@@ -57,7 +57,11 @@ export type HypothesisInvestigator = (input: {
   readonly instructions: string;
   readonly readOnlyToolsOnly: true;
   readonly maxTurns: 8;
-}) => Promise<{ readonly evidence: readonly string[]; readonly disproved?: boolean }>;
+}) => Promise<{
+  readonly evidence: readonly string[];
+  readonly disproved?: boolean;
+  readonly falsifiedHypotheses?: readonly string[];
+}>;
 
 function validateTeamTask(value: unknown): TeamTaskNode {
   if (value === null || typeof value !== "object" || Array.isArray(value))
@@ -580,6 +584,7 @@ export class HelixTeamRuntime {
           hypothesis: sanitizePeerText(hypothesis),
           evidence: result.evidence.map(sanitizePeerText),
           disproved: result.disproved === true,
+          falsifiedHypotheses: (result.falsifiedHypotheses ?? []).map(sanitizePeerText),
         };
         for (const peer of investigators) {
           if (peer !== teammateId)
@@ -624,6 +629,7 @@ export class HelixTeamRuntime {
           hypothesis: sanitizePeerText(hypothesis),
           evidence: result.evidence.map(sanitizePeerText),
           disproved: result.disproved === true,
+          falsifiedHypotheses: (result.falsifiedHypotheses ?? []).map(sanitizePeerText),
         };
         return {
           sender_agent: teammateId,
@@ -638,7 +644,7 @@ export class HelixTeamRuntime {
     const proof = options.arbitrate
       ? await options.arbitrate(findings)
       : defaultArbitrate(findings);
-    if (!proof.evidence.length || proof.evidence.some((item) => !/:[0-9]+(?:\b|$)/.test(item)))
+    if (!proof.evidence.length || proof.evidence.some((item) => !containsFileLineCitation(item)))
       throw new Error("Root cause proof requires reproducible file:line evidence");
     return proof;
   }
@@ -802,29 +808,72 @@ export function globPatternsOverlap(left: string, right: string): boolean {
 }
 
 function defaultArbitrate(findings: readonly TeamPeerMessage[]): RootCauseProof {
-  const surviving = findings.filter(
-    (finding) =>
-      finding.payload.disproved !== true &&
-      Array.isArray(finding.payload.evidence) &&
-      finding.payload.evidence.length > 0 &&
-      finding.payload.evidence.every((item) => typeof item === "string"),
-  );
-  if (surviving.length !== 1)
-    throw new Error(
-      "Hypothesis arbitration needs exactly one surviving evidence-backed hypothesis",
+  const hypothesisNames = new Set(findings.map((finding) => String(finding.payload.hypothesis)));
+  const hasCitedEvidence = (finding: TeamPeerMessage): boolean =>
+    Array.isArray(finding.payload.evidence) &&
+    finding.payload.evidence.some(
+      (item) => typeof item === "string" && containsFileLineCitation(item),
     );
-  const winner = surviving[0];
+  const falsified = new Set<string>();
+  for (const finding of findings) {
+    if (!hasCitedEvidence(finding)) continue;
+    const ownHypothesis = String(finding.payload.hypothesis);
+    if (finding.payload.disproved === true) falsified.add(ownHypothesis);
+    const claims = Array.isArray(finding.payload.falsifiedHypotheses)
+      ? finding.payload.falsifiedHypotheses.filter(
+          (item): item is string =>
+            typeof item === "string" && item !== ownHypothesis && hypothesisNames.has(item),
+        )
+      : [];
+    for (const hypothesis of claims) falsified.add(hypothesis);
+  }
+
+  const candidates = findings.flatMap((finding, investigatorOrder) => {
+    const rawEvidence = finding.payload.evidence;
+    const evidence = Array.isArray(rawEvidence)
+      ? rawEvidence.filter(
+          (item): item is string => typeof item === "string" && containsFileLineCitation(item),
+        )
+      : [];
+    const hypothesis = String(finding.payload.hypothesis);
+    if (!evidence.length || falsified.has(hypothesis)) return [];
+    const peerFalsifications = new Set(
+      findings
+        .filter(
+          (peer) =>
+            peer !== finding &&
+            hasCitedEvidence(peer) &&
+            Array.isArray(peer.payload.falsifiedHypotheses) &&
+            peer.payload.falsifiedHypotheses.includes(hypothesis),
+        )
+        .map((peer) => peer.sender_agent),
+    ).size;
+    return [
+      {
+        finding,
+        hypothesis,
+        evidence,
+        investigatorOrder,
+        score: evidence.length - peerFalsifications,
+      },
+    ];
+  });
+  if (!candidates.length)
+    throw new Error("Hypothesis arbitration found no surviving evidence-backed hypothesis");
+  candidates.sort((a, b) => b.score - a.score || a.investigatorOrder - b.investigatorOrder);
+  const winner = candidates[0];
   if (!winner) throw new Error("Hypothesis arbitration did not produce a survivor");
-  const evidence = winner.payload.evidence;
-  if (!Array.isArray(evidence) || evidence.some((item) => typeof item !== "string"))
-    throw new Error("Hypothesis evidence must be a list of citations");
   return {
-    hypothesis: String(winner.payload.hypothesis),
-    evidence,
-    falsifiedHypotheses: findings
-      .filter((finding) => finding.payload.disproved === true)
-      .map((finding) => String(finding.payload.hypothesis)),
+    hypothesis: winner.hypothesis,
+    evidence: winner.evidence,
+    falsifiedHypotheses: [...falsified],
   };
+}
+
+function containsFileLineCitation(value: string): boolean {
+  return /(?:^|[\s("'`])(?:\.{0,2}[\\/])?(?:[\w.@+-]+[\\/])*[\w.@+-]+\.[A-Za-z0-9]+:[1-9]\d*(?=$|[\s:),;])/u.test(
+    value,
+  );
 }
 
 function hypothesisInstruction(bugDescription: string, hypothesis: string): string {

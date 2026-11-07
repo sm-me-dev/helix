@@ -659,6 +659,36 @@ describe("Phase 4 peer team runtime", () => {
     }
   });
 
+  it("ranks multiple cited hypothesis survivors and applies peer falsifications", async () => {
+    const root = createTempDir();
+    try {
+      const team = new HelixTeamRuntime({ workspaceRoot: root, teamId: "hypothesis-ranking" });
+      const proof = await team.spawnHypothesisTeam({
+        bugDescription: "A retry is lost",
+        candidateHypotheses: ["lost write", "stale read", "bad parse"],
+        targetFiles: ["src/retry.ts"],
+        investigate: async ({ hypothesis, competingFindings }) => {
+          if (competingFindings.length === 0) return { evidence: ["src/retry.ts:1"] };
+          if (hypothesis === "lost write") {
+            return {
+              evidence: ["src/retry.ts:11", "src/retry.ts:12"],
+              falsifiedHypotheses: ["stale read"],
+            };
+          }
+          if (hypothesis === "bad parse") {
+            return { evidence: ["src/retry.ts:21", "src/retry.ts:22", "src/retry.ts:23"] };
+          }
+          return { evidence: ["src/retry.ts:31"] };
+        },
+      });
+      assert.equal(proof.hypothesis, "bad parse");
+      assert.deepEqual(proof.evidence, ["src/retry.ts:21", "src/retry.ts:22", "src/retry.ts:23"]);
+      assert.deepEqual(proof.falsifiedHypotheses, ["stale read"]);
+    } finally {
+      cleanupDir(root);
+    }
+  });
+
   it("caps peer team membership and applies per-teammate turn and token budgets", async () => {
     const delegate = new MockAgentRunner("opencode", [
       { stdout: "brief result", tokens: { input: 10, output: 5 } },

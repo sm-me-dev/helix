@@ -120,7 +120,7 @@ export function compactContextIfNeeded(
     return messages;
   }
   const toolIndexes = messages.flatMap((message, index) =>
-    message.role === "tool" ? [index] : [],
+    message.role === "tool" && !message.content.startsWith("[Compacted ->") ? [index] : [],
   );
   if (toolIndexes.length <= 2) return messages;
   const oldIndexes = new Set(toolIndexes.slice(0, -2));
@@ -139,12 +139,42 @@ export function compactContextIfNeeded(
   fs.mkdirSync(path.dirname(notesPath), { recursive: true });
   const section = `\n## Compacted tool output (${new Date().toISOString()})\n${facts || "No tool output was available."}\n`;
   fs.appendFileSync(notesPath, section, "utf8");
-  const pointer = `Older tool output was compacted into .helix/runtime/${session}/NOTES.md. Exact file paths, symbols, errors, and verified invariants are recorded there.`;
+  const notesRelativePath = `.helix/runtime/${session}/NOTES.md`;
   const compacted = messages.map((message, index) =>
-    oldIndexes.has(index) ? { ...message, content: pointer } : message,
+    oldIndexes.has(index)
+      ? {
+          ...message,
+          content: `[Compacted -> ${notesRelativePath}] Digest: ${toolOutputDigest(message.content)}`,
+        }
+      : message,
   );
   state.currentTokenCount = countTokens(compacted.map((message) => message.content).join("\n"));
   return compacted;
+}
+
+/** Keep compact evidence inline while the complete original output remains archived. */
+function toolOutputDigest(output: string): string {
+  const lines = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const filePathFacts =
+    output.match(
+      /(?:[A-Za-z]:)?(?:\.{0,2}[/\\])?[\w.@+-]+(?:[/\\][\w.@+-]+)*\.[A-Za-z0-9]+:\d+(?::\d+)?/g,
+    ) ?? [];
+  const symbolFacts = lines.filter((line) =>
+    /\b(?:export\s+)?(?:declare\s+)?(?:async\s+)?(?:function|class|interface|type|enum|const|let|var)\s+[A-Za-z_$][\w$]*/.test(
+      line,
+    ),
+  );
+  const failureFacts = lines.filter((line) => /\b(?:Error|FAIL)\b/i.test(line));
+  const facts = [...new Set([...filePathFacts, ...failureFacts, ...symbolFacts])];
+  const selected: string[] = [];
+  for (const fact of facts) {
+    const candidate = [...selected, fact].join(" | ");
+    if (countTokens(candidate) <= 120) selected.push(fact);
+  }
+  return selected.length ? selected.join(" | ") : "No path, symbol, or failure facts extracted.";
 }
 
 export interface MasterLoopTurn<T> {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { request as httpRequest } from "node:http";
 import test from "node:test";
 import { startHelixDaemon } from "./server.ts";
 
@@ -95,6 +96,52 @@ test("daemon streams sequenced events and resolves approval over REST without a 
     await peerReader.cancel();
   } finally {
     await daemon.close();
+  }
+});
+
+test("daemon restricts Host and mutating Origin headers and searches its configured workspace", async () => {
+  const workspaceRoot = fs.mkdtempSync(path.join(os.tmpdir(), "helix-daemon-workspace-"));
+  fs.writeFileSync(path.join(workspaceRoot, "needle-entry.ts"), "export const needle = true;\n");
+  const daemon = await startHelixDaemon({ host: "127.0.0.1", port: 0, workspaceRoot });
+  try {
+    const base = `http://${daemon.host}:${daemon.port}`;
+    const rejectedHostStatus = await new Promise<number>((resolve, reject) => {
+      const request = httpRequest(
+        {
+          hostname: daemon.host,
+          port: daemon.port,
+          path: "/health",
+          headers: { host: "attacker.example" },
+        },
+        (response) => {
+          response.resume();
+          resolve(response.statusCode ?? 0);
+        },
+      );
+      request.once("error", reject);
+      request.end();
+    });
+    assert.equal(rejectedHostStatus, 403);
+
+    const rejectedOrigin = await fetch(`${base}/api/sessions`, {
+      method: "POST",
+      headers: { origin: "https://attacker.example", "content-type": "application/json" },
+      body: "{}",
+    });
+    assert.equal(rejectedOrigin.status, 403);
+
+    const acceptedOrigin = await fetch(`${base}/api/sessions`, {
+      method: "POST",
+      headers: { origin: `http://localhost:${daemon.port}`, "content-type": "application/json" },
+      body: "{}",
+    });
+    assert.equal(acceptedOrigin.status, 201);
+
+    const files = await fetch(`${base}/api/workspace/files?q=needle`);
+    assert.deepEqual((await files.json()).files, ["needle-entry.ts"]);
+  } finally {
+    await daemon.close();
+    fs.rmSync(workspaceRoot, { recursive: true, force: true });
   }
 });
 

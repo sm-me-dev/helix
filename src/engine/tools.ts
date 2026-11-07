@@ -658,7 +658,7 @@ export class ProgressiveToolRuntime {
       const records = retrieveEpisodicRecords(
         repository,
         `${domainId} ${skill.route.description}`,
-        { limit: 3, maxTokens: 250 },
+        { domainId, limit: 3, maxTokens: 250 },
       );
       for (const record of records) this.state.injectedEpisodicIds.add(record.id);
       let references = "";

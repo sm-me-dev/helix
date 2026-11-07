@@ -35,6 +35,7 @@ export type HelixDaemonOptions = {
   port?: number;
   runtime?: SessionRuntime;
   webRoot?: string;
+  workspaceRoot?: string;
 };
 export type RunningHelixDaemon = {
   server: Server;
@@ -157,8 +158,9 @@ export async function startHelixDaemon(
   const requestedPort = options.port ?? 3000;
   const store = new SessionStore();
   const webRoot = options.webRoot ?? findBuiltWebRoot();
+  const workspaceRoot = resolve(options.workspaceRoot ?? process.cwd());
   const server = createServer((request, response) => {
-    void route(request, response, store, options.runtime, webRoot);
+    void route(request, response, store, options.runtime, webRoot, host, workspaceRoot);
   });
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
@@ -186,10 +188,23 @@ async function route(
   store: SessionStore,
   runtime?: SessionRuntime,
   webRoot?: string,
+  daemonHost = "127.0.0.1",
+  workspaceRoot = process.cwd(),
 ): Promise<void> {
   try {
-    const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+    if (!isAllowedHost(request.headers.host, daemonHost)) {
+      return json(response, 403, { error: "Forbidden" });
+    }
     const method = request.method ?? "GET";
+    const origin = request.headers.origin;
+    if (
+      ["POST", "PUT", "PATCH", "DELETE"].includes(method) &&
+      origin !== undefined &&
+      !isAllowedOrigin(origin, daemonHost)
+    ) {
+      return json(response, 403, { error: "Forbidden" });
+    }
+    const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
     if (method === "GET" && url.pathname === "/health") return json(response, 200, { ok: true });
     if (method === "GET" && url.pathname === "/api/sessions")
       return json(response, 200, { sessions: store.list() });
@@ -202,7 +217,9 @@ async function route(
       });
     }
     if (method === "GET" && url.pathname === "/api/workspace/files") {
-      return json(response, 200, { files: findWorkspaceFiles(url.searchParams.get("q") ?? "") });
+      return json(response, 200, {
+        files: findWorkspaceFiles(url.searchParams.get("q") ?? "", workspaceRoot),
+      });
     }
     if (method === "POST" && url.pathname === "/api/config/providers/verify") {
       const body = (await readJson(request)) as Record<string, unknown>;
@@ -494,8 +511,52 @@ function parseHeaders(value: unknown): Record<string, string> | undefined {
   return headers;
 }
 
-function findWorkspaceFiles(query: string): string[] {
-  const root = process.cwd();
+function isAllowedHost(authority: string | undefined, daemonHost: string): boolean {
+  if (!authority || /[\s/@?#]/u.test(authority)) return false;
+  try {
+    const parsed = new URL(`http://${authority}`);
+    if (
+      parsed.username ||
+      parsed.password ||
+      parsed.pathname !== "/" ||
+      parsed.search ||
+      parsed.hash
+    )
+      return false;
+    return isAllowedHostname(parsed.hostname, daemonHost);
+  } catch {
+    return false;
+  }
+}
+
+function isAllowedOrigin(origin: string, daemonHost: string): boolean {
+  try {
+    const parsed = new URL(origin);
+    if (
+      (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+      parsed.username ||
+      parsed.password ||
+      parsed.pathname !== "/" ||
+      parsed.search ||
+      parsed.hash
+    ) {
+      return false;
+    }
+    return isAllowedHostname(parsed.hostname, daemonHost);
+  } catch {
+    return false;
+  }
+}
+
+function isAllowedHostname(hostname: string, daemonHost: string): boolean {
+  const normalize = (value: string) => value.toLowerCase().replace(/^\[|\]$/gu, "");
+  const host = normalize(hostname);
+  const configured = normalize(daemonHost);
+  return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === configured;
+}
+
+function findWorkspaceFiles(query: string, workspaceRoot: string): string[] {
+  const root = resolve(workspaceRoot);
   const ignored = new Set([".git", "node_modules", ".helix-work", "dist", "coverage"]);
   const matches: string[] = [];
   let visited = 0;
