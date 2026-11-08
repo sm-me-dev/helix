@@ -3,14 +3,16 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { describe, it } from "node:test";
 import { DefaultContextManager, DEFAULT_CONTEXT_BUDGET } from "./context.ts";
 import { HelixExecutionEngine } from "./engine.ts";
 import { MockAgentRunner } from "./runner.ts";
+import { runDisposableScout, type ScoutTurnRequest } from "./scout.ts";
 import { FileExecutionStateManager } from "./state.ts";
 import { DefaultTaskPlanner, normalizeTaskDefinition } from "./task.ts";
 import { DefaultToolExecutor, ToolSecurityError } from "./tools.ts";
-import type { TaskDefinition, ValidationReport } from "./types.ts";
+import type { TaskDefinition, ValidationEngine, ValidationReport } from "./types.ts";
 import { DefaultValidationEngine } from "./validator.ts";
 import { GitWorktreeManager } from "./worktree.ts";
 
@@ -27,6 +29,110 @@ function cleanupDir(dir: string): void {
 }
 
 describe("Phase 03: Helix Core Execution Engine", () => {
+  it("runs a disposable scout with a read-only tool allowlist and returns only bounded JSON synthesis", async () => {
+    const calls: ScoutTurnRequest[] = [];
+    let turn = 0;
+    const providerRouter = {
+      async invokeTurn(request: (typeof calls)[number]) {
+        calls.push(request);
+        turn++;
+        if (turn === 1) {
+          return {
+            stopReason: "tool_use" as const,
+            toolCalls: [
+              {
+                id: "read-1",
+                name: "Read",
+                input: { filePath: "src/engine/scout.ts", startLine: 1, endLine: 2 },
+              },
+            ],
+          };
+        }
+        return {
+          stopReason: "end_turn" as const,
+          content: JSON.stringify({
+            files: ["src/engine/scout.ts:1"],
+            symbols: ["runDisposableScout"],
+            entryPoints: [],
+            negativeFindings: [],
+          }),
+        };
+      },
+    };
+    const synthesis = await runDisposableScout(
+      {
+        taskId: "scout-test",
+        query: "Find the execution entry point",
+      },
+      providerRouter,
+      process.cwd(),
+    );
+    assert.deepEqual(synthesis.files, ["src/engine/scout.ts:1"]);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0]?.readOnlyToolsOnly, true);
+    assert.equal(calls[0]?.maxTurns, 8);
+    assert.deepEqual(
+      calls[0]?.tools.map((tool) => tool.name),
+      ["Read", "Grep", "Glob", "ast_search"],
+    );
+    assert.ok(
+      calls[1]?.messages.some(
+        (message) => message.role === "tool" && message.content.includes("import fs"),
+      ),
+    );
+    assert.deepEqual(Object.keys(synthesis).sort(), [
+      "entryPoints",
+      "files",
+      "negativeFindings",
+      "symbols",
+    ]);
+  });
+
+  it("rejects forbidden scout calls before executing any call in the batch", async () => {
+    const providerRouter = {
+      async invokeTurn() {
+        return {
+          stopReason: "tool_use" as const,
+          toolCalls: [
+            { id: "write-1", name: "Write", input: { filePath: "forbidden.txt", content: "x" } },
+          ],
+        };
+      },
+    };
+    await assert.rejects(
+      runDisposableScout(
+        { taskId: "scout-blocked", query: "Inspect source" },
+        providerRouter,
+        process.cwd(),
+      ),
+      /forbidden tool 'Write'/,
+    );
+  });
+
+  it("stops the disposable scout at its eight-turn budget", async () => {
+    let calls = 0;
+    const providerRouter = {
+      async invokeTurn() {
+        calls++;
+        return {
+          stopReason: "tool_use" as const,
+          toolCalls: [
+            { id: `glob-${calls}`, name: "Glob", input: { pattern: "src/no-such-file-*" } },
+          ],
+        };
+      },
+    };
+    await assert.rejects(
+      runDisposableScout(
+        { taskId: "scout-turn-limit", query: "Inspect paths" },
+        providerRouter,
+        process.cwd(),
+      ),
+      /8-turn limit/,
+    );
+    assert.equal(calls, 8);
+  });
+
   describe("1. Task Input Validation & Representation", () => {
     it("normalizes and validates a valid task definition with defaults", () => {
       const tmp = createTempDir();
@@ -108,20 +214,20 @@ describe("Phase 03: Helix Core Execution Engine", () => {
         await stateManager.recordEvent({
           taskId: "task-123",
           type: "task_started",
-          workflowState: "classified",
+          workflowState: "INIT",
           payload: { action: "init" },
         });
 
         await stateManager.recordEvent({
           taskId: "task-123",
           type: "agent_launched",
-          workflowState: "implemented",
+          workflowState: "EXECUTE",
           payload: { step: 1 },
         });
 
         const snapshot = stateManager.getSnapshot();
         assert.equal(snapshot.taskId, "task-123");
-        assert.equal(snapshot.workflowState, "implemented");
+        assert.equal(snapshot.workflowState, "EXECUTE");
         assert.equal(snapshot.events.length, 2);
 
         // Test loading from disk
@@ -315,17 +421,18 @@ describe("Phase 03: Helix Core Execution Engine", () => {
         const result = await engine.execute(taskInput, { isolatedWorktree: false });
 
         assert.equal(result.status, "succeeded");
-        assert.equal(result.finalWorkflowState, "completed");
+        assert.equal(result.finalWorkflowState, "COMPLETE");
         assert.ok(result.affectedFiles.includes(targetFile));
         assert.ok(result.diff.includes("+export const version = 2;"));
         assert.equal(result.validation.passed, true);
+        assert.match(runner.calls[0]?.systemPrompt ?? "", /## Domain routes/u);
         assert.ok(result.metrics.wallClockDurationMs >= 0);
         assert.equal(result.metrics.retriesAttempted, 0);
 
         // Verify state snapshot
         const state = await engine.getState("task-success-e2e");
         assert.ok(state);
-        assert.equal(state.workflowState, "completed");
+        assert.equal(state.workflowState, "COMPLETE");
       } finally {
         cleanupDir(tmp);
       }
@@ -337,7 +444,7 @@ describe("Phase 03: Helix Core Execution Engine", () => {
       const result = await engine.execute({ prompt: "", workspaceRoot: "/non/existent" });
 
       assert.equal(result.status, "failed");
-      assert.equal(result.finalWorkflowState, "blocked");
+      assert.equal(result.finalWorkflowState, "BLOCKED");
       assert.equal(result.error?.code, "INVALID_TASK_INPUT");
     });
 
@@ -411,7 +518,7 @@ describe("Phase 03: Helix Core Execution Engine", () => {
         const result = await engine.execute(taskInput, { isolatedWorktree: false });
 
         assert.equal(result.status, "failed");
-        assert.equal(result.finalWorkflowState, "blocked");
+        assert.equal(result.finalWorkflowState, "BLOCKED");
         assert.equal(result.error?.code, "EXECUTION_FAILED");
         assert.equal(result.metrics.retriesAttempted, 2);
       } finally {
@@ -521,7 +628,7 @@ describe("Phase 03: Helix Core Execution Engine", () => {
         const result = await engine.execute(taskInput, { isolatedWorktree: false });
 
         assert.equal(result.status, "cancelled");
-        assert.equal(result.finalWorkflowState, "blocked");
+        assert.equal(result.finalWorkflowState, "BLOCKED");
         assert.equal(result.error?.code, "TASK_CANCELLED");
       } finally {
         cleanupDir(tmp);
@@ -587,5 +694,79 @@ describe("Phase 03: Helix Core Execution Engine", () => {
         cleanupDir(tmp);
       }
     });
+  });
+
+  it("runs Stage B after Stage A for complex tasks and returns auditor details", async () => {
+    const tmp = createTempDir("helix-stage-b-");
+    try {
+      fs.writeFileSync(path.join(tmp, "app.ts"), "export const version = 1;\n");
+      for (const args of [
+        ["init", "-q"],
+        ["config", "user.email", "helix-test@example.invalid"],
+        ["config", "user.name", "Helix Test"],
+        ["add", "app.ts"],
+        ["commit", "-qm", "initial"],
+      ]) {
+        const git = spawnSync("git", args, { cwd: tmp, encoding: "utf8" });
+        assert.equal(git.status, 0, git.stderr);
+      }
+
+      const runner = new MockAgentRunner("opencode", [
+        {
+          exitCode: 0,
+          fileEdits: { "app.ts": "export const version = 2;\n" },
+        },
+      ]);
+      let auditorCalls = 0;
+      const deterministicValidator: ValidationEngine = {
+        async validate(): Promise<ValidationReport> {
+          return { passed: true, durationMs: 0, checks: [] };
+        },
+        extractDiagnostics(): string {
+          return "";
+        },
+      };
+      const engine = new HelixExecutionEngine({
+        runner,
+        validator: deterministicValidator,
+        adversarialAudit: {
+          generatorProvider: "opencode",
+          async invokeAuditor(payload, route) {
+            auditorCalls++;
+            assert.deepEqual(Object.keys(payload).sort(), [
+              "deterministicGateSummary",
+              "domainInvariants",
+              "gitDiff",
+              "taskSpec",
+            ]);
+            return {
+              output: JSON.stringify({
+                status: "VERIFIED",
+                reviewerHarness: route.harness,
+                reviewerModelId: route.modelId,
+                findings: [],
+              }),
+              inputTokens: 12,
+              outputTokens: 5,
+            };
+          },
+        },
+      });
+      const task = normalizeTaskDefinition({
+        id: "task-stage-b",
+        prompt: "Bump app version to 2",
+        workspaceRoot: tmp,
+        targetFiles: ["app.ts"],
+        tierOverride: "complex",
+        passCommand: "true",
+      });
+      const result = await engine.execute(task, { isolatedWorktree: false });
+      assert.equal(result.status, "succeeded");
+      assert.equal(auditorCalls, 1);
+      assert.equal(result.validation.adversarialAudit?.status, "VERIFIED");
+      assert.deepEqual(result.validation.auditorTokenCost, { inputTokens: 12, outputTokens: 5 });
+    } finally {
+      cleanupDir(tmp);
+    }
   });
 });

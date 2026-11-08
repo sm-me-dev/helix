@@ -25,6 +25,13 @@ discovery_evidence:
   - Pack generator core file src/skills.ts
 created_at: 2026-11-02
 updated_at: 2026-11-02
+description: File Pack Generation
+paths:
+  - src/crew.ts
+  - src/generate.test.ts
+  - src/generate.ts
+  - src/mcps.ts
+  - src/skills.ts
 ---
 
 Harness pack compiler emitting platform files, gate scripts, and repo outlines

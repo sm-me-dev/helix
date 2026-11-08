@@ -3,6 +3,34 @@
 Append-only. Date, decision, evidence, alternatives rejected.
 Token/method rule: anything shown as a measurement must name the script + date.
 
+## 2026-11-05 — Phase 1 OpenAI-compatible provider surface
+
+- Added native `fetch` transport for chat completions, streaming, model listing,
+  and the doctor handshake. The OpenAI-specific client is distinct from the
+  generic OpenAI-compatible client; compatibility mode omits OpenAI-only store
+  and reasoning fields.
+- Verified platform fact: Chat Completions uses `POST /chat/completions`;
+  source: `https://developers.openai.com/api/reference/resources/chat`;
+  verifiedAt: 2026-11-05.
+- Verified platform fact: model listing uses `GET /v1/models`;
+  source: `https://developers.openai.com/api/reference/resources/models/methods/list`;
+  verifiedAt: 2026-11-05.
+- This verifies OpenAI's API surface only; it does not claim that any named
+  third-party service implements every optional OpenAI field or streaming
+  behavior. The generic client is configurable and callers must account for
+  server-specific capability differences.
+
+## 2026-11-05 — OpenTUI runtime floor
+
+- Decision: require Node.js >=26.4 for Helix because the TUI uses OpenTUI's
+  native FFI runtime. CI, npm engine metadata, standalone Node bundles, and
+  installation guidance are kept on the same minimum.
+- Verified fact: OpenTUI documents Node.js >=26.4 and Node applications using
+  ESM with `--experimental-ffi`; `@opentui/react` requires React >=19.2.0.
+- source: `https://opentui.com/docs/getting-started/runtime-support/` and
+  `https://opentui.com/docs/bindings/react/`;
+  verifiedAt: 2026-11-05.
+
 ## 2026-10-07 — Phase 0 baseline (no code changes yet)
 
 - Branch: `fix/pack-correctness` (from `main@0deebd5`).
@@ -1679,3 +1707,33 @@ Not changed, on purpose:
   checked it against the vendor docs that day, and this session did not.
 - `docs/DECISIONS.md` stays one append-only file, as decided in F7.
 - `docs/ANTIGRAVITY-AUDIT-PROMPT.md` is untracked and not mine; left out of the commits.
+
+## 2026-11-05 — Claude Code remote MCP transport field
+
+- Claude Code's current MCP docs state that `.mcp.json` entries with `url` require an explicit
+  `type`; without it, Claude Code treats the entry as stdio and skips the server. The supported
+  remote HTTP transport is `type: "http"` (also accepts `streamable-http`). Claude plugin and
+  direct Claude pack output now add `type: "http"` to URL-based MCP entries. Cursor keeps its
+  documented portable JSON shape.
+- Source: https://code.claude.com/docs/en/mcp (checked 2026-11-05; section “Add a remote HTTP server”).
+- The current plugin manifest docs define `Validation passed` as a loaded manifest; directory
+  submission checks may separately report missing listing materials. The `cli/plugin.test.mjs`
+  assertion now checks load success instead of treating every directory notice as a plugin error.
+- Source: https://code.claude.com/docs/en/plugins-reference (checked 2026-11-05; section “Validate the manifest”).
+
+## 2026-11-05 — Cross-model routing uses current documented model IDs
+
+- Keep the requested Claude and Codex/OpenCode harness separation, but route through currently
+  documented model IDs. The current OpenAI model catalog lists `gpt-6.1-sol`, not
+  `gpt-6.1-codex`; Google lists `gemini-3-pro-preview` as shut down and OpenCode lists
+  `gemini-3.1-pro`. The routing policy uses `gpt-6.1-sol` and `gemini-3.1-pro`, with the model
+  identifiers configurable for installations that expose other models.
+- Claude's current catalog documents `claude-opus-5-5`, `claude-fable-5-1`, `claude-sonnet-5-5`,
+  and `claude-haiku-5-5`; use those current IDs for the default route.
+- Sources: https://developers.openai.com/api/docs/models/all,
+  https://ai.google.dev/gemini-api/docs/deprecations,
+  https://dev.opencode.ai/v2/docs/console/models,
+  https://platform.claude.com/docs/en/models/overview (checked 2026-11-05).
+- Headless CLI invocation sources: https://code.claude.com/docs/en/headless,
+  https://learn.chatgpt.com/docs/codex/cli,
+  https://dev.opencode.ai/v2/docs/cli/commands/ (checked 2026-11-05).

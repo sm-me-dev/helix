@@ -40,6 +40,20 @@ describe("helix knowledge CLI", () => {
     assert.ok(res.stdout.includes("discover"));
     assert.ok(res.stdout.includes("index"));
     assert.ok(res.stdout.includes("retrieve"));
+    assert.ok(res.stdout.includes("compact"));
+  });
+
+  it("runs offline quarantine compaction and creates the tiered database", () => {
+    const dir = scratch();
+    const res = runHelix(dir, ["knowledge", "compact", "--json"]);
+    assert.equal(res.status, 0, res.stderr);
+    assert.deepEqual(JSON.parse(res.stdout), {
+      validated: 0,
+      pruned: 0,
+      promoted: 0,
+      scriptsWritten: [],
+      skillsUpdated: [],
+    });
   });
 
   it("runs project discovery and saves canonical knowledge", () => {

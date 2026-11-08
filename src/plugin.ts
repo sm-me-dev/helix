@@ -10,7 +10,7 @@
 //   - CLAUDE.md at the plugin root is not loaded as context (repo facts stay in AGENTS.md).
 //   - settings.json in a plugin honors only `agent` and `subagentStatusLine`, so the
 //     fail-closed `permissions.deny` secret rules must live in the repo's .claude/settings.json.
-import { portableMcpJson } from "./mcps.ts";
+import { claudeCodeMcpJson } from "./mcps.ts";
 import { SKILL_BY_ID } from "./skills.ts";
 import type { HarnessConfig, PackFile } from "./types.ts";
 import {
@@ -127,6 +127,6 @@ export function pluginPack(config: HarnessConfig, opts: { version?: string } = {
       });
     }
   }
-  files.push({ path: `${ROOT}/.mcp.json`, language: "json", body: portableMcpJson(config.mcps) });
+  files.push({ path: `${ROOT}/.mcp.json`, language: "json", body: claudeCodeMcpJson(config.mcps) });
   return files;
 }

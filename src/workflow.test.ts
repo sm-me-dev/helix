@@ -21,7 +21,7 @@ describe("workflow selection", () => {
     const sel = selectWorkflow({ fileCount: 1, crossesModules: false, isQuestion: false });
     assert.equal(sel.tier, "trivial");
     assert.deepEqual(sel.roles, []);
-    assert.ok(sel.states.includes("completed"));
+    assert.ok(sel.states.includes("COMPLETE"));
   });
 
   it("treats questions as trivial even with no files", () => {
@@ -39,6 +39,12 @@ describe("workflow selection", () => {
     const sel = selectWorkflow({ fileCount: 9, crossesModules: true, isQuestion: false });
     assert.equal(sel.tier, "complex");
     assert.deepEqual(sel.roles, ["scout", "architect", "builder", "reviewer"]);
+    assert.deepEqual(sel.executionModes, [
+      "MODE_1_MASTER_LOOP",
+      "MODE_2_DISPOSABLE_SCOUT",
+      "MODE_3_ADVERSARIAL_AUDITOR",
+      "MODE_4_PEER_TEAM",
+    ]);
   });
 
   it("blocks ambiguous work before any files change", () => {
@@ -48,7 +54,7 @@ describe("workflow selection", () => {
       isQuestion: false,
       ambiguous: true,
     });
-    assert.deepEqual(sel.states, ["classified", "blocked"]);
+    assert.deepEqual(sel.states, ["INIT", "BLOCKED"]);
     assert.deepEqual(sel.roles, []);
   });
 
@@ -60,22 +66,26 @@ describe("workflow selection", () => {
       securitySensitive: true,
     });
     assert.ok(sel.roles.includes("reviewer"));
-    assert.ok(sel.states.includes("verifying"));
+    assert.ok(sel.states.includes("VERIFY"));
   });
 });
 
 describe("workflow transitions", () => {
-  it("allows legitimate skips and blocks nonsense", () => {
-    assert.ok(canTransition("classified", "completed"));
-    assert.ok(canTransition("classified", "implemented"));
-    assert.ok(canTransition("implemented", "verifying"));
-    assert.ok(canTransition("verifying", "completed"));
-    assert.ok(!canTransition("completed", "implemented"));
-    assert.ok(!canTransition("planned", "completed"));
+  it("allows engine execution paths and blocks terminal shortcuts", () => {
+    assert.ok(canTransition("INIT", "DISCOVER"));
+    assert.ok(canTransition("INIT", "EXECUTE"));
+    assert.ok(canTransition("DISCOVER", "EXECUTE"));
+    assert.ok(canTransition("EXECUTE", "VERIFY"));
+    assert.ok(canTransition("EXECUTE", "COMPLETE"));
+    assert.ok(canTransition("VERIFY", "COMPLETE"));
+    assert.ok(canTransition("BLOCKED", "INIT"));
+    assert.ok(canTransition("BLOCKED", "DISCOVER"));
+    assert.ok(!canTransition("COMPLETE", "EXECUTE"));
+    assert.ok(!canTransition("INIT", "COMPLETE"));
   });
 
   it("lets verifying loop back to implemented on failure", () => {
-    assert.ok(canTransition("verifying", "implemented"));
+    assert.ok(canTransition("VERIFY", "EXECUTE"));
   });
 });
 
@@ -119,9 +129,9 @@ describe("security invariant: no bypass of independent verification", () => {
       "builder before reviewer",
     );
     assert.equal(sel.independentReview, true);
-    const i = sel.states.indexOf("implemented");
-    assert.ok(i >= 0 && sel.states.indexOf("verifying") > i, "verifying after implemented");
-    assert.equal(sel.states.at(-1), "completed");
+    const i = sel.states.indexOf("EXECUTE");
+    assert.ok(i >= 0 && sel.states.indexOf("VERIFY") > i, "verifying after implemented");
+    assert.equal(sel.states.at(-1), "COMPLETE");
     // Reviewer role is defined as an isolated, fresh-window role.
     assert.equal(CREW_BY_ID.reviewer.isolated, true);
   };
@@ -154,7 +164,8 @@ describe("security invariant: no bypass of independent verification", () => {
     assert.equal(sel.tier, "trivial");
     assert.deepEqual(sel.roles, []);
     assert.equal(sel.independentReview, false);
-    assert.deepEqual(sel.states, ["classified", "verifying", "completed"]);
+    assert.deepEqual(sel.states, ["INIT", "DISCOVER", "EXECUTE", "VERIFY", "COMPLETE"]);
+    assert.deepEqual(sel.executionModes, ["MODE_1_MASTER_LOOP"]);
   });
 
   it("security-related question stays an informational answer", () => {
@@ -172,7 +183,7 @@ describe("security invariant: no bypass of independent verification", () => {
 
   it("ambiguous security work blocks before any change", () => {
     const sel = selectWorkflow(change({ securitySensitive: true, ambiguous: true }));
-    assert.deepEqual(sel.states, ["classified", "blocked"]);
+    assert.deepEqual(sel.states, ["INIT", "BLOCKED"]);
     assert.equal(sel.independentReview, false);
   });
 });
@@ -185,12 +196,12 @@ describe("missing or malformed task facts", () => {
   it("invalid fileCount blocks instead of guessing", () => {
     for (const fileCount of [NaN, -1, 1.5, undefined, "3", Infinity]) {
       const sel = selectWorkflow(change({ fileCount: fileCount as never }));
-      assert.deepEqual(sel.states, ["classified", "blocked"], String(fileCount));
+      assert.deepEqual(sel.states, ["INIT", "BLOCKED"], String(fileCount));
     }
   });
 
   it("missing facts object blocks", () => {
-    assert.deepEqual(selectWorkflow(undefined as never).states, ["classified", "blocked"]);
+    assert.deepEqual(selectWorkflow(undefined as never).states, ["INIT", "BLOCKED"]);
   });
 
   it("missing crossesModules fails closed to the heavier tier", () => {

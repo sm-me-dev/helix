@@ -15,6 +15,7 @@ import {
   closeSync,
   constants,
   fstatSync,
+  fchmodSync,
   ftruncateSync,
   lstatSync,
   mkdirSync,
@@ -22,9 +23,15 @@ import {
   readFileSync,
   realpathSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+  assertCanonicalKnowledgeWriteAllowed,
+  type CanonicalPromotionGrant,
+} from "../src/engine/security.ts";
 import { assertSafePackPath, packPathSegments } from "./lib.ts";
 
 export class UnsafeDestinationError extends Error {
@@ -36,6 +43,43 @@ export class UnsafeDestinationError extends Error {
     this.packPath = packPath;
     this.reason = reason;
   }
+}
+
+/** Acquire a cross-process exclusive lock. The lock records enough ownership
+ * data to diagnose abandoned claims and is released only by its creator. */
+export function acquireAtomicLock(lockPath: string): () => void {
+  mkdirSync(dirname(lockPath), { recursive: true });
+  const token = randomUUID();
+  let fd: number;
+  try {
+    fd = openSync(lockPath, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600);
+  } catch (error) {
+    if (errCode(error) === "EEXIST") throw new Error(`Team lock is already held: ${lockPath}`);
+    throw error;
+  }
+  try {
+    writeFileSync(
+      fd,
+      JSON.stringify({ pid: process.pid, timestamp: new Date().toISOString(), token }),
+    );
+  } catch (error) {
+    closeSync(fd);
+    try {
+      unlinkSync(lockPath);
+    } catch {
+      /* Preserve the original write error. */
+    }
+    throw error;
+  }
+  closeSync(fd);
+  return () => {
+    try {
+      const lock = JSON.parse(readFileSync(lockPath, "utf8")) as { token?: unknown };
+      if (lock.token === token) unlinkSync(lockPath);
+    } catch (error) {
+      if (errCode(error) !== "ENOENT") throw error;
+    }
+  };
 }
 
 // Undefined on Windows, where Node does not expose O_NOFOLLOW.
@@ -191,8 +235,16 @@ export function readContained(rootReal: string, packPath: string): string | null
  * empty file at an attacker-chosen spot (see the header); it can no longer
  * clobber existing outside content that was swapped in after the check.
  */
-export function writeContained(rootReal: string, packPath: string, body: string): void {
+export function writeContained(
+  rootReal: string,
+  packPath: string,
+  body: string,
+  grant?: CanonicalPromotionGrant,
+  mode?: number,
+): void {
+  assertCanonicalKnowledgeWriteAllowed(resolve(rootReal, packPath), grant);
   const full = resolveContained(rootReal, packPath);
+  assertCanonicalKnowledgeWriteAllowed(full, grant);
   ensureDirs(rootReal, dirname(full), packPath);
   let fd: number;
   try {
@@ -205,6 +257,7 @@ export function writeContained(rootReal: string, packPath: string, body: string)
     verifyOpened(rootReal, full, fd, packPath);
     ftruncateSync(fd, 0);
     writeFileSync(fd, body);
+    if (mode !== undefined) fchmodSync(fd, mode);
   } finally {
     closeSync(fd);
   }

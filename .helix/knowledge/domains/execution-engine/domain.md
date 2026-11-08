@@ -38,6 +38,19 @@ discovery_evidence:
   - Core engine source file src/engine/validator.ts
 created_at: 2026-11-02
 updated_at: 2026-11-02
+description: Core Execution Engine
+paths:
+  - src/engine/config.ts
+  - src/engine/engine.test.ts
+  - src/engine/engine.ts
+  - src/engine/index.ts
+  - src/engine/integration.test.ts
+  - src/engine/observability.ts
+  - src/engine/provider.ts
+  - src/engine/state.ts
+  - src/engine/task.ts
+  - src/engine/types.ts
+  - src/engine/validator.ts
 ---
 
 Deterministic task execution lifecycle, single-agent baseline, and gate verification loops

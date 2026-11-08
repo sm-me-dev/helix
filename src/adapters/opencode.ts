@@ -1,4 +1,6 @@
 import { openCodeMcpJson } from "../mcps.ts";
+import { invokeProviderHeadlessAgent } from "../engine/provider.ts";
+import type { HeadlessInvocationRequest, HeadlessInvocationResult } from "../engine/provider.ts";
 import { SKILL_BY_ID } from "../skills.ts";
 import type { HarnessConfig, PackFile } from "../types";
 import { agentBody, skillFile } from "./parts.ts";
@@ -93,3 +95,10 @@ export const opencodeAdapter: PlatformAdapter = {
     return files;
   },
 };
+
+/** Run OpenCode's non-interactive run command or call a configured compatible endpoint. */
+export function invokeHeadlessAgent(
+  request: HeadlessInvocationRequest,
+): Promise<HeadlessInvocationResult> {
+  return invokeProviderHeadlessAgent("opencode", request);
+}

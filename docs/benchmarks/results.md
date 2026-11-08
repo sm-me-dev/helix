@@ -1,5 +1,7 @@
 # Helix Benchmark Results and Findings
 
+> **Scope:** These are historical 2026-10 paired runs of static-pack variants on a fixed OpenCode fixture. They are not a benchmark of Helix v2's execution modes, knowledge database, or daemon clients; see the current [architecture](../ARCHITECTURE.md) and [generated token evidence](../EVIDENCE.md).
+
 This report documents the empirical benchmark results collected across static token overhead measurements and live paired agent evaluations.
 
 ---

@@ -1,142 +1,34 @@
-# Helix Distribution & Packaging Architecture
+# Distribution and packaging
 
-This document outlines the distribution strategy, supported package channels, release automation, and supply chain security for Helix.
+Helix v0.2.0 is distributed as an npm package and through versioned standalone artifacts and package-manager manifests. Release metadata is kept in `package.json`, `Formula/helix.rb`, `manifests/scoop/helix.json`, and `manifests/winget/sm-me-dev.Helix.yaml`.
 
----
+## Installation channels
 
-## 1. Supported Installation & Distribution Channels
+| Channel                        | Runtime                      | Update path                                      |
+| ------------------------------ | ---------------------------- | ------------------------------------------------ |
+| npm                            | Node.js >= 26.4              | `npm install -g @sm-me-dev/helix@latest`         |
+| Homebrew                       | Bundled/managed with package | `brew update && brew upgrade helix`              |
+| Scoop                          | Bundled archive              | `scoop update helix`                             |
+| WinGet                         | Bundled archive              | `winget upgrade sm-me-dev.Helix`                 |
+| Standalone release archive     | Embedded Node.js 26.4        | Download the matching asset from GitHub Releases |
+| Git checkout with `helix link` | Node.js >= 26.4 and Git      | Pull updates in the checkout                     |
 
-| Distribution Channel                      | Target Platform               | Current Status             | Verification Level                                            |
-| ----------------------------------------- | ----------------------------- | -------------------------- | ------------------------------------------------------------- |
-| **Direct PATH Link (`helix link`)**       | Linux, macOS, WSL             | **Implemented & Verified** | Primary recommended local method; tested end-to-end.          |
-| **Source Checkout (`git clone`)**         | Cross-platform (Node >= 22.6) | **Implemented & Verified** | Clean git checkout + `npm ci`; zero global compile step.      |
-| **npm Registry (`npx helix` / global)**   | Cross-platform                | **Staged for Release**     | `package.json` configured with `bin`, `engines`, and `files`. |
-| **GitHub Releases (Tarball + Checksums)** | Linux, macOS                  | **Automated via CI/CD**    | Artifact packaging on `v*` tags with SHA-256 digests.         |
-| **Homebrew Tap (`brew install helix`)**   | macOS, Linux                  | **Staged Formula**         | Formula template prepared for GitHub Release tarballs.        |
-| **Debian/Ubuntu APT Repository**          | Linux (Debian, Ubuntu)        | **Evaluated (Post-v1.0)**  | Requires hosted APT repository and GPG signing keys.          |
-| **Container Distribution (Docker)**       | Cross-platform containers     | **Evaluated & Rejected**   | Impairs local git worktrees and file permissions.             |
+Standalone packages are produced by the release build for Linux x64/arm64, macOS x64/arm64, and Windows x64. Exact available assets and checksums are published with each GitHub release; use the release page as the source of truth for filenames.
 
----
-
-## 2. Channel Deep-Dives
-
-### 2.1 Direct PATH Link (`helix link`) — Recommended
-
-The primary installation method for developers is `helix link`. It creates an executable shell shim at `~/.local/bin/helix` that delegates to your local checkout:
+## Source checkout
 
 ```sh
-git clone https://github.com/sm-me-dev/helix.git ~/helix
-cd ~/helix && npm ci
+git clone https://github.com/sm-me-dev/helix.git
+cd helix
+npm ci
+npm run build
 ./cli/helix.mjs link
 ```
 
-**Advantages**:
+The built Web UI is required for `helix web` from a checkout. Standalone distributions bundle the supported Node runtime.
 
-- Zero build or compilation step needed (Node 22.6+ strips TypeScript types natively).
-- Immediate, frictionless updates: running `git pull` instantly updates your CLI.
-- Safe uninstallation: `helix unlink` cleans up the shim and PATH entries.
+## Release maintenance
 
----
+Before a release, synchronize the package version and all distribution manifests, regenerate evidence and pages, and run the build, typecheck, lint, test, and formatting gates. The release automation produces artifacts from version tags. Never publish a package-manager checksum or URL until it matches the released artifact.
 
-### 2.2 npm Package Distribution
-
-Helix is configured for npm registry distribution under `@sm-me/helix` or `helix`:
-
-```sh
-# One-shot execution
-npx helix init ~/my-repo
-
-# Global installation
-npm install -g helix
-```
-
-#### npm Packaging Specifications:
-
-- **Executable**: `cli/helix.mjs` mapped via `"bin": { "helix": "cli/helix.mjs" }`.
-- **Runtime Dependencies**: Strictly bounded to `gpt-tokenizer` (`o200k_base` BPE).
-- **Engine Constraint**: Enforces `"engines": { "node": ">=22.6" }`.
-- **Whitelisted Files**: Only `cli/`, `src/`, `LICENSE`, and `README.md` are published; tests, reports, and scratch files are omitted.
-
----
-
-### 2.3 GitHub Releases & Standalone Archives
-
-For continuous delivery, every tagged release (`v*`) triggers GitHub Actions to produce platform-agnostic source archives and platform-specific tarballs:
-
-- `helix-vX.Y.Z.tar.gz`
-- `helix-vX.Y.Z.zip`
-- `SHA256SUMS.txt` (SHA-256 digests of all released assets)
-
-#### Verification Procedure:
-
-```sh
-# 1. Download archive and checksums
-curl -LO https://github.com/sm-me-dev/helix/releases/download/v0.1.0/helix-v0.1.0.tar.gz
-curl -LO https://github.com/sm-me-dev/helix/releases/download/v0.1.0/SHA256SUMS.txt
-
-# 2. Verify integrity
-sha256sum --check --ignore-missing SHA256SUMS.txt
-
-# 3. Extract and link
-tar -xzf helix-v0.1.0.tar.gz -C ~/helix
-cd ~/helix && npm ci --production
-./cli/helix.mjs link
-```
-
----
-
-### 2.4 Homebrew Tap Specification
-
-A dedicated Homebrew tap (`sm-me-dev/homebrew-helix`) provides native installation for macOS and Linux users:
-
-```sh
-brew tap sm-me-dev/helix
-brew install helix
-```
-
-#### Formula Specification (`Formula/helix.rb`):
-
-```ruby
-class Helix < Formula
-  desc "AI coding harness with bounded context and zero-token mechanical gates"
-  homepage "https://github.com/sm-me-dev/helix"
-  url "https://github.com/sm-me-dev/helix/archive/refs/tags/v0.1.0.tar.gz"
-  sha256 "<INSERT_COMPUTED_SHA256>"
-  license "MIT"
-
-  depends_on "node" => "22.6"
-
-  def install
-    system "npm", "ci", "--include=dev"
-    libexec.install Dir["*"]
-    bin.install_symlink libexec/"cli/helix.mjs" => "helix"
-  end
-
-  test do
-    assert_match "helix 0.1.0", shell_output("#{bin}/helix --version")
-    assert_match "helix — AI coding harness", shell_output("#{bin}/helix --help")
-  end
-end
-```
-
----
-
-### 2.5 Containerization (Docker) Trade-off Analysis
-
-Distributing Helix as a standalone Docker image was evaluated and **rejected for primary local development** for the following technical reasons:
-
-1. **Filesystem & Permission Mappings**: Helix relies on Git worktrees (`git worktree add`) and real file modifications in the user's repository. Mounting arbitrary host directories into containers creates severe UID/GID ownership mismatches.
-2. **Local Agent CLI Integration**: Helix interacts with local agent CLIs (`claude`, `opencode`, `cursor`) installed on the user's host machine. Running Helix in a container disconnects it from host-authenticated agent binaries and native tools.
-3. **Recommendation**: Docker is appropriate for headless CI/CD evaluation runners, but local development should use native Node 22.
-
----
-
-## 3. Supply-Chain Security & Release Protections
-
-Helix enforces strict supply-chain security invariants across all distribution workflows:
-
-1. **SHA-Pinned GitHub Actions**: Every third-party GitHub Action in `.github/workflows/` must be pinned to a full 40-character commit SHA (verified by `scripts/repo-hygiene.test.mjs`). Floating on `@v4` tags is forbidden.
-2. **OIDC Tokenless Publishing**: npm publication uses GitHub Actions OIDC (`id-token: write`) instead of long-lived, high-risk NPM tokens.
-3. **Least-Privilege Permissions**: Workflows default to `permissions: { contents: read }`. Elevated permissions are granted solely to specific jobs that create releases or publish packages.
-4. **Mandatory Quality Gates**: No release artifact can be built or published unless `npm run lint`, `npm run typecheck`, and `npm test` all pass with 100% green status.
-5. **No Release on PRs**: Pull requests cannot publish packages or create releases.
+See [Installation](INSTALL.md), [Updating](UPDATING.md), and [Platform support](PLATFORM_SUPPORT.md) for user-facing details.

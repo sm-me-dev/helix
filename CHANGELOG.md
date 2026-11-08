@@ -5,6 +5,18 @@ All notable changes to **Helix** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-11-07
+
+### Helix v2 — Progressive Execution Harness
+
+- **Progressive Disclosure Master Loop**: bounded bootstrap instructions and a compact Tier 0 domain route catalog; `load_skill` and `tool_search` reveal domain context and tool schemas only when needed. `VisibilityGate` keeps undiscovered tools unavailable, while `WriteGate` confines team writes to approved paths. Context compaction archives older tool output to per-session `NOTES.md` files.
+- **Quarantine-Gated Three-Tier Knowledge System**: deterministic Tier 0 routes, read-only Tier 1 canonical skills and references, and mutable Tier 2 episodic memory in `.helix/knowledge/helix-memory.db`. SQLite WAL/FTS5 and `sqlite-vec` retrieval are fused with reciprocal rank fusion; AST rules are structurally checked and promoted only through offline `helix knowledge compact`.
+- **Four Execution Topologies**: a single-threaded master loop, bounded read-only scout, deterministic validation followed by an optional context-firewalled cross-model auditor, and a file-locked peer team DAG with approved ownership, sanitized peer inboxes, and hypothesis investigation.
+- **Five-Layer AI Provider Configuration**: runtime overrides, CLI flags, environment variables, trusted workspace TOML, global provider profiles, then defaults. URL sanitization and keyless localhost support make compatible local servers straightforward to configure.
+- **Synchronized Local Clients**: `helix serve` exposes the daemon and SSE event stream; `helix tui` and `helix web` attach to the same sessions, events, prompts, and approvals.
+- **Workflow and Release Surface**: the v2 workflow models `INIT`, `DISCOVER`, `EXECUTE`, `VERIFY`, and `COMPLETE`, with explicit blocked retries and supported short paths. The release updates CLI and distribution manifests for the v2 package.
+- **Measurement and Evidence**: static token-cost reports and paired evaluation evidence are generated from committed data with their methods and measurement dates.
+
 ## [0.1.0] - 2026-11-03
 
 ### Initial Public Release

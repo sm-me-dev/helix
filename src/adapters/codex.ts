@@ -1,4 +1,6 @@
 import { CREW_BY_ID } from "../crew.ts";
+import { invokeProviderHeadlessAgent } from "../engine/provider.ts";
+import type { HeadlessInvocationRequest, HeadlessInvocationResult } from "../engine/provider.ts";
 import { HOOK_SOURCES } from "../hooks.ts";
 import { codexToml } from "../mcps.ts";
 import { SKILL_BY_ID } from "../skills.ts";
@@ -122,3 +124,10 @@ export const codexAdapter: PlatformAdapter = {
     return files;
   },
 };
+
+/** Run Codex's non-interactive exec command or call a configured OpenAI-compatible endpoint. */
+export function invokeHeadlessAgent(
+  request: HeadlessInvocationRequest,
+): Promise<HeadlessInvocationResult> {
+  return invokeProviderHeadlessAgent("codex", request);
+}

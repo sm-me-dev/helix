@@ -2,6 +2,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { countTokens } from "../measure.ts";
+import { Lang, parse } from "@ast-grep/napi";
+import {
+  compileTier0DomainRoutes,
+  matchDomainsForFilePath,
+  syncCanonicalSkillStore,
+} from "../knowledge/discovery.ts";
+import { retrieveEpisodicRecords } from "../knowledge/retriever.ts";
+import { TieredKnowledgeRepository } from "../knowledge/repository.ts";
+import type { Tier0DomainRoute, Tier2EpisodicRecord } from "../knowledge/types.ts";
 import { resolveSafePath } from "./tools.ts";
 import type { CitedExcerpt, RepositoryRetriever, SymbolReference } from "./types.ts";
 
@@ -35,6 +44,67 @@ export class DefaultRepositoryRetriever implements RepositoryRetriever {
   private readonly maxExcerptLines: number;
   private cachedGraph: GraphData | null = null;
   private graphLoadAttempted = false;
+
+  /** Delegate all Helix v2 knowledge tiers to the canonical knowledge modules. */
+  async retrieveKnowledge(
+    query: string,
+    targetFiles: readonly string[] = [],
+    sourceByPath: Readonly<Record<string, string>> = {},
+  ): Promise<{
+    tier0: readonly Tier0DomainRoute[];
+    tier1: readonly { domainId: string; bodyMarkdown: string }[];
+    tier2: readonly Tier2EpisodicRecord[];
+  }> {
+    const routes = compileTier0DomainRoutes(this.workspaceRoot);
+    const selected = new Map<string, Tier0DomainRoute>();
+    for (const filePath of targetFiles) {
+      for (const route of matchDomainsForFilePath(filePath, this.workspaceRoot))
+        selected.set(route.domainId, route);
+    }
+    const queryLower = query.toLowerCase();
+    for (const route of routes) {
+      if (
+        `${route.domainId} ${route.description}`
+          .toLowerCase()
+          .split(/[^a-z0-9-]+/)
+          .some((word) => word.length > 2 && queryLower.includes(word))
+      ) {
+        selected.set(route.domainId, route);
+      }
+    }
+
+    const repository = new TieredKnowledgeRepository(this.workspaceRoot);
+    try {
+      syncCanonicalSkillStore(routes, repository, this.workspaceRoot);
+      const tier1 = [...selected.keys()].flatMap((domainId) => {
+        const skill = repository.getCanonicalSkill(domainId);
+        return skill ? [{ domainId, bodyMarkdown: skill.bodyMarkdown }] : [];
+      });
+      const tier2ById = new Map<string, Tier2EpisodicRecord>();
+      const searches = targetFiles.length > 0 ? targetFiles : [undefined];
+      for (const filePath of searches) {
+        const records = retrieveEpisodicRecords(repository, query, {
+          filePath,
+          sourceCode: filePath ? sourceByPath[filePath] : undefined,
+        });
+        for (const record of records) tier2ById.set(record.id, record);
+      }
+      const tier2: Tier2EpisodicRecord[] = [];
+      let usedTokens = 0;
+      for (const record of tier2ById.values()) {
+        const tokens = countTokens(
+          `- ${record.id} (${record.domainId}): ${record.triggerSummary}\n  ${record.resolutionRule}`,
+        );
+        if (usedTokens + tokens > 250) continue;
+        tier2.push(record);
+        usedTokens += tokens;
+        if (tier2.length === 3) break;
+      }
+      return { tier0: routes, tier1, tier2 };
+    } finally {
+      repository.close();
+    }
+  }
 
   constructor(options: RetrievalOptions) {
     this.workspaceRoot = path.resolve(options.workspaceRoot);
@@ -175,10 +245,7 @@ export class DefaultRepositoryRetriever implements RepositoryRetriever {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         this.scanDirectoryForSymbols(fullPath, queryLower, results, seen);
-      } else if (
-        entry.isFile() &&
-        (entry.name.endsWith(".ts") || entry.name.endsWith(".js") || entry.name.endsWith(".mjs"))
-      ) {
+      } else if (entry.isFile() && /\.(?:[cm]?ts|tsx|[cm]?js|jsx)$/i.test(entry.name)) {
         const relPath = path.relative(this.workspaceRoot, fullPath);
         this.extractSymbolsFromFile(fullPath, relPath, queryLower, results, seen);
       }
@@ -199,52 +266,46 @@ export class DefaultRepositoryRetriever implements RepositoryRetriever {
       return;
     }
 
-    const lines = content.split("\n");
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (!line.includes("export")) continue;
-
-      const fnMatch = line.match(/export\s+(?:async\s+)?function\s+([a-zA-Z0-9_$]+)/);
-      const classMatch = line.match(/export\s+class\s+([a-zA-Z0-9_$]+)/);
-      const interfaceMatch = line.match(/export\s+interface\s+([a-zA-Z0-9_$]+)/);
-      const typeMatch = line.match(/export\s+type\s+([a-zA-Z0-9_$]+)/);
-      const constMatch = line.match(/export\s+const\s+([a-zA-Z0-9_$]+)/);
-
-      let name = "";
-      let kind: SymbolReference["kind"] = "function";
-
-      if (fnMatch) {
-        name = fnMatch[1];
-        kind = "function";
-      } else if (classMatch) {
-        name = classMatch[1];
-        kind = "class";
-      } else if (interfaceMatch) {
-        name = interfaceMatch[1];
-        kind = "interface";
-      } else if (typeMatch) {
-        name = typeMatch[1];
-        kind = "type";
-      } else if (constMatch) {
-        name = constMatch[1];
-        kind = "variable";
+    const extension = path.extname(fullPath).toLowerCase();
+    const lang =
+      extension === ".tsx" || extension === ".jsx"
+        ? Lang.Tsx
+        : [".js", ".mjs", ".cjs"].includes(extension)
+          ? Lang.JavaScript
+          : Lang.TypeScript;
+    let root;
+    try {
+      root = parse(lang, content).root();
+    } catch {
+      return;
+    }
+    const add = (name: string | undefined, kind: SymbolReference["kind"], line: number) => {
+      if (!name) return;
+      const nameLower = name.toLowerCase();
+      if (!nameLower.includes(queryLower) && !queryLower.includes(nameLower)) return;
+      const key = `${relPath}:${name}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        results.push({ name, kind, filePath: relPath, line });
       }
-
-      if (name) {
-        const nameLower = name.toLowerCase();
-        if (nameLower.includes(queryLower) || queryLower.includes(nameLower)) {
-          const key = `${relPath}:${name}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            results.push({
-              name,
-              kind,
-              filePath: relPath,
-              line: i + 1,
-            });
-          }
-        }
-      }
+    };
+    const kindMap = new Map<string, SymbolReference["kind"]>([
+      ["function_declaration", "function"],
+      ["class_declaration", "class"],
+      ["interface_declaration", "interface"],
+      ["type_alias_declaration", "type"],
+      ["enum_declaration", "type"],
+    ]);
+    const stack = [root];
+    while (stack.length) {
+      const node = stack.pop();
+      if (!node) continue;
+      const nodeKind = String(node.kind());
+      const kind = kindMap.get(nodeKind);
+      if (kind) add(node.field("name")?.text(), kind, node.range().start.line + 1);
+      if (nodeKind === "variable_declarator")
+        add(node.field("name")?.text(), "variable", node.range().start.line + 1);
+      stack.push(...node.children());
     }
   }
 

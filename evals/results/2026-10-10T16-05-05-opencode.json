@@ -1,16 +1,12 @@
 {
   "meta": {
     "agent": "opencode",
-    "arms": [
-      "none"
-    ],
+    "arms": ["none"],
     "runs": 1,
     "startedAt": "2026-10-10",
     "fixture": "large",
     "includeHeldout": false,
-    "tasks": [
-      "deep-bug"
-    ]
+    "tasks": ["deep-bug"]
   },
   "rows": [
     {
@@ -21,9 +17,7 @@
       "avgTokens": 261646,
       "avgUncached": 28128,
       "sdUncached": null,
-      "rawUncached": [
-        28128
-      ],
+      "rawUncached": [28128],
       "passPer1kUncached": 0.036
     }
   ],

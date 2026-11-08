@@ -19,6 +19,8 @@ import { countTokens, TOKENIZER_METHOD } from "../src/measure.ts";
 import { DEFAULT_CREW } from "../src/crew.ts";
 import { DEFAULT_HARNESS_CONFIG } from "../src/defaults.ts";
 import { mcpSchemaTokens } from "../src/mcps.ts";
+import { assembleBootstrapSystemPrompt } from "../src/engine/context.ts";
+import { compileTier0DomainCatalog, compileTier0DomainRoutes } from "../src/knowledge/discovery.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const OUT = `${ROOT}evals/results/static-cost.json`;
@@ -63,11 +65,42 @@ const SCENARIOS = [
 ];
 const withCrew = (mcps, crew) => ({ ...DEFAULT_HARNESS_CONFIG, mcps, crew });
 const crewConfig = withCrew(["graphify", "context7"], [...DEFAULT_CREW]);
+const tier0Catalog = compileTier0DomainCatalog(compileTier0DomainRoutes(ROOT));
+const bootstrap = assembleBootstrapSystemPrompt({
+  workspaceRoot: ROOT,
+  sessionId: "static-cost-check",
+  maxContextTokens: 200_000,
+});
+const progressiveBootstrapTokens = countTokens(bootstrap.systemPrompt);
+const smallestCurrentPack = Math.min(
+  ...SCENARIOS.map(([, mcps]) => pack("baseline", withCrew(mcps, [])).alwaysOn),
+);
+const progressiveReductionPercent =
+  Math.round((1 - progressiveBootstrapTokens / smallestCurrentPack) * 1000) / 10;
+if (
+  countTokens(tier0Catalog) >= 250 ||
+  progressiveBootstrapTokens >= 600 ||
+  progressiveReductionPercent <= 80
+) {
+  throw new Error(
+    `Progressive bootstrap must stay below 600 tokens and reduce the smallest current always-on pack by >80% (bootstrap ${progressiveBootstrapTokens}, baseline ${smallestCurrentPack}, reduction ${progressiveReductionPercent}%)`,
+  );
+}
 
 const report = {
   schema: 1,
   method: TOKENIZER_METHOD,
   note: "Static sizes only. A plain agent adds 0 tokens, so this is Helix's cost, not a saving. Per-task tokens come from evals/results/*.json. Claude Code defers MCP schemas (verified 2026-10-10); other platforms are assumed to load them.",
+  progressiveDisclosure: {
+    measuredAt: new Date().toISOString().slice(0, 10),
+    coreAndTier0Tokens: progressiveBootstrapTokens,
+    tier0CatalogTokens: countTokens(tier0Catalog),
+    contextAutoCompactThresholdPercent: Math.round(bootstrap.state.autoCompactThresholdRatio * 100),
+    comparisonBaseline: "smallest current always-on pack scenario",
+    baselineTokens: smallestCurrentPack,
+    reductionPercent: progressiveReductionPercent,
+    gate: "bootstrap <600 tokens, Tier 0 <250 tokens, reduction >80%",
+  },
   packs: SCENARIOS.flatMap(([label, mcps]) => [
     pack(label, withCrew(mcps, [])),
     pack(`${label} + --crew`, withCrew(mcps, [...DEFAULT_CREW])),

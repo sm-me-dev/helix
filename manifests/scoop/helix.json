@@ -1,11 +1,11 @@
 {
-  "version": "0.1.0",
-  "description": "AI coding harness with bounded context, ephemeral worktrees, and mechanical gates",
+  "version": "0.2.0",
+  "description": "Helix v2 AI coding harness with progressive disclosure and multi-model execution",
   "homepage": "https://github.com/sm-me-dev/helix",
   "license": "MIT",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/sm-me-dev/helix/releases/download/v0.1.0/helix-v0.1.0-windows-x64.zip",
+      "url": "https://github.com/sm-me-dev/helix/releases/download/v0.2.0/helix-v0.2.0-windows-x64.zip",
       "extract_dir": "helix"
     }
   },

@@ -183,6 +183,11 @@ describe("generatePack", () => {
       const body = files.find((f) => f.path === path)?.body ?? "";
       const parsed = JSON.parse(body) as { mcpServers: Record<string, unknown> };
       assert.ok(parsed.mcpServers.graphify, `${path} must carry the graphify server`);
+      if (platform === "claude-code") {
+        for (const server of Object.values(parsed.mcpServers) as Array<Record<string, unknown>>) {
+          if ("url" in server) assert.equal(server.type, "http");
+        }
+      }
     }
   });
 

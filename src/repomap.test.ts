@@ -1,14 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { generatePack } from "./generate.ts";
 import { MAP_SOURCE, selectRepoMap } from "./repomap.ts";
-
-const MAP = join(mkdtempSync(join(tmpdir(), "helix-map-src-")), "map.mjs");
-writeFileSync(MAP, MAP_SOURCE);
 
 function project(files: Record<string, string>): string {
   const dir = mkdtempSync(join(tmpdir(), "helix-map-repo-"));
@@ -16,10 +13,16 @@ function project(files: Record<string, string>): string {
     mkdirSync(dirname(join(dir, p)), { recursive: true });
     writeFileSync(join(dir, p), body);
   }
+  mkdirSync(join(dir, ".helix"), { recursive: true });
+  writeFileSync(join(dir, ".helix", "map.mjs"), MAP_SOURCE);
+  symlinkSync(resolve("node_modules"), join(dir, "node_modules"), "junction");
   return dir;
 }
 const map = (dir: string, ...args: string[]) => {
-  const r = spawnSync(process.execPath, [MAP, ...args], { cwd: dir, encoding: "utf8" });
+  const r = spawnSync(process.execPath, [join(dir, ".helix", "map.mjs"), ...args], {
+    cwd: dir,
+    encoding: "utf8",
+  });
   return { code: r.status, out: String(r.stdout), err: String(r.stderr) };
 };
 
@@ -34,7 +37,8 @@ describe("repo map provider selection", () => {
 describe("outline map (fallback when Graphify is absent)", () => {
   it("lists files with top-level symbols for ts, py, go, rs", () => {
     const dir = project({
-      "src/a.ts": "export function alpha() {}\nexport const beta = 1;\n  function nested() {}\n",
+      "src/a.ts":
+        "import { helper } from './helper.js';\nexport function alpha() { function nested() {} }\nexport const beta = 1;\n",
       "lib/b.py": "def gamma():\n    pass\nclass Delta:\n    def inner(self): pass\n",
       "main.go": "package main\nfunc Epsilon() {}\nfunc (s *S) Zeta() {}\ntype Eta struct{}\n",
       "x.rs": "pub fn theta() {}\nstruct Iota;\n",
@@ -42,7 +46,7 @@ describe("outline map (fallback when Graphify is absent)", () => {
     });
     const r = map(dir);
     assert.equal(r.code, 0);
-    assert.match(r.out, /src\/a\.ts: alpha, beta\n/);
+    assert.match(r.out, /src\/a\.ts: alpha, beta; imports: '\.\/helper\.js'/);
     assert.match(r.out, /lib\/b\.py: gamma, Delta\n/);
     assert.match(r.out, /main\.go: Epsilon, Zeta, Eta\n/);
     assert.match(r.out, /x\.rs: theta, Iota\n/);
@@ -65,7 +69,7 @@ describe("outline map (fallback when Graphify is absent)", () => {
 
   it("skips node_modules and rejects unknown options", () => {
     const dir = project({
-      "node_modules/x/i.ts": "export function leak() {}\n",
+      "deep/node_modules/x/i.ts": "export function leak() {}\n",
       "a.ts": "export function ok() {}\n",
     });
     const r = map(dir);

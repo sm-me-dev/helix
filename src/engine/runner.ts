@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import type { PlatformId } from "../types.ts";
+import { countTokens } from "../measure.ts";
 import type {
   AgentCapabilities,
   AgentExecutionOutput,
@@ -105,6 +106,7 @@ export class MockAgentRunner implements AgentRunner {
       const exitCode = action.exitCode ?? 0;
       const stdout = action.stdout || (exitCode === 0 ? "Success" : "");
       const stderr = action.stderr || (exitCode !== 0 ? "Error encountered" : "");
+      if (stdout) session.onOutputChunk?.(stdout);
 
       const assistantMsg: AgentMessage = {
         role: "assistant",
@@ -146,6 +148,114 @@ export class MockAgentRunner implements AgentRunner {
       handle.abort();
       this.activeSessions.delete(sessionId);
     }
+  }
+}
+
+export interface TeammateExecutionBudget {
+  readonly tokenBudget: number;
+  readonly turnBudget: number;
+}
+
+/** Adds a hard four-member cap and per-member token/turn ceilings around a runner. */
+export class BudgetedTeammateRunner implements AgentRunner {
+  readonly platform: PlatformId;
+  readonly capabilities: AgentCapabilities;
+  private readonly delegate: AgentRunner;
+  private readonly budgets: ReadonlyMap<string, TeammateExecutionBudget>;
+  private readonly usage = new Map<string, { tokens: number; turns: number }>();
+
+  constructor(delegate: AgentRunner, budgets: Readonly<Record<string, TeammateExecutionBudget>>) {
+    const entries = Object.entries(budgets);
+    if (entries.length > 4) throw new Error("A peer team may have at most four teammates");
+    for (const [id, budget] of entries) {
+      if (
+        !id.trim() ||
+        !Number.isSafeInteger(budget.tokenBudget) ||
+        budget.tokenBudget < 1 ||
+        !Number.isSafeInteger(budget.turnBudget) ||
+        budget.turnBudget < 1
+      ) {
+        throw new Error(`Invalid execution budget for teammate '${id}'`);
+      }
+    }
+    this.delegate = delegate;
+    this.platform = delegate.platform;
+    this.capabilities = delegate.capabilities;
+    this.budgets = new Map(entries);
+  }
+
+  async run(session: AgentSession): Promise<AgentExecutionOutput> {
+    if (!session.teammateId) return this.delegate.run(session);
+    const budget = this.budgets.get(session.teammateId);
+    if (!budget)
+      return {
+        exitCode: 1,
+        stdout: "",
+        stderr: `No registered budget for teammate '${session.teammateId}'`,
+        messages: session.messages,
+        durationMs: 0,
+      };
+    const usage = this.usage.get(session.teammateId) ?? { tokens: 0, turns: 0 };
+    if (usage.turns >= budget.turnBudget)
+      return {
+        exitCode: 1,
+        stdout: "",
+        stderr: `Teammate '${session.teammateId}' exceeded its turn budget`,
+        messages: session.messages,
+        durationMs: 0,
+      };
+    const estimatedInput = countTokens(
+      session.systemPrompt + "\n" + session.messages.map((message) => message.content).join("\n"),
+    );
+    const tokensRemaining = budget.tokenBudget - usage.tokens;
+    if (estimatedInput >= tokensRemaining)
+      return {
+        exitCode: 1,
+        stdout: "",
+        stderr: `Teammate '${session.teammateId}' has no remaining token budget`,
+        messages: session.messages,
+        durationMs: 0,
+      };
+    const turnAllowance = Math.min(
+      session.maxTurns ?? budget.turnBudget - usage.turns,
+      budget.turnBudget - usage.turns,
+    );
+    if (turnAllowance < 1)
+      return {
+        exitCode: 1,
+        stdout: "",
+        stderr: `Teammate '${session.teammateId}' exceeded its turn budget`,
+        messages: session.messages,
+        durationMs: 0,
+      };
+    usage.turns += turnAllowance;
+    this.usage.set(session.teammateId, usage);
+    const result = await this.delegate.run({
+      ...session,
+      maxTurns: turnAllowance,
+      maxTokenBudget: tokensRemaining,
+    });
+    const consumed =
+      (result.tokens?.input ?? estimatedInput) +
+      (result.tokens?.output ?? countTokens(result.stdout));
+    usage.tokens += consumed;
+    if (usage.tokens > budget.tokenBudget) {
+      return {
+        ...result,
+        exitCode: 1,
+        stdout: "",
+        stderr: `Teammate '${session.teammateId}' exceeded its token budget`,
+        tokens: {
+          input: result.tokens?.input ?? estimatedInput,
+          output: result.tokens?.output ?? countTokens(result.stdout),
+        },
+      };
+    }
+    return result;
+  }
+
+  terminate(sessionId: string): Promise<void> {
+    return this.delegate.terminate(sessionId);
   }
 }
 
@@ -201,6 +311,9 @@ export class SubprocessAgentRunner implements AgentRunner {
         const payload = JSON.stringify({
           systemPrompt: session.systemPrompt,
           messages: session.messages,
+          toolAllowlist: session.toolAllowlist,
+          maxTurns: session.maxTurns,
+          readOnly: session.readOnly,
         });
         proc.stdin.write(payload);
         proc.stdin.end();
@@ -216,7 +329,9 @@ export class SubprocessAgentRunner implements AgentRunner {
       }, timeoutMs);
 
       proc.stdout?.on("data", (chunk: Buffer) => {
-        stdout += chunk.toString("utf8");
+        const text = chunk.toString("utf8");
+        stdout += text;
+        session.onOutputChunk?.(text);
       });
 
       proc.stderr?.on("data", (chunk: Buffer) => {

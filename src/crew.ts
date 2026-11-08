@@ -1,4 +1,113 @@
 import type { CrewId, SkillId } from "./types";
+import { countTokens } from "./measure.ts";
+
+export type ExecutionModeId =
+  | "MODE_1_MASTER_LOOP"
+  | "MODE_2_DISPOSABLE_SCOUT"
+  | "MODE_3_ADVERSARIAL_AUDITOR"
+  | "MODE_4_PEER_TEAM";
+
+export interface ExecutionMode {
+  readonly id: ExecutionModeId;
+  readonly purpose: string;
+  readonly readOnlyToolsOnly: boolean;
+  readonly maxTurns: number;
+  readonly maxOutputTokens?: number;
+}
+
+export interface ScoutSynthesis {
+  readonly files: readonly string[];
+  readonly symbols: readonly string[];
+  readonly entryPoints: readonly string[];
+  readonly negativeFindings: readonly string[];
+}
+
+export const MODE_1_MASTER_LOOP: ExecutionMode = {
+  id: "MODE_1_MASTER_LOOP",
+  purpose: "Own the task loop, progressive disclosure, edits, and gate retries.",
+  readOnlyToolsOnly: false,
+  maxTurns: 30,
+};
+
+export const MODE_2_DISPOSABLE_SCOUT: ExecutionMode = {
+  id: "MODE_2_DISPOSABLE_SCOUT",
+  purpose: "Explore a bounded repository scope and return a compact evidence synthesis.",
+  readOnlyToolsOnly: true,
+  maxTurns: 8,
+  maxOutputTokens: 250,
+};
+
+export const MODE_3_ADVERSARIAL_AUDITOR: ExecutionMode = {
+  id: "MODE_3_ADVERSARIAL_AUDITOR",
+  purpose: "Review a gated diff from a context-firewalled, orthogonal model.",
+  readOnlyToolsOnly: true,
+  maxTurns: 6,
+};
+
+export const MODE_4_PEER_TEAM: ExecutionMode = {
+  id: "MODE_4_PEER_TEAM",
+  purpose: "Coordinate bounded read-only investigations and approved parallel work.",
+  readOnlyToolsOnly: true,
+  maxTurns: 10,
+};
+
+export const EXECUTION_MODES: readonly ExecutionMode[] = [
+  MODE_1_MASTER_LOOP,
+  MODE_2_DISPOSABLE_SCOUT,
+  MODE_3_ADVERSARIAL_AUDITOR,
+  MODE_4_PEER_TEAM,
+];
+
+const LEGACY_ROLE_MODE: Readonly<Record<CrewId, ExecutionModeId>> = {
+  scout: "MODE_2_DISPOSABLE_SCOUT",
+  architect: "MODE_1_MASTER_LOOP",
+  builder: "MODE_1_MASTER_LOOP",
+  reviewer: "MODE_3_ADVERSARIAL_AUDITOR",
+};
+
+/** Backward-compatible mode mapping for callers that still select a legacy crew role. */
+export function getExecutionModeForRole(role: CrewId): ExecutionMode {
+  const modeId = LEGACY_ROLE_MODE[role];
+  const mode = EXECUTION_MODES.find((candidate) => candidate.id === modeId);
+  if (!mode) throw new Error(`Unknown execution mode for legacy role '${role}'`);
+  return mode;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry: unknown) => typeof entry === "string");
+}
+
+export function validateScoutSynthesis(value: unknown): ScoutSynthesis {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Scout synthesis must be an object");
+  }
+  const record = value as Record<string, unknown>;
+  const expectedKeys = ["files", "symbols", "entryPoints", "negativeFindings"];
+  if (
+    Object.keys(record).length !== expectedKeys.length ||
+    expectedKeys.some((key) => !(key in record))
+  ) {
+    throw new Error(
+      "Scout synthesis must contain exactly files, symbols, entryPoints, and negativeFindings",
+    );
+  }
+  const files = record.files;
+  const symbols = record.symbols;
+  const entryPoints = record.entryPoints;
+  const negativeFindings = record.negativeFindings;
+  if (
+    !isStringArray(files) ||
+    !isStringArray(symbols) ||
+    !isStringArray(entryPoints) ||
+    !isStringArray(negativeFindings)
+  ) {
+    throw new Error("Scout synthesis fields must be arrays of strings");
+  }
+  const result = { files, symbols, entryPoints, negativeFindings };
+  if (countTokens(JSON.stringify(result)) > 250)
+    throw new Error("Scout synthesis exceeds the 250-token limit");
+  return result;
+}
 
 export type CrewRole = {
   id: CrewId;
@@ -121,3 +230,8 @@ export const CREW_BY_ID = Object.fromEntries(CREW.map((c) => [c.id, c])) as Reco
 >;
 
 export const DEFAULT_CREW: CrewId[] = CREW.map((c) => c.id);
+
+/** Legacy role lookup retained for existing adapters and callers. */
+export function getCrewMember(role: CrewId): CrewRole {
+  return CREW_BY_ID[role];
+}

@@ -1,6 +1,12 @@
 // Helix Core Execution Engine (Phase 03 - Component 3)
+import fs from "node:fs";
+import path from "node:path";
 import type { WorkflowState } from "../workflow.ts";
-import { DefaultContextManager, TokenBudgetManager } from "./context.ts";
+import {
+  assembleBootstrapSystemPrompt,
+  DefaultContextManager,
+  TokenBudgetManager,
+} from "./context.ts";
 import { DefaultObservabilityCollector } from "./observability.ts";
 import { DefaultAgentOrchestrator } from "./orchestrator.ts";
 import { DefaultRepositoryRetriever } from "./retrieval.ts";
@@ -23,6 +29,7 @@ import type {
   HelixEngine,
   ObservabilityCollector,
   TaskDefinition,
+  TaskPlan,
   TaskPlanner,
   TaskResult,
   ToolExecutor,
@@ -30,7 +37,11 @@ import type {
   ValidationReport,
 } from "./types.ts";
 import { TokenBudgetExceededError } from "./types.ts";
-import { DefaultValidationEngine } from "./validator.ts";
+import { CrossModelAdversarialValidationEngine, DefaultValidationEngine } from "./validator.ts";
+import type { AuditorInvocationOutput, FirewalledAuditPayload } from "./validator.ts";
+import { compileTier0DomainRoutes, matchDomainsForFilePath } from "../knowledge/discovery.ts";
+import { parseFrontmatter } from "../knowledge/repository.ts";
+import type { ModelRoute, ProviderSelection } from "./provider.ts";
 import { GitWorktreeManager } from "./worktree.ts";
 import { DefaultModelProvider } from "./provider.ts";
 import type { ExtendedEngineConfig } from "./config.ts";
@@ -47,6 +58,13 @@ export type HelixExecutionEngineDependencies = {
   orchestrator?: AgentOrchestrator;
   provider?: ModelProvider;
   config?: ExtendedEngineConfig;
+  adversarialAudit?: {
+    readonly generatorProvider: ProviderSelection | string;
+    readonly invokeAuditor: (
+      payload: FirewalledAuditPayload,
+      route: ModelRoute,
+    ) => Promise<AuditorInvocationOutput>;
+  };
 };
 
 export class HelixExecutionEngine implements HelixEngine {
@@ -59,6 +77,7 @@ export class HelixExecutionEngine implements HelixEngine {
   private readonly orchestrator: AgentOrchestrator;
   private readonly provider: ModelProvider;
   private readonly config?: ExtendedEngineConfig;
+  private readonly adversarialAudit?: HelixExecutionEngineDependencies["adversarialAudit"];
   private readonly stateManagers = new Map<string, FileExecutionStateManager>();
   private readonly activeRuns = new Map<string, { abort: (reason: string) => void }>();
 
@@ -71,6 +90,7 @@ export class HelixExecutionEngine implements HelixEngine {
     this.worktreeManager = deps.worktreeManager || new GitWorktreeManager();
     this.provider = deps.provider || new DefaultModelProvider();
     this.config = deps.config;
+    this.adversarialAudit = deps.adversarialAudit;
     this.orchestrator =
       deps.orchestrator ||
       new DefaultAgentOrchestrator({
@@ -120,7 +140,7 @@ export class HelixExecutionEngine implements HelixEngine {
       return {
         taskId: taskInput?.id || "invalid-task",
         status: "failed",
-        finalWorkflowState: "blocked",
+        finalWorkflowState: "BLOCKED",
         diff: "",
         affectedFiles: [],
         summary: `Task validation failed: ${msg}`,
@@ -154,18 +174,18 @@ export class HelixExecutionEngine implements HelixEngine {
     await stateManager.recordEvent({
       taskId: task.id,
       type: "task_started",
-      workflowState: "classified",
+      workflowState: "INIT",
       payload: { title: task.title, workspaceRoot: task.workspaceRoot },
     });
 
     // 2. Assess and Plan
     const plan = await this.planner.plan(task);
-    const isBlocked = plan.selection.states.includes("blocked");
+    const isBlocked = plan.selection.states.includes("BLOCKED");
     stateManager.setTier(plan.tier);
     await stateManager.recordEvent({
       taskId: task.id,
       type: "tier_classified",
-      workflowState: isBlocked ? "blocked" : "classified",
+      workflowState: isBlocked ? "BLOCKED" : "INIT",
       payload: {
         tier: plan.tier,
         selectionReason: plan.reason,
@@ -177,7 +197,7 @@ export class HelixExecutionEngine implements HelixEngine {
       await stateManager.recordEvent({
         taskId: task.id,
         type: "task_failed",
-        workflowState: "blocked",
+        workflowState: "BLOCKED",
         payload: { reason: plan.reason },
       });
       this.activeRuns.delete(task.id);
@@ -185,7 +205,7 @@ export class HelixExecutionEngine implements HelixEngine {
       return {
         taskId: task.id,
         status: "blocked",
-        finalWorkflowState: "blocked",
+        finalWorkflowState: "BLOCKED",
         diff: "",
         affectedFiles: [],
         summary: `Task blocked by workflow policy: ${plan.reason}`,
@@ -199,9 +219,12 @@ export class HelixExecutionEngine implements HelixEngine {
       };
     }
 
+    const taskValidator = this.validatorForTask(task, plan);
+
     // Check if multi-agent orchestration is requested
     const isSingleAgent = options.singleAgentOnly !== false;
     if (!isSingleAgent) {
+      const taskOptions = { ...options, validationEngine: taskValidator };
       const strategy = options.orchestrationStrategy || "chain";
       const decomposedPlan = await this.orchestrator.decomposeTask(task, strategy);
 
@@ -211,7 +234,7 @@ export class HelixExecutionEngine implements HelixEngine {
         return {
           taskId: task.id,
           status: "succeeded",
-          finalWorkflowState: "discovered",
+          finalWorkflowState: "DISCOVER",
           diff: "",
           affectedFiles: [],
           summary: `Dry run completed: multi-agent task planned with ${decomposedPlan.steps.length} steps (${strategy}).`,
@@ -221,9 +244,9 @@ export class HelixExecutionEngine implements HelixEngine {
       }
 
       if (strategy === "parallel" || strategy === "parallel-implementation") {
-        return this.orchestrator.orchestrateParallel(task, decomposedPlan, options);
+        return this.orchestrator.orchestrateParallel(task, decomposedPlan, taskOptions);
       }
-      return this.orchestrator.orchestrateChain(task, decomposedPlan, options);
+      return this.orchestrator.orchestrateChain(task, decomposedPlan, taskOptions);
     }
 
     // 3. Workspace Setup (Ephemeral Git Worktree or direct)
@@ -241,7 +264,7 @@ export class HelixExecutionEngine implements HelixEngine {
       await stateManager.recordEvent({
         taskId: task.id,
         type: "worktree_created",
-        workflowState: "discovered",
+        workflowState: "DISCOVER",
         payload: { worktreePath, branch: branchName, isEphemeral },
       });
     }
@@ -256,7 +279,7 @@ export class HelixExecutionEngine implements HelixEngine {
       return {
         taskId: task.id,
         status: "succeeded",
-        finalWorkflowState: "discovered",
+        finalWorkflowState: "DISCOVER",
         diff: "",
         affectedFiles: [],
         summary: "Dry run completed: task planned successfully without launching agent.",
@@ -320,7 +343,7 @@ export class HelixExecutionEngine implements HelixEngine {
         await stateManager.recordEvent({
           taskId: task.id,
           type: "agent_launched",
-          workflowState: "implemented",
+          workflowState: "EXECUTE",
           payload: { sessionId, retryCount, role: "single-agent" },
         });
 
@@ -331,6 +354,11 @@ export class HelixExecutionEngine implements HelixEngine {
           includeTests: true,
           role: "single-agent",
         });
+        const bootstrap = assembleBootstrapSystemPrompt({
+          workspaceRoot: worktreePath,
+          sessionId,
+          activeModel: this.config?.defaultModelId,
+        });
 
         // Run agent
         const agentOutput = await this.runner.run({
@@ -339,7 +367,7 @@ export class HelixExecutionEngine implements HelixEngine {
           role: "single-agent",
           platform: this.runner.platform,
           workdir: worktreePath,
-          systemPrompt: assembled.systemPrompt,
+          systemPrompt: `${bootstrap.systemPrompt}\n\n${assembled.systemPrompt}`,
           messages: [
             {
               role: "user",
@@ -348,6 +376,7 @@ export class HelixExecutionEngine implements HelixEngine {
             },
           ],
           timeoutSec: task.constraints.timeoutSec,
+          onOutputChunk: options.onMessageDelta,
         });
 
         obs.recordAgentDuration(agentOutput.durationMs);
@@ -377,11 +406,13 @@ export class HelixExecutionEngine implements HelixEngine {
         await stateManager.recordEvent({
           taskId: task.id,
           type: "agent_completed",
-          workflowState: "implemented",
+          workflowState: "EXECUTE",
           payload: {
             exitCode: agentOutput.exitCode,
             durationMs: agentOutput.durationMs,
             interrupted: agentOutput.interrupted,
+            stdout: agentOutput.stdout,
+            stderr: agentOutput.stderr,
           },
         });
 
@@ -401,7 +432,7 @@ export class HelixExecutionEngine implements HelixEngine {
             await stateManager.recordEvent({
               taskId: task.id,
               type: "retry_scheduled",
-              workflowState: "implemented",
+              workflowState: "EXECUTE",
               payload: { retryCount, reason: "Agent non-zero exit", errorFeedback },
             });
             continue;
@@ -422,7 +453,7 @@ export class HelixExecutionEngine implements HelixEngine {
               await stateManager.recordEvent({
                 taskId: task.id,
                 type: "retry_scheduled",
-                workflowState: "implemented",
+                workflowState: "EXECUTE",
                 payload: { retryCount, reason: "Question modified files", errorFeedback },
               });
               continue;
@@ -433,7 +464,7 @@ export class HelixExecutionEngine implements HelixEngine {
           await stateManager.recordEvent({
             taskId: task.id,
             type: "task_completed",
-            workflowState: "completed",
+            workflowState: "COMPLETE",
             payload: { isQuestion: true },
           });
 
@@ -449,7 +480,7 @@ export class HelixExecutionEngine implements HelixEngine {
           return {
             taskId: task.id,
             status: "succeeded",
-            finalWorkflowState: "completed",
+            finalWorkflowState: "COMPLETE",
             diff: "",
             affectedFiles: [],
             summary:
@@ -463,11 +494,11 @@ export class HelixExecutionEngine implements HelixEngine {
         await stateManager.recordEvent({
           taskId: task.id,
           type: "gate_started",
-          workflowState: "verifying",
+          workflowState: "VERIFY",
           payload: { worktreePath, passCommand: task.passCommand },
         });
 
-        const validationReport = await this.validator.validate(worktreePath, task.passCommand);
+        const validationReport = await taskValidator.validate(worktreePath, task.passCommand);
         lastValidation = validationReport;
         obs.recordGateRun(validationReport.durationMs, validationReport.passed);
 
@@ -488,13 +519,13 @@ export class HelixExecutionEngine implements HelixEngine {
               await stateManager.recordEvent({
                 taskId: task.id,
                 type: "gate_failed",
-                workflowState: "verifying",
+                workflowState: "VERIFY",
                 payload: { reason: "requireDiff violated" },
               });
               await stateManager.recordEvent({
                 taskId: task.id,
                 type: "retry_scheduled",
-                workflowState: "implemented",
+                workflowState: "EXECUTE",
                 payload: { retryCount, errorFeedback },
               });
               continue;
@@ -507,15 +538,19 @@ export class HelixExecutionEngine implements HelixEngine {
           await stateManager.recordEvent({
             taskId: task.id,
             type: "gate_passed",
-            workflowState: "verifying",
+            workflowState: "VERIFY",
             payload: { checksRun: validationReport.checks.length },
           });
 
           await stateManager.recordEvent({
             taskId: task.id,
             type: "task_completed",
-            workflowState: "completed",
-            payload: { affectedFiles: diffResult.affectedFiles },
+            workflowState: "COMPLETE",
+            payload: {
+              affectedFiles: diffResult.affectedFiles,
+              diffPatch: diffResult.diff,
+              durationMs: agentOutput.durationMs,
+            },
           });
 
           if (isEphemeral) {
@@ -533,7 +568,7 @@ export class HelixExecutionEngine implements HelixEngine {
           return {
             taskId: task.id,
             status: "succeeded",
-            finalWorkflowState: "completed",
+            finalWorkflowState: "COMPLETE",
             diff: diffResult.diff,
             affectedFiles: diffResult.affectedFiles,
             summary: "Task executed successfully and verified by mechanical gate.",
@@ -546,7 +581,7 @@ export class HelixExecutionEngine implements HelixEngine {
         await stateManager.recordEvent({
           taskId: task.id,
           type: "gate_failed",
-          workflowState: "verifying",
+          workflowState: "VERIFY",
           payload: { failingStage: validationReport.failingStage },
         });
 
@@ -554,11 +589,11 @@ export class HelixExecutionEngine implements HelixEngine {
           retryCount++;
           obs.recordRetry();
           obs.recordCompaction?.();
-          errorFeedback = this.validator.extractDiagnostics(validationReport);
+          errorFeedback = taskValidator.extractDiagnostics(validationReport);
           await stateManager.recordEvent({
             taskId: task.id,
             type: "retry_scheduled",
-            workflowState: "implemented",
+            workflowState: "EXECUTE",
             payload: { retryCount, failingStage: validationReport.failingStage, errorFeedback },
           });
         } else {
@@ -569,7 +604,7 @@ export class HelixExecutionEngine implements HelixEngine {
 
       // If loop exited without returning success:
       const status = aborted ? "cancelled" : "failed";
-      const workflowState: WorkflowState = "blocked";
+      const workflowState: WorkflowState = "BLOCKED";
 
       await stateManager.recordEvent({
         taskId: task.id,
@@ -626,5 +661,50 @@ export class HelixExecutionEngine implements HelixEngine {
       obs.recordSecuritySummary?.(auditLogger.getSummary());
       this.activeRuns.delete(task.id);
     }
+  }
+
+  private validatorForTask(task: TaskDefinition, plan: TaskPlan): ValidationEngine {
+    if (!this.adversarialAudit || (!plan.selection.independentReview && plan.tier !== "complex")) {
+      return this.validator;
+    }
+
+    const candidatePaths = [
+      ...(task.targetFiles ?? []),
+      ...plan.steps.flatMap((step) => step.targetFiles),
+    ];
+    const domainIds = new Set(
+      candidatePaths.flatMap((filePath) =>
+        matchDomainsForFilePath(filePath, task.workspaceRoot).map((route) => route.domainId),
+      ),
+    );
+    const routes = compileTier0DomainRoutes(task.workspaceRoot);
+    const domainInvariants = [...domainIds].flatMap((domainId) => {
+      const route = routes.find((candidate) => candidate.domainId === domainId);
+      if (!route) return [];
+      const domainPath = path.join(
+        task.workspaceRoot,
+        ".helix",
+        "knowledge",
+        "domains",
+        domainId,
+        "domain.md",
+      );
+      const skillPath = path.join(path.dirname(domainPath), "SKILL.md");
+      const sourcePath = fs.existsSync(skillPath) ? skillPath : domainPath;
+      try {
+        return [parseFrontmatter(fs.readFileSync(sourcePath, "utf8")).content || route.description];
+      } catch {
+        return [route.description];
+      }
+    });
+
+    return new CrossModelAdversarialValidationEngine({
+      taskId: task.id,
+      taskSpec: task.prompt,
+      domainInvariants,
+      generatorProvider: this.adversarialAudit.generatorProvider,
+      invokeAuditor: this.adversarialAudit.invokeAuditor,
+      deterministic: this.validator,
+    });
   }
 }

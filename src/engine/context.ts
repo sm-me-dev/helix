@@ -1,5 +1,8 @@
 // Helix Context Manager, Progressive Disclosure & Token Optimization (Phase 05 - Component 7)
+import fs from "node:fs";
+import path from "node:path";
 import { countTokens } from "../measure.ts";
+import { compileTier0DomainCatalog, compileTier0DomainRoutes } from "../knowledge/discovery.ts";
 import { UntrustedContentHandler } from "./security.ts";
 import type {
   AgentMessage,
@@ -17,6 +20,184 @@ import type {
   TokenUsage,
 } from "./types.ts";
 import { TokenBudgetExceededError } from "./types.ts";
+
+export interface ProgressiveContextState {
+  readonly sessionId: string;
+  readonly activeModel: string;
+  readonly maxContextTokens: number;
+  readonly autoCompactThresholdRatio: number;
+  readonly loadedDomainIds: Set<string>;
+  readonly visibleToolNames: Set<string>;
+  readonly approvedWriteScopes: Set<string>;
+  readonly injectedEpisodicIds: Set<string>;
+  currentTokenCount: number;
+  turnCount: number;
+  readonly maxTurns: number;
+}
+
+export const BOOTSTRAP_TOOL_NAMES = [
+  "load_skill",
+  "tool_search",
+  "spawn_scout",
+  "consult_peer",
+  "Read",
+  "Grep",
+  "Glob",
+] as const;
+
+const BOOTSTRAP_CORE_RULES = [
+  "You are Helix, a careful coding agent. Follow the user's task and repository rules.",
+  "Load a matching domain skill before editing; discover tools with tool_search before use.",
+  "Read only relevant file ranges. Preserve unrelated changes and verify edits with requested gates.",
+].join("\n");
+
+export function createProgressiveContextState(options: {
+  sessionId: string;
+  activeModel?: string;
+  maxContextTokens: number;
+  maxTurns?: number;
+}): ProgressiveContextState {
+  return {
+    sessionId: options.sessionId,
+    activeModel: options.activeModel ?? "claude-opus-5-5",
+    maxContextTokens: options.maxContextTokens,
+    autoCompactThresholdRatio: 0.92,
+    loadedDomainIds: new Set(),
+    visibleToolNames: new Set(BOOTSTRAP_TOOL_NAMES),
+    approvedWriteScopes: new Set(),
+    injectedEpisodicIds: new Set(),
+    currentTokenCount: 0,
+    turnCount: 0,
+    maxTurns: options.maxTurns ?? 30,
+  };
+}
+
+export function assembleBootstrapSystemPrompt(
+  options: {
+    workspaceRoot?: string;
+    state?: ProgressiveContextState;
+    sessionId?: string;
+    activeModel?: string;
+    maxContextTokens?: number;
+    maxTurns?: number;
+  } = {},
+): { systemPrompt: string; state: ProgressiveContextState } {
+  const workspaceRoot = path.resolve(options.workspaceRoot ?? process.cwd());
+  const state =
+    options.state ??
+    createProgressiveContextState({
+      sessionId: options.sessionId ?? `session-${Date.now()}`,
+      activeModel: options.activeModel,
+      maxContextTokens: options.maxContextTokens ?? 200_000,
+      maxTurns: options.maxTurns,
+    });
+  const coreTokens = countTokens(BOOTSTRAP_CORE_RULES);
+  if (coreTokens >= 350) throw new Error(`Bootstrap core is ${coreTokens} tokens; maximum is 349`);
+  const catalog = compileTier0DomainCatalog(compileTier0DomainRoutes(workspaceRoot));
+  const catalogTokens = countTokens(catalog);
+  if (catalogTokens >= 250) {
+    throw new Error(`Tier 0 bootstrap catalog is ${catalogTokens} tokens; maximum is 249`);
+  }
+  const systemPrompt = [BOOTSTRAP_CORE_RULES, "", "## Domain routes", catalog].join("\n");
+  if (countTokens(systemPrompt) >= 600)
+    throw new Error("Bootstrap system prompt must stay below 600 tokens");
+  state.currentTokenCount = countTokens(systemPrompt);
+  return { systemPrompt, state };
+}
+
+/** Archive old tool output exactly and replace the in-memory content with a compact pointer. */
+export function compactContextIfNeeded(
+  messages: AgentMessage[],
+  state: ProgressiveContextState,
+  workspaceRoot: string = process.cwd(),
+): AgentMessage[] {
+  const measured = countTokens(messages.map((message) => message.content).join("\n"));
+  state.currentTokenCount = measured;
+  if (
+    state.maxContextTokens <= 0 ||
+    measured / state.maxContextTokens < state.autoCompactThresholdRatio
+  ) {
+    return messages;
+  }
+  const toolIndexes = messages.flatMap((message, index) =>
+    message.role === "tool" && !message.content.startsWith("[Compacted ->") ? [index] : [],
+  );
+  if (toolIndexes.length <= 2) return messages;
+  const oldIndexes = new Set(toolIndexes.slice(0, -2));
+  const oldTools = messages.filter((_message, index) => oldIndexes.has(index));
+  const facts = oldTools
+    .map((message, index) => `### Tool output ${index + 1}\n\n${message.content}`)
+    .join("\n\n");
+  const session = state.sessionId.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const notesPath = path.join(
+    path.resolve(workspaceRoot),
+    ".helix",
+    "runtime",
+    session,
+    "NOTES.md",
+  );
+  fs.mkdirSync(path.dirname(notesPath), { recursive: true });
+  const section = `\n## Compacted tool output (${new Date().toISOString()})\n${facts || "No tool output was available."}\n`;
+  fs.appendFileSync(notesPath, section, "utf8");
+  const notesRelativePath = `.helix/runtime/${session}/NOTES.md`;
+  const compacted = messages.map((message, index) =>
+    oldIndexes.has(index)
+      ? {
+          ...message,
+          content: `[Compacted -> ${notesRelativePath}] Digest: ${toolOutputDigest(message.content)}`,
+        }
+      : message,
+  );
+  state.currentTokenCount = countTokens(compacted.map((message) => message.content).join("\n"));
+  return compacted;
+}
+
+/** Keep compact evidence inline while the complete original output remains archived. */
+function toolOutputDigest(output: string): string {
+  const lines = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const filePathFacts =
+    output.match(
+      /(?:[A-Za-z]:)?(?:\.{0,2}[/\\])?[\w.@+-]+(?:[/\\][\w.@+-]+)*\.[A-Za-z0-9]+:\d+(?::\d+)?/g,
+    ) ?? [];
+  const symbolFacts = lines.filter((line) =>
+    /\b(?:export\s+)?(?:declare\s+)?(?:async\s+)?(?:function|class|interface|type|enum|const|let|var)\s+[A-Za-z_$][\w$]*/.test(
+      line,
+    ),
+  );
+  const failureFacts = lines.filter((line) => /\b(?:Error|FAIL)\b/i.test(line));
+  const facts = [...new Set([...filePathFacts, ...failureFacts, ...symbolFacts])];
+  const selected: string[] = [];
+  for (const fact of facts) {
+    const candidate = [...selected, fact].join(" | ");
+    if (countTokens(candidate) <= 120) selected.push(fact);
+  }
+  return selected.length ? selected.join(" | ") : "No path, symbol, or failure facts extracted.";
+}
+
+export interface MasterLoopTurn<T> {
+  readonly stop_reason: "tool_use" | "end_turn";
+  readonly value: T;
+  readonly messages: AgentMessage[];
+  readonly workspaceRoot?: string;
+}
+
+export async function runMasterLoop<T>(
+  state: ProgressiveContextState,
+  initialMessages: AgentMessage[],
+  runTurn: (messages: AgentMessage[]) => Promise<MasterLoopTurn<T>>,
+): Promise<{ value: T; messages: AgentMessage[] }> {
+  let messages = initialMessages;
+  while (state.turnCount < state.maxTurns) {
+    const turn = await runTurn(messages);
+    state.turnCount++;
+    messages = compactContextIfNeeded(turn.messages, state, turn.workspaceRoot);
+    if (turn.stop_reason === "end_turn") return { value: turn.value, messages };
+  }
+  throw new Error(`Master loop exceeded its ${state.maxTurns}-turn limit`);
+}
 
 export const DEFAULT_ROLE_TOKEN_BUDGETS: RoleTokenBudgets = {
   planningMaxTokens: 15_000,

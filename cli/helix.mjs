@@ -1,6 +1,6 @@
-#!/usr/bin/env -S node --experimental-strip-types
+#!/usr/bin/env -S node --experimental-strip-types --experimental-ffi
 // helix — init, doctor, measure, export, eval for the Helix harness pack.
-// Requires Node 22.6+ (type stripping). No dependencies beyond the repo.
+// Requires Node 26.4+ (type stripping and OpenTUI FFI support).
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import {
   accessSync,
@@ -22,7 +22,7 @@ import { generatePack } from "../src/generate.ts";
 import { pluginPack } from "../src/plugin.ts";
 import { cmdKnowledge } from "./knowledge.ts";
 import { cmdLearn } from "./learn.ts";
-import { cmdRun } from "./run.ts";
+import { cmdRun, createCliSessionRuntime } from "./run.ts";
 import { cmdUpdate, cmdUninstall } from "./update.ts";
 import { addRcBlock, installShim, isOnPath, rcFileFor, removeRcBlock, removeShim } from "./link.ts";
 import { startUi } from "./ui.ts";
@@ -49,6 +49,7 @@ import {
   writeContained,
 } from "./safe-write.ts";
 import { formatReport, loadOpenCodeDb, parseClaudeCodeJsonl } from "./report.ts";
+import { startHelixDaemon } from "../src/daemon/server.ts";
 
 const USAGE = `helix — AI coding harness pack manager
 
@@ -78,6 +79,11 @@ const USAGE = `helix — AI coding harness pack manager
   helix run [task] [options]                    execute a coding task with ephemeral worktree,
                                                 bounded context, and mechanical verification
                                                 (--strategy, --platform, --dry, --pass, --json)
+  helix serve [--host <host>] [--port <n>]      start the headless local Helix daemon
+  helix tui [--session <id>] [--host <host>] [--port <n>]
+                                                attach the full-screen terminal client
+  helix web [--host <host>] [--port <n>] [--no-open]
+                                                serve the synchronized browser client
   helix bench [options]                         repeatable benchmark suite across 10 categories
                                                 and 5 strategies (--strategy, --category, --json)
   helix eval [options]                          run the eval harness (see evals/README.md)
@@ -120,7 +126,10 @@ function parseArgs(argv) {
     binDir: null,
     modifyRc: null,
     port: null,
+    host: null,
+    session: null,
     open: false,
+    noOpen: false,
     json: false,
     utilization: false,
     ascii: false,
@@ -166,7 +175,12 @@ function parseArgs(argv) {
     else if (a === "--no-modify-rc") opts.modifyRc = false;
     else if (a === "--port") opts.port = Number(rest[++i]);
     else if (a.startsWith("--port=")) opts.port = Number(a.slice("--port=".length));
+    else if (a === "--host") opts.host = rest[++i] ?? null;
+    else if (a.startsWith("--host=")) opts.host = a.slice("--host=".length);
+    else if (a === "--session") opts.session = rest[++i] ?? null;
+    else if (a.startsWith("--session=")) opts.session = a.slice("--session=".length);
     else if (a === "--open") opts.open = true;
+    else if (a === "--no-open") opts.noOpen = true;
     else if (a.startsWith("-")) opts.evalArgs.push(a);
     else if (cmd === "eval") opts.evalArgs.push(a);
     else positional.push(a);
@@ -785,6 +799,136 @@ async function cmdUi(opts) {
   process.once("SIGTERM", stop);
 }
 
+async function cmdServe(opts) {
+  const port = opts.port ?? Number(process.env.HELIX_PORT ?? 3000);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    console.error("helix serve: --port/HELIX_PORT must be an integer from 0 to 65535");
+    process.exitCode = 2;
+    return;
+  }
+  const host = opts.host ?? process.env.HELIX_HOST ?? "127.0.0.1";
+  const daemon = await startHelixDaemon({ host, port, runtime: createCliSessionRuntime() });
+  console.log(`helixd listening at http://${daemon.host}:${daemon.port}`);
+  console.log("headless mode; press Ctrl-C to stop");
+  let stopping = false;
+  const stop = async () => {
+    if (stopping) return;
+    stopping = true;
+    process.removeListener("SIGINT", stop);
+    process.removeListener("SIGTERM", stop);
+    await daemon.close();
+  };
+  process.once("SIGINT", stop);
+  process.once("SIGTERM", stop);
+}
+
+async function cmdTui(opts) {
+  if (!process.execArgv.includes("--experimental-ffi")) {
+    const child = spawnSync(
+      process.execPath,
+      ["--experimental-ffi", "--experimental-strip-types", ...process.argv.slice(1)],
+      { stdio: "inherit" },
+    );
+    process.exitCode = child.status ?? 1;
+    return;
+  }
+  const host = opts.host ?? process.env.HELIX_HOST ?? "127.0.0.1";
+  const port = opts.port ?? Number(process.env.HELIX_PORT ?? 3000);
+  if (!Number.isInteger(port) || port < 0 || port > 65535)
+    throw new Error("helix tui: port must be an integer from 0 to 65535");
+  let baseUrl = `http://${host}:${port}`;
+  let ownsDaemon = false;
+  let daemon;
+  try {
+    const health = await fetch(`${baseUrl}/health`, { signal: AbortSignal.timeout(500) });
+    if (!health.ok) throw new Error("daemon health check failed");
+  } catch {
+    daemon = await startHelixDaemon({ host, port, runtime: createCliSessionRuntime() });
+    baseUrl = `http://${daemon.host}:${daemon.port}`;
+    ownsDaemon = true;
+  }
+  try {
+    let session;
+    if (opts.session) {
+      const response = await fetch(`${baseUrl}/api/sessions/${encodeURIComponent(opts.session)}`);
+      if (!response.ok) throw new Error(`session ${opts.session} was not found`);
+      session = (await response.json()).session;
+    } else {
+      const response = await fetch(`${baseUrl}/api/sessions`, { method: "POST" });
+      if (!response.ok) throw new Error(`could not create session (HTTP ${response.status})`);
+      session = (await response.json()).session;
+    }
+    const { startTui } = await import("../src/tui/index.ts");
+    await startTui({ baseUrl, session });
+  } finally {
+    if (ownsDaemon) await daemon.close();
+  }
+}
+
+async function cmdWeb(opts) {
+  const port = opts.port ?? Number(process.env.HELIX_PORT ?? 3000);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    console.error("helix web: --port/HELIX_PORT must be an integer from 0 to 65535");
+    process.exitCode = 2;
+    return;
+  }
+  const host = opts.host ?? process.env.HELIX_HOST ?? "127.0.0.1";
+  let baseUrl = "http://" + host + ":" + port;
+  let daemon;
+  let ownsDaemon = false;
+  try {
+    const health = await fetch(baseUrl + "/health", { signal: AbortSignal.timeout(500) });
+    if (!health.ok) throw new Error("daemon health check failed");
+  } catch {
+    daemon = await startHelixDaemon({ host, port, runtime: createCliSessionRuntime() });
+    baseUrl = "http://" + daemon.host + ":" + daemon.port;
+    ownsDaemon = true;
+  }
+  const webResponse = await fetch(baseUrl + "/", { headers: { Accept: "text/html" } });
+  if (!webResponse.ok || !(webResponse.headers.get("content-type") ?? "").includes("text/html")) {
+    if (ownsDaemon) await daemon.close();
+    throw new Error("Web UI assets are not built; run npm run build before helix web");
+  }
+  const sessionsResponse = await fetch(baseUrl + "/api/sessions");
+  const sessionsData = sessionsResponse.ok ? await sessionsResponse.json() : { sessions: [] };
+  const sessions = Array.isArray(sessionsData.sessions) ? sessionsData.sessions : [];
+  const selectedSession =
+    [...sessions]
+      .reverse()
+      .find((item) => item.status === "running" || item.status === "waiting_approval") ??
+    sessions.at(-1);
+  const browserHost = host === "0.0.0.0" ? "127.0.0.1" : host;
+  const url =
+    "http://" +
+    browserHost +
+    ":" +
+    (daemon?.port ?? port) +
+    (selectedSession ? "/?session=" + encodeURIComponent(selectedSession.id) : "/");
+  console.log("Helix Web is serving at " + url);
+  console.log(
+    ownsDaemon
+      ? "shared local daemon started; press Ctrl-C to stop"
+      : "attached to the running Helix daemon",
+  );
+  if (!opts.noOpen) {
+    const opener =
+      process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open";
+    const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];
+    spawn(opener, args, { stdio: "ignore", detached: true })
+      .on("error", () => console.log("Could not open a browser; visit " + url))
+      .unref();
+  }
+  if (ownsDaemon) {
+    const stop = async () => {
+      process.removeListener("SIGINT", stop);
+      process.removeListener("SIGTERM", stop);
+      await daemon.close();
+    };
+    process.once("SIGINT", stop);
+    process.once("SIGTERM", stop);
+  }
+}
+
 async function cmdBench(opts) {
   const { RepeatableBenchmarkSuite, BENCHMARK_TASKS } = await import("../src/engine/benchmark.ts");
   const suite = new RepeatableBenchmarkSuite();
@@ -919,6 +1063,9 @@ async function main() {
   else if (cmd === "knowledge") {
     process.exitCode = await cmdKnowledge(opts.knowledgeArgs);
   } else if (cmd === "run") await cmdRun(opts);
+  else if (cmd === "serve") await cmdServe(opts);
+  else if (cmd === "web") await cmdWeb(opts);
+  else if (cmd === "tui") await cmdTui(opts);
   else if (cmd === "link") await cmdLink(opts);
   else if (cmd === "unlink") cmdUnlink(opts);
   else if (cmd === "update") await cmdUpdate(opts);
@@ -934,8 +1081,11 @@ async function main() {
       await runEval(opts.evalArgs);
     }
   } else {
-    process.stdout.write(USAGE);
-    process.exitCode = cmd ? 2 : 0;
+    if (!cmd) await cmdTui(opts);
+    else {
+      process.stdout.write(USAGE);
+      process.exitCode = 2;
+    }
   }
 }
 

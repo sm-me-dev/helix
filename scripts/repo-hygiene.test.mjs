@@ -17,15 +17,18 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 
 describe("repo hygiene (Phase 0 #9)", () => {
-  it("engines.node covers the CLI's type-stripping floor (22.6)", () => {
+  it("engines.node covers OpenTUI's Node FFI floor (26.4)", () => {
     const m = String(pkg.engines?.node ?? "").match(/>=\s*(\d+)\.(\d+)/);
     assert.ok(m, "engines.node must declare a >= floor");
     const floor = Number(m[1]) * 100 + Number(m[2]);
-    assert.ok(floor >= 2206, `engines.node ${pkg.engines.node} below CLI floor 22.6`);
+    assert.ok(floor >= 2604, `engines.node ${pkg.engines.node} below OpenTUI floor 26.4`);
   });
 
   it("typescript is a devDependency, not a runtime dependency", () => {
-    assert.ok(!((pkg.dependencies ?? {}).typescript), "typescript must not ship as a runtime dependency");
+    assert.ok(
+      !(pkg.dependencies ?? {}).typescript,
+      "typescript must not ship as a runtime dependency",
+    );
     assert.ok((pkg.devDependencies ?? {}).typescript, "typescript must stay in devDependencies");
   });
 

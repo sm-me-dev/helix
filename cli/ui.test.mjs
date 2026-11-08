@@ -7,9 +7,36 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { startUi } from "./ui.ts";
+import { formatTeamProgressEvent, startUi } from "./ui.ts";
 
 const CLI = fileURLToPath(new URL("./helix.mjs", import.meta.url));
+
+describe("team progress rendering", () => {
+  it("renders progressive disclosure, peer, and DAG events as compact badges", () => {
+    assert.equal(
+      formatTeamProgressEvent({ type: "skill_loaded", payload: { domainId: "execution-engine" } }),
+      "[L1 Skill Loaded: execution-engine]",
+    );
+    assert.equal(
+      formatTeamProgressEvent({ type: "visibility_tools_unlocked", payload: { count: 3 } }),
+      "[Visibility Gate: +3 tools unlocked]",
+    );
+    assert.equal(
+      formatTeamProgressEvent({
+        type: "peer_consulted",
+        payload: { reviewerModelId: "gpt-6.1-sol" },
+      }),
+      "[Peer Consult: gpt-6.1-sol]",
+    );
+    assert.equal(
+      formatTeamProgressEvent({
+        type: "team_task_state",
+        payload: { from: "pending", to: "awaiting_plan_approval" },
+      }),
+      "[Team DAG: pending -> awaiting_plan_approval]",
+    );
+  });
+});
 
 /** Raw request so tests can set Host/Origin exactly. */
 function raw(url, { method = "GET", headers = {}, body } = {}) {

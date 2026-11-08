@@ -3,7 +3,7 @@ import prettier from "eslint-config-prettier";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
-/** Flat ESLint config for the Helix harness repo (CLI + pack generator + evals; no site, no React). */
+/** Flat ESLint config for the Helix harness, daemon, and web clients. */
 export default tseslint.config(
   {
     // Generated or machine-local trees: linting them buries real findings (a stray

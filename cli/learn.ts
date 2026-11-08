@@ -4,6 +4,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { countTokens } from "../src/measure.ts";
+import { learnAfterRun, type AutomatedRunLearningInput } from "../src/learn.ts";
+import { TieredKnowledgeRepository } from "../src/knowledge/repository.ts";
 import {
   COMPILED_FILE,
   COMPILE_TOKEN_CAP,
@@ -71,6 +73,24 @@ function saveLedger(dir: string, ledger: LearnLedger): void {
 
 function now(): string {
   return new Date().toISOString();
+}
+
+/** Persist automated post-run deltas through the quarantine store, never Tier 1 files. */
+export function persistAutomatedRunLearning(
+  dir: string,
+  input: Omit<AutomatedRunLearningInput, "insertQuarantined">,
+): number {
+  if (input.gateAttempts <= 1 && input.blockingFaults + (input.blockingFaultsCaught ?? 0) === 0)
+    return 0;
+  const repository = new TieredKnowledgeRepository(dir);
+  try {
+    return learnAfterRun({
+      ...input,
+      insertQuarantined: (record) => repository.insertEpisodicRecord(record),
+    });
+  } finally {
+    repository.close();
+  }
 }
 
 export function learnUsage(): string {

@@ -1,6 +1,5 @@
 // Helix Adaptive Knowledge Retriever (Phase 11.4)
 // Deterministic ranking, bounded dependency expansion, token budget enforcement & caching.
-import { countTokens } from "../measure.ts";
 import { SQLiteKnowledgeIndex } from "./index.ts";
 import type {
   KnowledgeContextPackage,
@@ -9,6 +8,12 @@ import type {
   RetrievedItem,
   TaskRetrievalContext,
 } from "./types.ts";
+import { Lang, parse } from "@ast-grep/napi";
+import { countTokens } from "../measure.ts";
+import { TieredKnowledgeRepository } from "./repository.ts";
+import { matchPathGlob } from "./glob.ts";
+import type { AstGrepMatcherRule, Tier2EpisodicRecord } from "./types.ts";
+import { recordEpisodicRetrieval } from "../telemetry/utilization.ts";
 
 export interface RetrieverOptions {
   index: SQLiteKnowledgeIndex;
@@ -366,4 +371,99 @@ export class AdaptiveKnowledgeRetriever {
   clearCache(): void {
     this.cache.clear();
   }
+}
+
+export interface EpisodicRetrievalOptions {
+  readonly domainId?: string;
+  readonly filePath?: string;
+  readonly sourceCode?: string;
+  readonly limit?: number;
+  readonly maxTokens?: number;
+}
+
+/** Hybrid BM25/vector retrieval using reciprocal rank fusion (k=60). */
+export function retrieveEpisodicRecords(
+  repository: TieredKnowledgeRepository,
+  query: string,
+  options: EpisodicRetrievalOptions = {},
+): Tier2EpisodicRecord[] {
+  const limit = Math.min(3, Math.max(0, options.limit ?? 3));
+  const maxTokens = Math.min(250, Math.max(0, options.maxTokens ?? 250));
+  if (limit === 0 || maxTokens === 0 || !query.trim()) return [];
+
+  const fts = repository.searchEpisodicFts(query, 100, options.domainId);
+  const vectors = repository.searchEpisodicVector(query, 100, options.domainId);
+  const scores = new Map<string, number>();
+  for (const [index, result] of fts.entries()) {
+    scores.set(result.id, (scores.get(result.id) ?? 0) + 1 / (60 + index + 1));
+  }
+  for (const [index, result] of vectors.entries()) {
+    scores.set(result.id, (scores.get(result.id) ?? 0) + 1 / (60 + index + 1));
+  }
+
+  const records = [...scores.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .flatMap(([id]) => {
+      const record = repository.getEpisodicRecord(id);
+      if (
+        !record ||
+        (options.domainId !== undefined && record.domainId !== options.domainId) ||
+        (options.filePath && record.fileGlob && !matchPathGlob(options.filePath, record.fileGlob))
+      ) {
+        return [];
+      }
+      if (
+        options.sourceCode !== undefined &&
+        record.astGrepRule &&
+        !astGrepRuleMatches(record.astGrepRule, options.sourceCode)
+      ) {
+        return [];
+      }
+      return [record];
+    });
+
+  const selected: Tier2EpisodicRecord[] = [];
+  let usedTokens = 0;
+  for (const record of records) {
+    const recordTokens = countTokens(
+      `- ${record.id} (${record.domainId}): ${record.triggerSummary}\n  ${record.resolutionRule}`,
+    );
+    if (usedTokens + recordTokens > maxTokens) continue;
+    selected.push(record);
+    usedTokens += recordTokens;
+    recordEpisodicRetrieval(repository, record.id);
+    if (selected.length === limit) break;
+  }
+  return selected;
+}
+
+/** Return validated rules structurally matched against a parsed source file. */
+export function matchEpisodicRulesForSource(
+  repository: TieredKnowledgeRepository,
+  filePath: string,
+  sourceCode: string,
+): Tier2EpisodicRecord[] {
+  return repository.listEpisodicRecords("VALIDATED").filter((record) => {
+    if (record.fileGlob && !matchPathGlob(filePath, record.fileGlob)) return false;
+    return record.astGrepRule ? astGrepRuleMatches(record.astGrepRule, sourceCode) : false;
+  });
+}
+
+function astGrepRuleMatches(rule: AstGrepMatcherRule, sourceCode: string): boolean {
+  const lang =
+    rule.lang === "TypeScript" ? Lang.TypeScript : rule.lang === "Tsx" ? Lang.Tsx : Lang.JavaScript;
+  const root = parse(lang, sourceCode).root();
+  const hasConstraint = Boolean(rule.pattern || rule.kind || rule.insideKind);
+  if (!hasConstraint) return false;
+
+  const visit = (node: ReturnType<typeof root.children>[number]): boolean => {
+    const nodeMatches =
+      (!rule.kind || node.kind() === rule.kind) &&
+      (!rule.pattern || node.matches(rule.pattern)) &&
+      (!rule.insideKind ||
+        node.ancestors().some((ancestor) => ancestor.kind() === rule.insideKind));
+    if (nodeMatches) return true;
+    return node.children().some(visit);
+  };
+  return visit(root);
 }

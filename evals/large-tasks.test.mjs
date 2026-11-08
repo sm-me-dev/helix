@@ -11,7 +11,10 @@ const readDir = async (sub) => {
   const files = (await readdir(dir)).filter((f) => f.endsWith(".yml")).sort();
   const tasks = [];
   for (const f of files) {
-    tasks.push({ file: f, ...parseYaml(await readFile(new URL(`./${sub}/${f}`, import.meta.url), "utf8")) });
+    tasks.push({
+      file: f,
+      ...parseYaml(await readFile(new URL(`./${sub}/${f}`, import.meta.url), "utf8")),
+    });
   }
   return { files, tasks };
 };
@@ -19,7 +22,12 @@ const readDir = async (sub) => {
 describe("large fixture tasks", () => {
   it("has four tuning tasks with navigation setups", async () => {
     const { files, tasks } = await readDir("tasks-large");
-    assert.deepEqual(files, ["call-chain.yml", "cross-module.yml", "deep-bug.yml", "trace-bug.yml"]);
+    assert.deepEqual(files, [
+      "call-chain.yml",
+      "cross-module.yml",
+      "deep-bug.yml",
+      "trace-bug.yml",
+    ]);
     for (const t of tasks) {
       assert.ok(t.id && t.title && t.prompt && t.pass, `${t.file} needs id/title/prompt/pass`);
       assert.equal(t.fixture, "large", `${t.file} must target the large fixture`);

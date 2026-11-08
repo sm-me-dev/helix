@@ -7,10 +7,12 @@
 //  - actions are a fixed whitelist run as child processes of the CLI in the launched directory
 //    only; the browser cannot choose the directory, the command or free-form arguments;
 //  - the page loads nothing from the network (CSP default-src 'none').
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import * as fs from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import * as path from "node:path";
 import { resolve } from "node:path";
 
 export type UiOptions = {
@@ -22,6 +24,59 @@ export type UiOptions = {
 };
 
 export type UiHandle = { server: Server; url: string; token: string; close: () => Promise<void> };
+
+export function formatTeamProgressEvent(event: {
+  readonly type: string;
+  readonly payload: Readonly<Record<string, unknown>>;
+}): string | undefined {
+  if (event.type === "skill_loaded" && typeof event.payload.domainId === "string")
+    return `[L1 Skill Loaded: ${event.payload.domainId}]`;
+  if (event.type === "visibility_tools_unlocked" && typeof event.payload.count === "number")
+    return `[Visibility Gate: +${event.payload.count} tools unlocked]`;
+  if (event.type === "peer_consulted" && typeof event.payload.reviewerModelId === "string")
+    return `[Peer Consult: ${event.payload.reviewerModelId}]`;
+  if (
+    event.type === "team_task_state" &&
+    typeof event.payload.from === "string" &&
+    typeof event.payload.to === "string"
+  )
+    return `[Team DAG: ${event.payload.from} -> ${event.payload.to}]`;
+  return undefined;
+}
+
+/** Open a tmux pane that follows the persisted task DAG for an active team. */
+export function startTmuxTeamMonitor(workspaceRoot: string, teamId: string): void {
+  if (!/^[a-z0-9][a-z0-9._-]*$/i.test(teamId)) throw new Error("Invalid team id for tmux monitor");
+  const root = resolve(workspaceRoot);
+  const tasksPath = resolve(root, ".helix/runtime/teams", teamId, "tasks.json");
+  const teamDir = resolve(tasksPath, "..");
+  fs.mkdirSync(teamDir, { recursive: true });
+  const relative = path.relative(fs.realpathSync(root), fs.realpathSync(teamDir));
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative))
+    throw new Error("tmux team monitor path escapes the workspace");
+  if (!fs.existsSync(tasksPath))
+    fs.writeFileSync(tasksPath, JSON.stringify({ tasks: [] }, null, 2) + "\n", "utf8");
+  const tasksReal = fs.realpathSync(tasksPath);
+  const tasksRelative = path.relative(fs.realpathSync(root), tasksReal);
+  if (
+    tasksRelative === ".." ||
+    tasksRelative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(tasksRelative) ||
+    !fs.statSync(tasksReal).isFile()
+  )
+    throw new Error("tmux team task file escapes the workspace or is not a file");
+  const quote = (value: string) => `'${value.replace(/'/g, `'"'"'`)}'`;
+  const script =
+    'const fs=require("node:fs");const path=require("node:path");const d=process.argv[1];setInterval(()=>{process.stdout.write("\\x1bc");try{process.stdout.write("Team DAG\\n"+fs.readFileSync(path.join(d,"tasks.json"),"utf8"));const s=path.join(d,"streams");if(fs.existsSync(s)){for(const f of fs.readdirSync(s).sort()){const lines=fs.readFileSync(path.join(s,f),"utf8").trim().split(/\\r?\\n/);process.stdout.write("\\n"+f+"\\n"+lines.slice(-20).join("\\n"))}}}catch{process.stdout.write("Waiting for team tasks...")}},1000)';
+  const command = `${quote(process.execPath)} -e ${quote(script)} ${quote(teamDir)}`;
+  const result = spawnSync("tmux", ["split-window", "-v", "-c", root, command], {
+    encoding: "utf8",
+  });
+  if (result.error || result.status !== 0)
+    throw new Error(
+      result.error?.message ?? (result.stderr.trim() || "tmux could not open a team status pane"),
+    );
+}
 
 type ActionBody = { platforms?: unknown; crew?: unknown };
 

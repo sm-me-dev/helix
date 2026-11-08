@@ -3,6 +3,7 @@
 // tool isolation, context optimization, mechanical validation, and state management.
 import type { CrewId, PlatformId, RepoFacts } from "../types.ts";
 import type { TaskTier, WorkflowState, WorkflowSelection } from "../workflow.ts";
+import type { Tier0DomainRoute, Tier2EpisodicRecord } from "../knowledge/types.ts";
 
 export type { CrewId, PlatformId, RepoFacts, TaskTier, WorkflowState, WorkflowSelection };
 
@@ -144,6 +145,10 @@ export type EngineExecutionOptions = {
   dryRun?: boolean;
   /** Event listener for real-time observability. */
   onEvent?: (event: ExecutionEvent) => void;
+  /** Stream assistant text from the agent runner to non-terminal clients. */
+  onMessageDelta?: (text: string) => void;
+  /** Per-task validation override used to layer independent review after Stage A. */
+  validationEngine?: ValidationEngine;
 };
 
 export interface HelixEngine {
@@ -188,6 +193,15 @@ export type AgentSession = {
   systemPrompt: string;
   messages: AgentMessage[];
   timeoutSec: number;
+  /** Optional hard tool surface and turn ceiling for disposable execution modes. */
+  toolAllowlist?: readonly string[];
+  maxTurns?: number;
+  /** Assigned by the team runtime; used by BudgetedTeammateRunner. */
+  teammateId?: string;
+  teamId?: string;
+  maxTokenBudget?: number;
+  readOnly?: boolean;
+  onOutputChunk?: (text: string) => void;
 };
 
 export type AgentExecutionOutput = {
@@ -383,6 +397,10 @@ export type ToolExecutionContext = {
   networkPolicy?: NetworkPolicy;
   validateArguments?: boolean;
   redactSecrets?: boolean;
+  progressiveState?: {
+    visibleToolNames: Set<string>;
+    approvedWriteScopes: Set<string>;
+  };
   auditLogger?: SecurityAuditLoggerInterface;
 };
 
@@ -552,6 +570,16 @@ export type SymbolReference = {
 export interface RepositoryRetriever {
   /** Query semantic graph (Graphify) or fallback structural outline. */
   queryStructure(query: string): Promise<SymbolReference[]>;
+  /** V2 Tier 0 routing, Tier 1 canonical skills and Tier 2 episodic retrieval. */
+  retrieveKnowledge?(
+    query: string,
+    targetFiles?: readonly string[],
+    sourceByPath?: Readonly<Record<string, string>>,
+  ): Promise<{
+    tier0: readonly Tier0DomainRoute[];
+    tier1: readonly { domainId: string; bodyMarkdown: string }[];
+    tier2: readonly Tier2EpisodicRecord[];
+  }>;
   /** Retrieve narrow cited line excerpts (strictly avoiding whole-file dumps >200 lines). */
   fetchExcerpts(
     citations: Array<{ path: string; start: number; end: number; reason?: string }>,
@@ -668,7 +696,11 @@ export type ExecutionEventType =
   | "review_completed"
   | "conflict_detected"
   | "integration_started"
-  | "integration_completed";
+  | "integration_completed"
+  | "skill_loaded"
+  | "visibility_tools_unlocked"
+  | "peer_consulted"
+  | "team_task_state";
 
 export type ExecutionEvent = {
   eventId: string;
@@ -705,7 +737,22 @@ export interface ExecutionStateManager {
 // 11. Validation Engine
 // ============================================================================
 
-export type ValidationStage = "secrets" | "lint" | "typecheck" | "tests";
+export type ValidationStage = "secrets" | "lint" | "typecheck" | "tests" | "adversarial";
+
+export interface AdversarialFinding {
+  readonly severity: "BLOCKING_FAULT" | "EDGE_CASE_RISK" | "NIT";
+  readonly file: string;
+  readonly lineOrAstNode: string;
+  readonly proof: string;
+  readonly requiredFix: string;
+}
+
+export interface AdversarialAuditVerdict {
+  readonly status: "VERIFIED" | "REJECTED";
+  readonly reviewerHarness: string;
+  readonly reviewerModelId: string;
+  readonly findings: readonly AdversarialFinding[];
+}
 
 export type ValidationCheckResult = {
   stage: ValidationStage;
@@ -724,6 +771,8 @@ export type ValidationReport = {
   checks: ValidationCheckResult[];
   failingStage?: ValidationStage;
   diagnosticsExcerpt?: string;
+  adversarialAudit?: AdversarialAuditVerdict;
+  auditorTokenCost?: { inputTokens: number; outputTokens: number };
 };
 
 export interface ValidationEngine {

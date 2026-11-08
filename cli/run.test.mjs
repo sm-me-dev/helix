@@ -26,6 +26,7 @@ describe("helix run CLI command", () => {
     assert.match(res.stdout, /--strategy/);
     assert.match(res.stdout, /--dry/);
     assert.match(res.stdout, /--simulation/);
+    assert.match(res.stdout, /--tmux/);
   });
 
   it("prints usage and exits 0 on -h", () => {
@@ -61,7 +62,7 @@ describe("helix run CLI command", () => {
     const parsed = JSON.parse(res.stdout);
     assert.equal(parsed.status, "succeeded");
     assert.equal(typeof parsed.taskId, "string");
-    assert.equal(parsed.finalWorkflowState, "discovered");
+    assert.equal(parsed.finalWorkflowState, "DISCOVER");
     assert.equal(parsed.validation.passed, true);
     assert.ok(parsed.metrics.wallClockDurationMs >= 0);
   });

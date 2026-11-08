@@ -19,7 +19,12 @@ import {
   WorkspaceConflictError,
   WorkspaceLockManager,
 } from "./security.ts";
-import { FileExecutionStateManager } from "./state.ts";
+import {
+  FileExecutionStateManager,
+  HelixTeamRuntime,
+  type RootCauseProof,
+  type TeamTaskNode,
+} from "./state.ts";
 import { DEFAULT_FORBIDDEN_PATHS } from "./task.ts";
 import {
   type AgentOrchestrator,
@@ -94,6 +99,22 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
     this.validator = deps.validator || new DefaultValidationEngine();
     this.contextManager = deps.contextManager || new DefaultContextManager();
     this.worktreeManager = deps.worktreeManager || new GitWorktreeManager();
+  }
+
+  createTeamRuntime(options: {
+    workspaceRoot: string;
+    teamId: string;
+    tasks?: readonly TeamTaskNode[];
+    onStatus?: ConstructorParameters<typeof HelixTeamRuntime>[0]["onStatus"];
+  }): HelixTeamRuntime {
+    return new HelixTeamRuntime(options);
+  }
+
+  spawnHypothesisTeam(
+    runtime: HelixTeamRuntime,
+    options: Parameters<HelixTeamRuntime["spawnHypothesisTeam"]>[0],
+  ): Promise<RootCauseProof> {
+    return runtime.spawnHypothesisTeam(options);
   }
 
   /**
@@ -378,7 +399,13 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
       selection: {
         tier,
         roles: ["scout", "architect", "builder", "reviewer"],
-        states: ["classified", "discovered", "planned", "implemented", "verifying", "completed"],
+        states: ["INIT", "DISCOVER", "EXECUTE", "VERIFY", "COMPLETE"],
+        executionModes: [
+          "MODE_1_MASTER_LOOP",
+          "MODE_2_DISPOSABLE_SCOUT",
+          "MODE_3_ADVERSARIAL_AUDITOR",
+          "MODE_4_PEER_TEAM",
+        ],
         reason: `Decomposed using ${strategy} strategy`,
         independentReview: isSecurity || tier === "complex" || strategy.includes("review"),
       },
@@ -652,6 +679,7 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
     options: EngineExecutionOptions,
     allowParallel: boolean,
   ): Promise<TaskResult> {
+    const validator = options.validationEngine ?? this.validator;
     const obs = new DefaultObservabilityCollector();
     const securityAuditLogger = new SecurityAuditLogger(task.id);
     const stateManager = new FileExecutionStateManager(task.id, plan.tier, {
@@ -686,7 +714,7 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
       await stateManager.recordEvent({
         taskId: task.id,
         type: "worktree_created",
-        workflowState: "discovered",
+        workflowState: "DISCOVER",
         payload: {
           worktreePath: integrationWorktree,
           branch: integrationBranch,
@@ -714,7 +742,7 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
     await stateManager.recordEvent({
       taskId: task.id,
       type: "handoff_created",
-      workflowState: "planned",
+      workflowState: "EXECUTE",
       payload: {
         lineCount: currentHandoffCard.lineCount,
         card: currentHandoffCard.serializedText,
@@ -760,7 +788,7 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
             await stateManager.recordEvent({
               taskId: task.id,
               type: "step_failed",
-              workflowState: "implemented",
+              workflowState: "EXECUTE",
               payload: { stepId: step.id, reason: "Prerequisite dependency failed or cancelled" },
             });
           }
@@ -853,7 +881,7 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
         await stateManager.recordEvent({
           taskId: task.id,
           type: "integration_started",
-          workflowState: "verifying",
+          workflowState: "VERIFY",
           payload: { subtaskCount: parallelImplementerOutcomes.length },
         });
 
@@ -866,7 +894,7 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
           await stateManager.recordEvent({
             taskId: task.id,
             type: "conflict_detected",
-            workflowState: "verifying",
+            workflowState: "VERIFY",
             payload: { conflicts: integrationResult.conflicts },
           });
 
@@ -878,7 +906,7 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
         await stateManager.recordEvent({
           taskId: task.id,
           type: "integration_completed",
-          workflowState: "verifying",
+          workflowState: "VERIFY",
           payload: { resolved: true },
         });
       }
@@ -890,13 +918,13 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
       await stateManager.recordEvent({
         taskId: task.id,
         type: "gate_started",
-        workflowState: "verifying",
+        workflowState: "VERIFY",
         payload: { worktreePath: integrationWorktree, passCommand: task.passCommand },
       });
 
       const validationReport: ValidationReport = task.isQuestion
         ? { passed: true, durationMs: 0, checks: [] }
-        : await this.validator.validate(integrationWorktree, task.passCommand);
+        : await validator.validate(integrationWorktree, task.passCommand);
 
       obs.recordGateRun(validationReport.durationMs, validationReport.passed);
 
@@ -904,11 +932,11 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
         await stateManager.recordEvent({
           taskId: task.id,
           type: "gate_failed",
-          workflowState: "verifying",
+          workflowState: "VERIFY",
           payload: { failingStage: validationReport.failingStage },
         });
         throw new Error(
-          `Gate validation failed: ${this.validator.extractDiagnostics(validationReport)}`,
+          `Gate validation failed: ${validator.extractDiagnostics(validationReport)}`,
         );
       }
 
@@ -917,7 +945,7 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
         await stateManager.recordEvent({
           taskId: task.id,
           type: "review_started",
-          workflowState: "verifying",
+          workflowState: "VERIFY",
           payload: { reviewerRole: "reviewer" },
         });
 
@@ -926,7 +954,7 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
         await stateManager.recordEvent({
           taskId: task.id,
           type: "review_completed",
-          workflowState: "verifying",
+          workflowState: "VERIFY",
           payload: { verdict: reviewResult.verdict, evidence: reviewResult.evidence },
         });
 
@@ -939,14 +967,14 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
       await stateManager.recordEvent({
         taskId: task.id,
         type: "gate_passed",
-        workflowState: "completed",
+        workflowState: "COMPLETE",
         payload: { checksRun: validationReport.checks.length },
       });
 
       await stateManager.recordEvent({
         taskId: task.id,
         type: "task_completed",
-        workflowState: "completed",
+        workflowState: "COMPLETE",
         payload: { affectedFiles: integratedDiffResult.affectedFiles },
       });
 
@@ -971,7 +999,7 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
       return {
         taskId: task.id,
         status: "succeeded",
-        finalWorkflowState: "completed",
+        finalWorkflowState: "COMPLETE",
         diff: integratedDiffResult.diff,
         affectedFiles: integratedDiffResult.affectedFiles,
         summary: `Multi-agent orchestration (${allowParallel ? "parallel" : "chain"}) completed successfully.`,
@@ -985,7 +1013,7 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
       await stateManager.recordEvent({
         taskId: task.id,
         type: "task_failed",
-        workflowState: isAbort ? "blocked" : "implemented",
+        workflowState: isAbort ? "BLOCKED" : "EXECUTE",
         payload: { error: msg, aborted: isAbort },
       });
 
@@ -1009,7 +1037,7 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
       return {
         taskId: task.id,
         status: isAbort ? "cancelled" : "failed",
-        finalWorkflowState: "blocked",
+        finalWorkflowState: "BLOCKED",
         diff: "",
         affectedFiles: [],
         summary: `Orchestration ${isAbort ? "cancelled" : "failed"}: ${msg}`,
@@ -1085,7 +1113,7 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
       await stateManager.recordEvent({
         taskId: task.id,
         type: "step_started",
-        workflowState: "implemented",
+        workflowState: "EXECUTE",
         payload: { stepId: step.id, role: step.role, worktreePath: stepWorktree },
       });
 
@@ -1150,7 +1178,7 @@ export class DefaultAgentOrchestrator implements AgentOrchestrator {
       await stateManager.recordEvent({
         taskId: task.id,
         type: isSuccess ? "step_completed" : "step_failed",
-        workflowState: "implemented",
+        workflowState: "EXECUTE",
         payload: {
           stepId: step.id,
           role: step.role,

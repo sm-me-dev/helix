@@ -1,4 +1,6 @@
 import { vscodeMcpJson } from "../mcps.ts";
+import { invokeProviderHeadlessAgent } from "../engine/provider.ts";
+import type { HeadlessInvocationRequest, HeadlessInvocationResult } from "../engine/provider.ts";
 import type { HarnessConfig } from "../types";
 import { copilotInstructions } from "./parts.ts";
 import type { PlatformAdapter } from "./types.ts";
@@ -46,3 +48,10 @@ export const copilotAdapter: PlatformAdapter = {
     ];
   },
 };
+
+/** Copilot currently uses an explicitly configured API endpoint through this neutral transport. */
+export function invokeHeadlessAgent(
+  request: HeadlessInvocationRequest,
+): Promise<HeadlessInvocationResult> {
+  return invokeProviderHeadlessAgent("copilot", request);
+}

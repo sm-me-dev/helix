@@ -5,10 +5,13 @@ import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { DefaultAgentOrchestrator } from "./orchestrator.ts";
-import { MockAgentRunner } from "./runner.ts";
+import { BudgetedTeammateRunner, MockAgentRunner } from "./runner.ts";
 import { normalizeTaskDefinition } from "./task.ts";
 import type { TaskDefinition, ExecutionEvent } from "./types.ts";
 import { runComparativeExperiment } from "./experiment.ts";
+import { HelixTeamRuntime, type TeamTaskNode } from "./state.ts";
+import { ProgressiveToolRuntime, createConsultPeerHandler } from "./tools.ts";
+import { assembleBootstrapSystemPrompt } from "./context.ts";
 
 function createTempDir(prefix = "helix-orchestrator-test-"): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -482,5 +485,245 @@ describe("Phase 04: Multi-Agent Orchestration Subsystem", () => {
         cleanupDir(tmp);
       }
     });
+  });
+});
+
+describe("Phase 4 peer team runtime", () => {
+  function teamTask(taskId: string, ownedPaths: string[], dependsOn: string[] = []): TeamTaskNode {
+    return {
+      taskId,
+      title: taskId,
+      description: taskId,
+      ownedPaths,
+      dependsOn,
+      status: "pending",
+      planApprovedByLead: false,
+    };
+  }
+
+  it("serializes claims, blocks overlapping paths and uncompleted dependencies", () => {
+    const root = createTempDir();
+    try {
+      const team = new HelixTeamRuntime({
+        workspaceRoot: root,
+        teamId: "claims",
+        tasks: [
+          teamTask("first", ["src/shared/**"]),
+          teamTask("overlap", ["src/shared/file.ts"]),
+          teamTask("parent", ["lib/**"]),
+          teamTask("child", ["test/**"], ["parent"]),
+        ],
+      });
+      assert.equal(team.claimTask("first", "agent-a").status, "awaiting_plan_approval");
+      assert.throws(() => team.claimTask("overlap", "agent-b"), /overlaps active task/);
+      assert.throws(() => team.claimTask("child", "agent-c"), /uncompleted dependency/);
+    } finally {
+      cleanupDir(root);
+    }
+  });
+
+  it("blocks teammate writes until the lead approves its submitted plan", async () => {
+    const root = createTempDir();
+    try {
+      const team = new HelixTeamRuntime({
+        workspaceRoot: root,
+        teamId: "write-gate",
+        tasks: [teamTask("implementation", ["src/**"])],
+      });
+      team.claimTask("implementation", "builder");
+      const { state } = assembleBootstrapSystemPrompt({
+        workspaceRoot: root,
+        sessionId: "teammate-write",
+        maxContextTokens: 1000,
+      });
+      const runtime = new ProgressiveToolRuntime({
+        workspaceRoot: root,
+        state,
+        teamRuntime: team,
+        teammateId: "builder",
+      });
+      runtime.toolSearch("write file");
+      const blocked = await runtime.invoke("Write", {
+        filePath: "src/new.ts",
+        content: "export const value = 1;",
+      });
+      assert.equal(blocked.isError, true);
+      assert.match(blocked.content, /WriteGate blocked/);
+      team.submitPlan(
+        "builder",
+        "implementation",
+        "Own src/**; export the function without changing callers.",
+      );
+      assert.throws(
+        () =>
+          team.approve_teammate_plan("builder", {
+            teammate_id: "builder",
+            task_id: "implementation",
+            approved: true,
+          }),
+        /Only the lead agent/,
+      );
+      const { state: leadState } = assembleBootstrapSystemPrompt({
+        workspaceRoot: root,
+        sessionId: "lead-approval",
+        maxContextTokens: 1000,
+      });
+      const leadRuntime = new ProgressiveToolRuntime({
+        workspaceRoot: root,
+        state: leadState,
+        teamRuntime: team,
+        teammateId: "lead",
+      });
+      leadRuntime.toolSearch("approve teammate plan");
+      const approval = await leadRuntime.invoke("approve_teammate_plan", {
+        teammate_id: "builder",
+        task_id: "implementation",
+        approved: true,
+      });
+      assert.notEqual(approval.isError, true, approval.content);
+      const written = await runtime.invoke("Write", {
+        filePath: "src/new.ts",
+        content: "export const value = 1;",
+      });
+      assert.equal(written.isError, false, written.content);
+      assert.equal(
+        fs.readFileSync(path.join(root, "src/new.ts"), "utf8"),
+        "export const value = 1;",
+      );
+    } finally {
+      cleanupDir(root);
+    }
+  });
+
+  it("mounts raw on-disk slices and routes peer consultation to an orthogonal harness", async () => {
+    const root = createTempDir();
+    try {
+      fs.mkdirSync(path.join(root, "src"), { recursive: true });
+      fs.writeFileSync(
+        path.join(root, "src/peer.ts"),
+        "const first = 1;\nconst raw = 'preserve me';\nreturn raw;\n",
+        "utf8",
+      );
+      let observedRoute = "";
+      let observedPrompt = "";
+      const consult = createConsultPeerHandler({
+        workspaceRoot: root,
+        generatorProvider: "claude",
+        resolveApi: () => ({
+          endpoint: "https://peer.example.test/review",
+          format: "openai-chat-completions",
+        }),
+        invoke: async (route, prompt) => {
+          observedRoute = `${route.harness}/${route.modelId}`;
+          observedPrompt = prompt;
+          return "Check whether the return path preserves the original value.";
+        },
+      });
+      const result = await consult({
+        question: "Review this change",
+        proposedApproach: "Keep the local variable",
+        fileSlices: [{ filePath: "src/peer.ts", startLine: 2, endLine: 3 }],
+      });
+      assert.match(observedRoute, /^codex\//);
+      assert.ok(observedPrompt.includes("const raw = 'preserve me';\nreturn raw;"));
+      assert.ok(!observedPrompt.includes("const first = 1;"));
+      assert.match(result.content, /gpt-6\.1-sol/);
+    } finally {
+      cleanupDir(root);
+    }
+  });
+
+  it("runs heterogeneous hypothesis investigators and gives them competing findings", async () => {
+    const root = createTempDir();
+    try {
+      const team = new HelixTeamRuntime({ workspaceRoot: root, teamId: "hypotheses" });
+      const calls: Array<{ provider: string; peers: number }> = [];
+      const proof = await team.spawnHypothesisTeam({
+        bugDescription: "A request path fails intermittently",
+        candidateHypotheses: ["stale cache", "racy update", "bad parse"],
+        targetFiles: ["src/bug.ts"],
+        investigate: async ({ hypothesis, provider, competingFindings }) => {
+          calls.push({ provider, peers: competingFindings.length });
+          return {
+            evidence: ["src/bug.ts:8"],
+            disproved: hypothesis !== "racy update" && competingFindings.length > 0,
+          };
+        },
+      });
+      assert.equal(new Set(calls.slice(0, 3).map((call) => call.provider)).size, 3);
+      assert.ok(calls.slice(3).every((call) => call.peers === 2));
+      assert.equal(proof.hypothesis, "racy update");
+      assert.deepEqual(proof.evidence, ["src/bug.ts:8"]);
+    } finally {
+      cleanupDir(root);
+    }
+  });
+
+  it("ranks multiple cited hypothesis survivors and applies peer falsifications", async () => {
+    const root = createTempDir();
+    try {
+      const team = new HelixTeamRuntime({ workspaceRoot: root, teamId: "hypothesis-ranking" });
+      const proof = await team.spawnHypothesisTeam({
+        bugDescription: "A retry is lost",
+        candidateHypotheses: ["lost write", "stale read", "bad parse"],
+        targetFiles: ["src/retry.ts"],
+        investigate: async ({ hypothesis, competingFindings }) => {
+          if (competingFindings.length === 0) return { evidence: ["src/retry.ts:1"] };
+          if (hypothesis === "lost write") {
+            return {
+              evidence: ["src/retry.ts:11", "src/retry.ts:12"],
+              falsifiedHypotheses: ["stale read"],
+            };
+          }
+          if (hypothesis === "bad parse") {
+            return { evidence: ["src/retry.ts:21", "src/retry.ts:22", "src/retry.ts:23"] };
+          }
+          return { evidence: ["src/retry.ts:31"] };
+        },
+      });
+      assert.equal(proof.hypothesis, "bad parse");
+      assert.deepEqual(proof.evidence, ["src/retry.ts:21", "src/retry.ts:22", "src/retry.ts:23"]);
+      assert.deepEqual(proof.falsifiedHypotheses, ["stale read"]);
+    } finally {
+      cleanupDir(root);
+    }
+  });
+
+  it("caps peer team membership and applies per-teammate turn and token budgets", async () => {
+    const delegate = new MockAgentRunner("opencode", [
+      { stdout: "brief result", tokens: { input: 10, output: 5 } },
+    ]);
+    assert.throws(
+      () =>
+        new BudgetedTeammateRunner(delegate, {
+          a: { tokenBudget: 100, turnBudget: 2 },
+          b: { tokenBudget: 100, turnBudget: 2 },
+          c: { tokenBudget: 100, turnBudget: 2 },
+          d: { tokenBudget: 100, turnBudget: 2 },
+          e: { tokenBudget: 100, turnBudget: 2 },
+        }),
+      /at most four/,
+    );
+    const runner = new BudgetedTeammateRunner(delegate, {
+      builder: { tokenBudget: 100, turnBudget: 3 },
+    });
+    const session = {
+      sessionId: "budgeted",
+      taskId: "budgeted-task",
+      role: "implementer" as const,
+      platform: "opencode" as const,
+      workdir: process.cwd(),
+      systemPrompt: "",
+      messages: [],
+      timeoutSec: 30,
+      teammateId: "builder",
+      teamId: "team-a",
+    };
+    assert.equal((await runner.run(session)).exitCode, 0);
+    assert.equal(delegate.calls[0]?.maxTurns, 3);
+    assert.equal(delegate.calls[0]?.maxTokenBudget, 100);
+    const exhausted = await runner.run(session);
+    assert.equal(exhausted.exitCode, 1);
+    assert.match(exhausted.stderr, /turn budget/);
   });
 });

@@ -5,17 +5,24 @@ import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import {
+  assembleBootstrapSystemPrompt,
+  compactContextIfNeeded,
+  runMasterLoop,
   ContextCompactor,
   DEFAULT_CONTEXT_BUDGET,
   DefaultContextManager,
   TokenBudgetManager,
 } from "./context.ts";
+import { ProgressiveToolRuntime } from "./tools.ts";
 import { runContextOptimizationExperiment } from "./experiment.ts";
 import { DefaultObservabilityCollector } from "./observability.ts";
 import { DefaultRepositoryRetriever } from "./retrieval.ts";
+import { TieredKnowledgeRepository } from "../knowledge/repository.ts";
+import type { Tier2EpisodicRecord } from "../knowledge/types.ts";
 import { DefaultTaskPlanner, normalizeTaskDefinition } from "./task.ts";
 import { DefaultToolExecutor } from "./tools.ts";
 import { TokenBudgetExceededError } from "./types.ts";
+import { countTokens } from "../measure.ts";
 
 function createTempDir(): string {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "helix-p05-test-"));
@@ -31,6 +38,170 @@ function cleanupDir(dir: string): void {
 }
 
 describe("Phase 05: Context Management & Token Optimization", () => {
+  describe("Progressive disclosure runtime", () => {
+    it("keeps bootstrap tools visible and compacts old tool output to NOTES.md", () => {
+      const tmp = createTempDir();
+      try {
+        const { systemPrompt, state } = assembleBootstrapSystemPrompt({
+          workspaceRoot: tmp,
+          sessionId: "bootstrap-test",
+          maxContextTokens: 5,
+        });
+        assert.ok(systemPrompt.length > 0);
+        assert.deepEqual(
+          [...state.visibleToolNames],
+          ["load_skill", "tool_search", "spawn_scout", "consult_peer", "Read", "Grep", "Glob"],
+        );
+        const messages = [
+          "src/a.ts:4\nfunction ready()\nError: expected true\nverified invariant",
+          "symbol export ready",
+          "completed tool call",
+        ].map((content) => ({
+          role: "tool" as const,
+          content,
+          timestamp: new Date().toISOString(),
+        }));
+        const compacted = compactContextIfNeeded(messages, state, tmp);
+        assert.notEqual(compacted[0].content, messages[0].content);
+        assert.match(
+          compacted[0].content,
+          /^\[Compacted -> \.helix\/runtime\/bootstrap-test\/NOTES\.md\]/,
+        );
+        const inlineDigest = compacted[0].content.split("Digest: ")[1] ?? "";
+        assert.ok(countTokens(inlineDigest) <= 120);
+        assert.match(inlineDigest, /src\/a\.ts:4/);
+        assert.match(inlineDigest, /Error: expected true/);
+        const firstArchive = fs.readFileSync(
+          path.join(tmp, ".helix/runtime/bootstrap-test/NOTES.md"),
+          "utf8",
+        );
+        const secondCompaction = compactContextIfNeeded(compacted, state, tmp);
+        assert.deepEqual(secondCompaction, compacted);
+        assert.equal(
+          fs.readFileSync(path.join(tmp, ".helix/runtime/bootstrap-test/NOTES.md"), "utf8"),
+          firstArchive,
+        );
+        const notes = fs.readFileSync(
+          path.join(tmp, ".helix/runtime/bootstrap-test/NOTES.md"),
+          "utf8",
+        );
+        assert.ok(notes.includes("src/a.ts:4"));
+        assert.ok(notes.includes("function ready()"));
+        assert.ok(notes.includes("Error: expected true"));
+        assert.ok(notes.includes("verified invariant"));
+      } finally {
+        cleanupDir(tmp);
+      }
+    });
+
+    it("rejects invisible tools, unlocks searched schemas, and enforces approved write scopes", async () => {
+      const tmp = createTempDir();
+      try {
+        const { state } = assembleBootstrapSystemPrompt({
+          workspaceRoot: tmp,
+          sessionId: "tool-test",
+          maxContextTokens: 1000,
+        });
+        const runtime = new ProgressiveToolRuntime({ workspaceRoot: tmp, state });
+        const hidden = await runtime.invoke("Write", {
+          filePath: "src/sample.ts",
+          content: "export const x = 1;",
+        });
+        assert.equal(hidden.isError, true);
+        assert.match(hidden.content, /tool_search/);
+        const found = runtime.toolSearch("write file");
+        assert.ok(found.some((schema) => schema.name === "Write"));
+        const mcpRuntime = new ProgressiveToolRuntime({
+          workspaceRoot: tmp,
+          state,
+          schemas: [
+            {
+              name: "query_graph",
+              description: "Search the dependency graph",
+              source: "mcp",
+              inputSchema: { type: "object", properties: { query: { type: "string" } } },
+            },
+          ],
+        });
+        assert.ok(
+          mcpRuntime.toolSearch("dependency graph").some((schema) => schema.name === "query_graph"),
+        );
+        runtime.approveWriteScope("src/**");
+        const write = await runtime.invoke("Write", {
+          filePath: "src/sample.ts",
+          content: "export const x = 1;",
+        });
+        assert.equal(write.isError, false, write.content);
+        assert.equal(
+          fs.readFileSync(path.join(tmp, "src/sample.ts"), "utf8"),
+          "export const x = 1;",
+        );
+      } finally {
+        cleanupDir(tmp);
+      }
+    });
+
+    it("loads a canonical skill on demand and hints when Read matches its Tier 0 route", async () => {
+      const tmp = createTempDir();
+      try {
+        const domainDir = path.join(tmp, ".helix/knowledge/domains/demo");
+        fs.mkdirSync(domainDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(domainDir, "domain.md"),
+          "---\nid: demo\nname: Demo\ndescription: Demo rules\nsource_paths:\n  - src/module.ts\n---\n# Demo\nKeep the module deterministic.\n",
+          "utf8",
+        );
+        fs.mkdirSync(path.join(tmp, "src"), { recursive: true });
+        fs.writeFileSync(path.join(tmp, "src/module.ts"), "export const ready = true;\n", "utf8");
+        const { state } = assembleBootstrapSystemPrompt({
+          workspaceRoot: tmp,
+          sessionId: "skill-test",
+          maxContextTokens: 2000,
+        });
+        const runtime = new ProgressiveToolRuntime({ workspaceRoot: tmp, state });
+        const read = await runtime.invoke("Read", { filePath: "src/module.ts" });
+        assert.match(read.content, /Call load_skill\("demo"\)/);
+        runtime.toolSearch("edit file");
+        runtime.approveWriteScope("src/**");
+        const edited = await runtime.invoke("Edit", {
+          filePath: "src/module.ts",
+          oldString: "ready = true",
+          newString: "ready = false",
+        });
+        assert.match(edited.content, /Call load_skill\("demo"\)/);
+        const loaded = await runtime.invoke("load_skill", { domain_id: "demo" });
+        assert.match(loaded.content, /Keep the module deterministic/);
+        assert.equal(state.loadedDomainIds.has("demo"), true);
+      } finally {
+        cleanupDir(tmp);
+      }
+    });
+
+    it("continues tool-use turns in one master loop and obeys the turn ceiling", async () => {
+      const { state } = assembleBootstrapSystemPrompt({
+        sessionId: "loop-test",
+        maxContextTokens: 1000,
+        maxTurns: 3,
+      });
+      let calls = 0;
+      const result = await runMasterLoop(state, [], async (messages) => {
+        calls++;
+        const nextMessages = [
+          ...messages,
+          { role: "tool" as const, content: `turn ${calls}`, timestamp: new Date().toISOString() },
+        ];
+        return {
+          stop_reason: calls === 2 ? ("end_turn" as const) : ("tool_use" as const),
+          value: calls,
+          messages: nextMessages,
+        };
+      });
+      assert.equal(result.value, 2);
+      assert.equal(state.turnCount, 2);
+      assert.equal(result.messages.length, 2);
+    });
+  });
+
   describe("1. Task-Specific Context Construction (Task A)", () => {
     it("assembles layered context adhering to strict layer token budgets", async () => {
       const tmp = createTempDir();
@@ -159,6 +330,47 @@ describe("Phase 05: Context Management & Token Optimization", () => {
         assert.ok(symbols.some((s) => s.name === "AuthService" && s.kind === "class"));
         assert.ok(symbols.some((s) => s.name === "authenticate" && s.kind === "function"));
       } finally {
+        cleanupDir(tmp);
+      }
+    });
+
+    it("delegates Tier 0 routing, Tier 1 canonical skills, and Tier 2 episodes to knowledge modules", async () => {
+      const tmp = createTempDir();
+      let repository: TieredKnowledgeRepository | undefined;
+      try {
+        const domainDir = path.join(tmp, ".helix", "knowledge", "domains", "execution-engine");
+        fs.mkdirSync(path.join(tmp, "src"), { recursive: true });
+        fs.mkdirSync(domainDir, { recursive: true });
+        fs.writeFileSync(path.join(tmp, "src", "runner.ts"), "export const retry = true;\n");
+        fs.writeFileSync(
+          path.join(domainDir, "domain.md"),
+          "---\nid: execution-engine\ndescription: Execution routing and retry rules\npaths:\n  - src/**/*.ts\n---\n# Execution\nPreserve retry invariants.\n",
+        );
+        repository = new TieredKnowledgeRepository(tmp);
+        const episode: Tier2EpisodicRecord = {
+          id: "retry-episode",
+          domainId: "execution-engine",
+          triggerSummary: "Retry failures lose task state",
+          resolutionRule: "Persist the retry state before dispatch.",
+          status: "VALIDATED",
+          sourceTaskId: "task-1",
+          timesRetrieved: 0,
+          timesHelpedPassGate: 1,
+          timesPresentInFailedRun: 0,
+          createdAtIso: new Date(0).toISOString(),
+        };
+        repository.insertEpisodicRecord(episode);
+        repository.close();
+        repository = undefined;
+
+        const result = await new DefaultRepositoryRetriever({
+          workspaceRoot: tmp,
+        }).retrieveKnowledge("retry failures task state", ["src/runner.ts"]);
+        assert.equal(result.tier0[0]?.domainId, "execution-engine");
+        assert.equal(result.tier1[0]?.domainId, "execution-engine");
+        assert.equal(result.tier2[0]?.id, "retry-episode");
+      } finally {
+        repository?.close();
         cleanupDir(tmp);
       }
     });

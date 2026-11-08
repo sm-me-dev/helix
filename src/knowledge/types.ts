@@ -14,6 +14,40 @@ export type KnowledgeType =
 
 export type VerificationStatus = "verified" | "inferred" | "proposed" | "stale" | "deprecated";
 
+/** Compact Tier 0 route compiled from a domain's SKILL.md/domain.md metadata. */
+export interface Tier0DomainRoute {
+  readonly domainId: string;
+  readonly description: string;
+  readonly pathGlobs: readonly string[];
+  readonly skillTokenCost: number;
+  readonly canonicalHash: string;
+}
+
+export type EpisodicStatus = "QUARANTINED" | "VALIDATED" | "PROMOTED" | "PRUNED";
+
+export interface AstGrepMatcherRule {
+  readonly lang: "TypeScript" | "Tsx" | "JavaScript";
+  readonly polarity?: "forbid" | "require";
+  readonly pattern?: string;
+  readonly kind?: string;
+  readonly insideKind?: string;
+}
+
+export interface Tier2EpisodicRecord {
+  readonly id: string;
+  readonly domainId: string;
+  readonly triggerSummary: string;
+  readonly resolutionRule: string;
+  readonly fileGlob?: string;
+  readonly astGrepRule?: AstGrepMatcherRule;
+  readonly status: EpisodicStatus;
+  readonly sourceTaskId: string;
+  readonly timesRetrieved: number;
+  readonly timesHelpedPassGate: number;
+  readonly timesPresentInFailedRun: number;
+  readonly createdAtIso: string;
+}
+
 export type DomainRelationshipType =
   "depends_on" | "uses" | "implements" | "owns" | "tests" | "documents" | "extends";
 

@@ -2,7 +2,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { isInside } from "../../cli/safe-write.ts";
 import type {
   AgentRole,
   CommandCategory,
@@ -41,6 +40,60 @@ export class SecurityViolationError extends Error {
     this.severity = severity;
     this.details = details;
   }
+}
+
+export const CANONICAL_PROMOTION_CAPABILITY = Symbol("helix.canonical-promotion");
+export interface CanonicalPromotionGrant {
+  readonly allowCanonicalPromotion: true;
+  readonly token: typeof CANONICAL_PROMOTION_CAPABILITY;
+}
+
+export function isCanonicalKnowledgePath(targetPath: string): boolean {
+  const normalized = path.resolve(targetPath).replace(/\\/g, "/");
+  return /(?:^|\/)\.helix\/knowledge\/(?:project\.md$|domains(?:\/|$))/i.test(normalized);
+}
+
+function isPromotableCanonicalPath(targetPath: string): boolean {
+  const normalized = path.resolve(targetPath).replace(/\\/g, "/");
+  return /(?:^|\/)\.helix\/knowledge\/domains\/[^/]+\/(?:SKILL\.md|scripts\/[^/]+\.mjs)$/i.test(
+    normalized,
+  );
+}
+
+function isTaskExecutionRuntime(): boolean {
+  return process.env.HELIX_EXECUTION_MODE === "run" || Boolean(process.env.HELIX_WORKTREE_DIR);
+}
+
+export function assertCanonicalKnowledgeWriteAllowed(
+  targetPath: string,
+  grant?: CanonicalPromotionGrant,
+): void {
+  if (!isCanonicalKnowledgePath(targetPath)) return;
+  const promoted =
+    grant?.allowCanonicalPromotion === true &&
+    grant.token === CANONICAL_PROMOTION_CAPABILITY &&
+    isPromotableCanonicalPath(targetPath);
+  if (isTaskExecutionRuntime() || (isPromotableCanonicalPath(targetPath) && !promoted)) {
+    throw new SecurityViolationError("TIER1_CANONICAL_SKILL_IMMUTABLE_AT_RUNTIME");
+  }
+}
+
+function assertNoCanonicalMutationCommand(command: string): void {
+  if (!isTaskExecutionRuntime()) return;
+  const touchesCanonical =
+    /(?:\.helix[\\/]knowledge[\\/](?:project\.md|domains(?:[\\/]|\b)))/i.test(command);
+  const mutates =
+    /(?:^|[;&|]\s*)(?:\S*\/)?(?:tee|rm|mv|cp|ln|touch|install|truncate|perl|sed|python(?:\d+(?:\.\d+)*)?|node|ruby|printf|dd)(?:\s|$)/i.test(
+      command,
+    ) || /(?:^|[^<])>>?\s*[^;&|]*\.helix[\\/]knowledge[\\/]/i.test(command);
+  if (touchesCanonical && mutates) {
+    throw new SecurityViolationError("TIER1_CANONICAL_SKILL_IMMUTABLE_AT_RUNTIME");
+  }
+}
+
+function isPathInside(root: string, child: string): boolean {
+  const rel = path.relative(root, child);
+  return rel === "" || (rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel));
 }
 
 // Tool security error for forbidden path / boundary violations
@@ -278,7 +331,7 @@ export function resolveSafePath(
     : path.resolve(rootReal, candidatePath);
 
   // Containment check
-  if (!isInside(rootReal, resolved)) {
+  if (!isPathInside(rootReal, resolved)) {
     throw new WorkspaceEscapeError(candidatePath, rootReal);
   }
 
@@ -985,6 +1038,8 @@ export function validateToolArguments(
         throw new ToolArgumentValidationError("writeFile", "content", "Content must be a string");
       }
 
+      assertCanonicalKnowledgeWriteAllowed(filePath);
+
       // Check tamper-protected files
       if (isTamperProtected(filePath)) {
         throw new ToolSecurityError(
@@ -1029,6 +1084,7 @@ export function validateToolArguments(
           "Command length exceeds safe limit (16KB)",
         );
       }
+      assertNoCanonicalMutationCommand(command);
       break;
     }
   }

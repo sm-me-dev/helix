@@ -20,6 +20,11 @@ discovery_evidence:
   - Source file src/engine/experiment.ts providing benchmark metrics and runner
 created_at: 2026-11-02
 updated_at: 2026-11-02
+description: Evaluation & Benchmarks
+paths:
+  - src/engine/benchmark.test.ts
+  - src/engine/benchmark.ts
+  - src/engine/experiment.ts
 ---
 
 Repeatable benchmarking, paired stats evaluation, and comparative performance analysis

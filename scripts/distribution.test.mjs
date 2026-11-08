@@ -23,14 +23,16 @@ describe("Phase 10.1: Cross-Platform Distribution & Installation", () => {
       assert.ok(existsSync(join(ROOT, "bin", "helix.mjs")));
     });
 
-    it("declares Node engine floor >= 22.6", () => {
+    it("declares Node engine floor >= 26.4", () => {
       assert.ok(PKG.engines?.node);
-      assert.match(PKG.engines.node, />=\s*22\.6/);
+      assert.match(PKG.engines.node, />=\s*26\.4/);
     });
 
-    it("prepack script triggers ES module build", () => {
-      assert.equal(PKG.scripts?.prepack, "node scripts/build.mjs");
-      assert.equal(PKG.scripts?.build, "node scripts/build.mjs");
+    it("prepack builds the ES module CLI and Web SPA", () => {
+      assert.equal(PKG.scripts?.prepack, "npm run build");
+      assert.equal(PKG.scripts?.build, "npm run build:lib && npm run build:web");
+      assert.equal(PKG.scripts?.["build:lib"], "node scripts/build.mjs");
+      assert.match(PKG.scripts?.["build:web"] ?? "", /vite build/);
     });
   });
 
