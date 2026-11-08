@@ -197,12 +197,11 @@ export async function buildBundle(targetKey, options = {}) {
   copyDirRecursive(join(ROOT, "dist", "fixtures"), join(appDir, "dist", "fixtures"));
   copyFileSync(join(ROOT, "dist", "package.json"), join(appDir, "package.json"));
 
-  // Include production dependency: gpt-tokenizer
-  const gptSrc = join(ROOT, "node_modules", "gpt-tokenizer");
-  if (existsSync(gptSrc)) {
-    const gptDest = join(appDir, "node_modules", "gpt-tokenizer");
-    copyDirRecursive(gptSrc, gptDest);
-  }
+  // Include all installed packages so the standalone bundle is fully
+  // self-contained: every runtime import plus hoisted native bindings
+  // (e.g. @ast-grep/napi-linux-x64-gnu, better-sqlite3 bindings) that
+  // live at the top level of node_modules.
+  copyDirRecursive(join(ROOT, "node_modules"), join(appDir, "node_modules"));
 
   // 4. Metadata & license
   copyFileSync(join(ROOT, "LICENSE"), join(rootInBundle, "LICENSE"));
