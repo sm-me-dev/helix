@@ -54,8 +54,9 @@ export function acquireAtomicLock(lockPath: string): () => void {
   try {
     fd = openSync(lockPath, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600);
   } catch (error) {
-    if (errCode(error) === "EEXIST") throw new Error(`Team lock is already held: ${lockPath}`);
-    throw error;
+    if (errCode(error) === "EEXIST")
+      throw new Error(`Team lock is already held: ${lockPath}`, { cause: error });
+    throw new Error((error as Error).message, { cause: error });
   }
   try {
     writeFileSync(

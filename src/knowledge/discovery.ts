@@ -163,7 +163,7 @@ export class ProjectScanner {
     const languages = new Set<string>();
 
     const walk = (dir: string): void => {
-      let entries: fs.Dirent[] = [];
+      let entries: fs.Dirent[];
       try {
         entries = fs.readdirSync(dir, { withFileTypes: true });
       } catch {

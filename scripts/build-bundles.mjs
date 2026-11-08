@@ -231,7 +231,7 @@ async function main() {
   const targetArg = args.find((a) => !a.startsWith("-")) || "host";
   const useSystemNode = args.includes("--use-system-node") || args.includes("-s");
 
-  let targetsToBuild = [];
+  let targetsToBuild;
   if (targetArg === "all") {
     targetsToBuild = Object.keys(TARGETS);
   } else if (targetArg === "host") {

@@ -560,9 +560,6 @@ export class DefaultContextManager implements ContextManager {
   ): Promise<AssembledContext> {
     const includedReferences: string[] = [];
     const securityWarnings: string[] = [];
-    let systemTokens = 0;
-    let contractTokens = 0;
-    let repoStructureTokens = 0;
     let knowledgeTokens = 0;
     let citedExcerptsTokens = 0;
     let diagnosticTokens = 0;
@@ -593,7 +590,7 @@ export class DefaultContextManager implements ContextManager {
     }
 
     const systemPrompt = systemPromptLines.join("\n");
-    systemTokens = countTokens(systemPrompt);
+    const systemTokens = countTokens(systemPrompt);
 
     // --------------------------------------------------------------------------
     // Layer 1: Task Contract & Handoff Card (Target budget: <= 350 tokens)
@@ -624,7 +621,7 @@ export class DefaultContextManager implements ContextManager {
       }
     }
 
-    contractTokens = countTokens(taskPromptLines.join("\n"));
+    const contractTokens = countTokens(taskPromptLines.join("\n"));
 
     // --------------------------------------------------------------------------
     // Layer 2: Repository Structure & Exported Interfaces (Target: <= 500 tokens)
@@ -662,7 +659,7 @@ export class DefaultContextManager implements ContextManager {
     }
 
     const structureText = structureLines.join("\n");
-    repoStructureTokens = countTokens(structureText);
+    const repoStructureTokens = countTokens(structureText);
     if (structureText) {
       taskPromptLines.push(structureText);
     }

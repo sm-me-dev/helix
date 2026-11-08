@@ -108,7 +108,7 @@ export async function doctorHandshake(
     const t0 = Date.now();
     let status: number | undefined;
     let rawBody: string | undefined;
-    let ok = false;
+    let ok: boolean;
     let error: string | undefined;
 
     try {
