@@ -100,5 +100,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+          chmod 600 ~/.npmrc
           echo "Publishing @sm-me-dev/helix to npm..."
           npm publish --access public --provenance
